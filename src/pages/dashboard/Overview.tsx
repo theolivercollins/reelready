@@ -1,64 +1,122 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Activity, Clock, DollarSign, CheckCircle2, AlertTriangle, Layers } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Activity, Clock, DollarSign, CheckCircle2, AlertTriangle, Layers, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import {
-  completedProperties, inProgressProperties, dailyStats, hourlyThroughput,
-  getStatusColor, formatCents, formatDuration, getRelativeTime
-} from "@/lib/mock-data";
-
-const statCards = [
-  {
-    label: "Today's Properties",
-    value: `${dailyStats[6]?.properties_completed || 0}`,
-    sub: `of ${(dailyStats[6]?.properties_completed || 0) + 3} submitted`,
-    icon: Layers,
-    color: "text-primary",
-  },
-  {
-    label: "In Pipeline",
-    value: `${inProgressProperties.length}`,
-    sub: "currently processing",
-    icon: Activity,
-    color: "text-info",
-  },
-  {
-    label: "Avg Processing Time",
-    value: formatDuration(dailyStats[6]?.avg_processing_time_ms || 0),
-    sub: "per video",
-    icon: Clock,
-    color: "text-muted-foreground",
-  },
-  {
-    label: "Success Rate",
-    value: `${Math.round((1 - (dailyStats[6]?.properties_failed || 0) / Math.max(1, (dailyStats[6]?.properties_completed || 1))) * 100)}%`,
-    sub: "auto-completed",
-    icon: CheckCircle2,
-    color: "text-primary",
-  },
-  {
-    label: "Today's Cost",
-    value: formatCents(dailyStats[6]?.total_cost_cents || 0),
-    sub: `${dailyStats[6]?.total_clips_generated || 0} clips`,
-    icon: DollarSign,
-    color: "text-warning",
-  },
-  {
-    label: "Avg Cost/Video",
-    value: formatCents(dailyStats[6]?.avg_cost_per_video_cents || 0),
-    sub: "per property",
-    icon: AlertTriangle,
-    color: "text-muted-foreground",
-  },
-];
+import { getStatusColor, formatCents, formatDuration, getRelativeTime } from "@/lib/types";
+import type { Property, DailyStat } from "@/lib/types";
+import { fetchProperties, fetchDailyStats, fetchStatsOverview } from "@/lib/api";
 
 const Overview = () => {
+  const [completedProps, setCompletedProps] = useState<Property[]>([]);
+  const [inProgressProps, setInProgressProps] = useState<Property[]>([]);
+  const [dailyStatsData, setDailyStatsData] = useState<DailyStat[]>([]);
+  const [stats, setStats] = useState<{
+    completedToday: number; submittedToday: number; inPipeline: number; needsReview: number;
+    avgProcessingMs: number; totalCostTodayCents: number; avgCostPerVideoCents: number; successRate: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [completedRes, inProgressRes, dailyRes, overviewRes] = await Promise.all([
+          fetchProperties({ status: "complete", limit: 10 }),
+          fetchProperties({ limit: 50 }),
+          fetchDailyStats(7),
+          fetchStatsOverview(),
+        ]);
+        if (cancelled) return;
+        setCompletedProps(completedRes.properties);
+        // Filter for in-progress statuses
+        const activeStatuses = new Set(["queued", "analyzing", "scripting", "generating", "qc", "assembling"]);
+        setInProgressProps(inProgressRes.properties.filter(p => activeStatuses.has(p.status)));
+        setDailyStatsData(dailyRes.stats);
+        setStats(overviewRes);
+        setError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        setError(err.message || "Failed to load dashboard data");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
   const statusToProgress: Record<string, number> = {
     queued: 0, analyzing: 15, scripting: 35, generating: 55, qc: 80, assembling: 90, complete: 100,
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center space-y-2">
+          <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const statCards = [
+    {
+      label: "Today's Properties",
+      value: `${stats?.completedToday ?? 0}`,
+      sub: `of ${stats?.submittedToday ?? 0} submitted`,
+      icon: Layers,
+      color: "text-primary",
+    },
+    {
+      label: "In Pipeline",
+      value: `${stats?.inPipeline ?? 0}`,
+      sub: "currently processing",
+      icon: Activity,
+      color: "text-info",
+    },
+    {
+      label: "Avg Processing Time",
+      value: formatDuration(stats?.avgProcessingMs ?? 0),
+      sub: "per video",
+      icon: Clock,
+      color: "text-muted-foreground",
+    },
+    {
+      label: "Success Rate",
+      value: `${Math.round((stats?.successRate ?? 0) * 100)}%`,
+      sub: "auto-completed",
+      icon: CheckCircle2,
+      color: "text-primary",
+    },
+    {
+      label: "Today's Cost",
+      value: formatCents(stats?.totalCostTodayCents ?? 0),
+      sub: "total spend",
+      icon: DollarSign,
+      color: "text-warning",
+    },
+    {
+      label: "Avg Cost/Video",
+      value: formatCents(stats?.avgCostPerVideoCents ?? 0),
+      sub: "per property",
+      icon: AlertTriangle,
+      color: "text-muted-foreground",
+    },
+  ];
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -83,34 +141,32 @@ const Overview = () => {
         <Card>
           <CardContent className="pt-5">
             <h3 className="text-sm font-medium mb-4">Pipeline Throughput (24h)</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={hourlyThroughput}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                />
-                <Area type="monotone" dataKey="completed" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
+              Coming soon
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-5">
             <h3 className="text-sm font-medium mb-4">Daily Cost (7d)</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={dailyStats}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => v.slice(5)} />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `$${(v / 100).toFixed(0)}`} />
-                <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: number) => formatCents(v)}
-                />
-                <Bar dataKey="total_cost_cents" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {dailyStatsData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={dailyStatsData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `$${(v / 100).toFixed(0)}`} />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                    formatter={(v: number) => formatCents(v)}
+                  />
+                  <Bar dataKey="total_cost_cents" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
+                No data yet
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -130,7 +186,14 @@ const Overview = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {inProgressProperties.map(prop => (
+              {inProgressProps.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    No properties currently in pipeline
+                  </TableCell>
+                </TableRow>
+              )}
+              {inProgressProps.map(prop => (
                 <TableRow key={prop.id} className="cursor-pointer hover:bg-accent/50">
                   <TableCell className="font-medium text-sm">{prop.address}</TableCell>
                   <TableCell>
@@ -165,7 +228,14 @@ const Overview = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {completedProperties.slice(0, 10).map(prop => (
+              {completedProps.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    No completed properties yet
+                  </TableCell>
+                </TableRow>
+              )}
+              {completedProps.slice(0, 10).map(prop => (
                 <TableRow key={prop.id} className="cursor-pointer hover:bg-accent/50">
                   <TableCell>
                     <Link to={`/dashboard/properties/${prop.id}`} className="font-medium text-sm hover:underline">

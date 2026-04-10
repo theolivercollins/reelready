@@ -7,11 +7,21 @@ import { X, CheckCircle2, Loader2, Check, Mic, Bookmark, BookmarkCheck, RotateCc
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { getPresets, savePreset, Preset } from "@/lib/presets";
+import { createProperty } from "@/lib/api";
 
 interface UploadedFile {
   file: File;
   preview: string;
   id: string;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 const Upload = () => {
@@ -32,7 +42,8 @@ const Upload = () => {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [trackingId] = useState(`PROP-${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+  const [trackingId, setTrackingId] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetSaved, setPresetSaved] = useState(false);
@@ -137,9 +148,25 @@ const Upload = () => {
     e.preventDefault();
     if (!isValid) return;
     setSubmitting(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setSubmitting(false);
-    setSubmitted(true);
+    setSubmitError(null);
+    try {
+      const base64Photos = await Promise.all(files.map(f => fileToBase64(f.file)));
+      const result = await createProperty({
+        address,
+        price: Number(price),
+        bedrooms: Number(bedrooms),
+        bathrooms: Number(bathrooms),
+        listing_agent: agent,
+        brokerage: "",
+        photos: base64Photos,
+      });
+      setTrackingId(result.id);
+      setSubmitted(true);
+    } catch (err: any) {
+      setSubmitError(err.message || "Failed to submit property");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
@@ -490,6 +517,11 @@ const Upload = () => {
                   <span className="font-mono text-xl font-bold">${totalPrice}</span>
                 </div>
               </>
+            )}
+            {submitError && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 p-3 rounded">
+                {submitError}
+              </div>
             )}
             <div className="flex gap-3 pt-2">
               <Button

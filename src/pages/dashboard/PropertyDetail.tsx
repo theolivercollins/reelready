@@ -1,25 +1,85 @@
 import { useParams, Link } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Download, RotateCcw, Camera, Clock, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
-import {
-  allProperties, generatePhotos, generateScenes, allLogs,
-  getStatusColor, formatCents, formatDuration, getRelativeTime
-} from "@/lib/mock-data";
+import { ArrowLeft, Download, RotateCcw, Camera, Clock, DollarSign, ChevronDown, ChevronUp, Loader2, AlertTriangle } from "lucide-react";
+import { getStatusColor, formatCents, formatDuration, getRelativeTime } from "@/lib/types";
+import type { Property, Photo, Scene, PipelineLog } from "@/lib/types";
+import { fetchProperty, fetchLogs, rerunProperty } from "@/lib/api";
 
 const PropertyDetail = () => {
   const { id } = useParams();
-  const property = allProperties.find(p => p.id === id) || allProperties[0];
-  const photos = generatePhotos(property.id, property.photo_count || 20);
-  const scenes = generateScenes(property.id, property.selected_photo_count || 12);
-  const logs = allLogs.filter(l => l.property_id === property.id);
+  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: Scene[] }) | null>(null);
+  const [logs, setLogs] = useState<(PipelineLog & { properties?: { address: string } })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [expandedScene, setExpandedScene] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState(false);
 
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [propData, logsData] = await Promise.all([
+          fetchProperty(id),
+          fetchLogs({ property_id: id, limit: 500 }),
+        ]);
+        if (cancelled) return;
+        setProperty(propData);
+        setLogs(logsData.logs);
+        setError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        setError(err.message || "Failed to load property");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  const handleRerun = async () => {
+    if (!id) return;
+    setRerunning(true);
+    try {
+      await rerunProperty(id);
+      // Reload property data
+      const propData = await fetchProperty(id);
+      setProperty(propData);
+    } catch (err: any) {
+      alert(`Failed to rerun: ${err.message}`);
+    } finally {
+      setRerunning(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !property) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center space-y-2">
+          <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-sm text-destructive">{error || "Property not found"}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const photos = property.photos || [];
+  const scenes = property.scenes || [];
   const displayPhotos = showSelectedOnly ? photos.filter(p => p.selected) : photos;
 
   return (
@@ -57,9 +117,19 @@ const PropertyDetail = () => {
 
       {property.status === "complete" && (
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2"><Download className="h-4 w-4" /> Download 16:9</Button>
-          <Button variant="outline" className="gap-2"><Download className="h-4 w-4" /> Download 9:16</Button>
-          <Button variant="outline" className="gap-2"><RotateCcw className="h-4 w-4" /> Rerun Pipeline</Button>
+          {property.horizontal_video_url && (
+            <Button variant="outline" className="gap-2" asChild>
+              <a href={property.horizontal_video_url} download><Download className="h-4 w-4" /> Download 16:9</a>
+            </Button>
+          )}
+          {property.vertical_video_url && (
+            <Button variant="outline" className="gap-2" asChild>
+              <a href={property.vertical_video_url} download><Download className="h-4 w-4" /> Download 9:16</a>
+            </Button>
+          )}
+          <Button variant="outline" className="gap-2" onClick={handleRerun} disabled={rerunning}>
+            <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun Pipeline
+          </Button>
         </div>
       )}
 
@@ -77,65 +147,73 @@ const PropertyDetail = () => {
               {showSelectedOnly ? "Show All" : "Selected Only"}
             </Button>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-            {displayPhotos.map(photo => (
-              <div
-                key={photo.id}
-                className={`relative aspect-square rounded-md overflow-hidden border-2 transition-all ${
-                  photo.selected ? "border-primary" : "border-transparent opacity-50"
-                }`}
-              >
-                <div className="w-full h-full bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
-                  {photo.room_type.replace(/_/g, " ")}
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 bg-background/80 px-1 py-0.5 flex gap-1">
-                  <Badge variant="secondary" className="text-[8px] h-4 px-1">Q:{photo.quality_score}</Badge>
-                  <Badge variant="secondary" className="text-[8px] h-4 px-1">A:{photo.aesthetic_score}</Badge>
-                </div>
-                {photo.discard_reason && (
-                  <div className="absolute top-1 right-1">
-                    <Badge className="bg-destructive text-destructive-foreground text-[8px] h-4 px-1">{photo.discard_reason}</Badge>
+          {displayPhotos.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No photos</p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              {displayPhotos.map(photo => (
+                <div
+                  key={photo.id}
+                  className={`relative aspect-square rounded-md overflow-hidden border-2 transition-all ${
+                    photo.selected ? "border-primary" : "border-transparent opacity-50"
+                  }`}
+                >
+                  <div className="w-full h-full bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                    {photo.room_type.replace(/_/g, " ")}
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  <div className="absolute bottom-0 left-0 right-0 bg-background/80 px-1 py-0.5 flex gap-1">
+                    <Badge variant="secondary" className="text-[8px] h-4 px-1">Q:{photo.quality_score}</Badge>
+                    <Badge variant="secondary" className="text-[8px] h-4 px-1">A:{photo.aesthetic_score}</Badge>
+                  </div>
+                  {photo.discard_reason && (
+                    <div className="absolute top-1 right-1">
+                      <Badge className="bg-destructive text-destructive-foreground text-[8px] h-4 px-1">{photo.discard_reason}</Badge>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="shots" className="space-y-2">
-          {scenes.map(scene => (
-            <Card key={scene.id}>
-              <CardContent className="p-3">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setExpandedScene(expandedScene === scene.id ? null : scene.id)}>
-                  <span className="font-mono text-xs text-muted-foreground w-6">#{scene.scene_number}</span>
-                  <div className="w-16 h-10 bg-muted rounded flex items-center justify-center text-[10px] text-muted-foreground shrink-0">
-                    Thumb
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium">{scene.camera_movement.replace(/_/g, " ")}</span>
-                      <Badge variant="secondary" className={`text-[10px] h-4 ${getStatusColor(scene.status)}`}>
-                        {scene.status.replace(/_/g, " ")}
-                      </Badge>
+          {scenes.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No scenes yet</p>
+          ) : (
+            scenes.map(scene => (
+              <Card key={scene.id}>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3 cursor-pointer" onClick={() => setExpandedScene(expandedScene === scene.id ? null : scene.id)}>
+                    <span className="font-mono text-xs text-muted-foreground w-6">#{scene.scene_number}</span>
+                    <div className="w-16 h-10 bg-muted rounded flex items-center justify-center text-[10px] text-muted-foreground shrink-0">
+                      Thumb
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{scene.prompt}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{scene.camera_movement.replace(/_/g, " ")}</span>
+                        <Badge variant="secondary" className={`text-[10px] h-4 ${getStatusColor(scene.status)}`}>
+                          {scene.status.replace(/_/g, " ")}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{scene.prompt}</p>
+                    </div>
+                    <span className="font-mono text-xs text-muted-foreground">{scene.duration_seconds}s</span>
+                    {expandedScene === scene.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </div>
-                  <span className="font-mono text-xs text-muted-foreground">{scene.duration_seconds}s</span>
-                  {expandedScene === scene.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </div>
-                {expandedScene === scene.id && (
-                  <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div><span className="text-muted-foreground">Provider</span><p className="font-mono">{scene.provider}</p></div>
-                    <div><span className="text-muted-foreground">Gen Time</span><p className="font-mono">{formatDuration(scene.generation_time_ms)}</p></div>
-                    <div><span className="text-muted-foreground">Cost</span><p className="font-mono">{formatCents(scene.generation_cost_cents)}</p></div>
-                    <div><span className="text-muted-foreground">QC Confidence</span><p className="font-mono">{(scene.qc_confidence * 100).toFixed(0)}%</p></div>
-                    <div><span className="text-muted-foreground">Attempts</span><p className="font-mono">{scene.attempt_count}</p></div>
-                    <div><span className="text-muted-foreground">Verdict</span><p className="font-mono">{scene.qc_verdict || "—"}</p></div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {expandedScene === scene.id && (
+                    <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div><span className="text-muted-foreground">Provider</span><p className="font-mono">{scene.provider}</p></div>
+                      <div><span className="text-muted-foreground">Gen Time</span><p className="font-mono">{formatDuration(scene.generation_time_ms)}</p></div>
+                      <div><span className="text-muted-foreground">Cost</span><p className="font-mono">{formatCents(scene.generation_cost_cents)}</p></div>
+                      <div><span className="text-muted-foreground">QC Confidence</span><p className="font-mono">{(scene.qc_confidence * 100).toFixed(0)}%</p></div>
+                      <div><span className="text-muted-foreground">Attempts</span><p className="font-mono">{scene.attempt_count}</p></div>
+                      <div><span className="text-muted-foreground">Verdict</span><p className="font-mono">{scene.qc_verdict || "—"}</p></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="logs" className="space-y-1">
