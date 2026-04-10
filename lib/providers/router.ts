@@ -1,4 +1,4 @@
-import type { RoomType, VideoProvider } from "@/lib/db";
+import type { RoomType, VideoProvider } from "../db";
 import type { IVideoProvider } from "./provider.interface";
 import { RunwayProvider } from "./runway";
 import { KlingProvider } from "./kling";

@@ -10,7 +10,7 @@ import type {
   VideoProvider,
   LogStage,
   LogLevel,
-} from "@/lib/types";
+} from "./types";
 
 export type {
   Property,

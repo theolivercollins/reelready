@@ -12,32 +12,32 @@ import {
   getProperty,
   addPropertyCost,
   log,
-} from "@/lib/db";
-import type { Photo, RoomType, DepthRating, VideoProvider } from "@/lib/types";
+} from "./db";
+import type { Photo, RoomType, DepthRating, VideoProvider } from "./types";
 import {
   PHOTO_ANALYSIS_SYSTEM,
   buildAnalysisUserPrompt,
   type PhotoAnalysisResult,
-} from "@/lib/prompts/photo-analysis";
+} from "./prompts/photo-analysis";
 import {
   DIRECTOR_SYSTEM,
   buildDirectorUserPrompt,
   type DirectorOutput,
-} from "@/lib/prompts/director";
+} from "./prompts/director";
 import {
   QC_SYSTEM,
   buildQCUserPrompt,
   buildPromptModification,
   type QCResult,
-} from "@/lib/prompts/qc-evaluator";
-import { selectProvider } from "@/lib/providers/router";
-import { pollUntilComplete } from "@/lib/providers/provider.interface";
+} from "./prompts/qc-evaluator";
+import { selectProvider } from "./providers/router";
+import { pollUntilComplete } from "./providers/provider.interface";
 import {
   estimateAnalysisCost,
   estimateScriptingCost,
   estimateGenerationCost,
   estimateQCCost,
-} from "@/lib/utils/cost-tracker";
+} from "./utils/cost-tracker";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;

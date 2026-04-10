@@ -1,4 +1,4 @@
-import type { RoomType, DepthRating } from "@/lib/db";
+import type { RoomType, DepthRating } from "../db";
 
 export interface PhotoAnalysisResult {
   room_type: RoomType;
