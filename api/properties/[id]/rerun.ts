@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getProperty, updatePropertyStatus } from '../../../lib/db.js';
-import { runPipeline } from '../../../lib/pipeline.js';
+async function loadPipeline() {
+  const mod = await import('../../../lib/pipeline.js');
+  return mod.runPipeline;
+}
 
 export const maxDuration = 300;
 
@@ -15,7 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await getProperty(id); // verify exists
     await updatePropertyStatus(id, 'queued');
 
-    runPipeline(id).catch((err) => console.error('Rerun error:', err));
+    const runPipeline = await loadPipeline();
+    runPipeline(id).catch((err: unknown) => console.error('Rerun error:', err));
 
     return res.status(200).json({ message: 'Pipeline restarted', status: 'queued' });
   } catch {

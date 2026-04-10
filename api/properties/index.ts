@@ -5,7 +5,11 @@ import {
   updatePropertyStatus,
   insertPhotos,
 } from '../../lib/db.js';
-import { runPipeline } from '../../lib/pipeline.js';
+// Dynamic import to avoid loading heavy pipeline deps for GET requests
+async function loadPipeline() {
+  const mod = await import('../../lib/pipeline.js');
+  return mod.runPipeline;
+}
 
 export const maxDuration = 300;
 
@@ -113,7 +117,8 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     }
 
     // Start pipeline in background (non-blocking)
-    runPipeline(property.id).catch(async (err) => {
+    const runPipeline = await loadPipeline();
+    runPipeline(property.id).catch(async (err: unknown) => {
       console.error('Pipeline error:', err);
     });
 
