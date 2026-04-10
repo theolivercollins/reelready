@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "api": "tsx packages/api/src/index.ts",
+    "api:dev": "tsx watch packages/api/src/index.ts",
     "worker": "tsx worker/index.ts",
     "worker:dev": "tsx watch worker/index.ts",
     "lint": "turbo lint",

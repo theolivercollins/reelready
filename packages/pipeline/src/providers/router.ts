@@ -49,7 +49,7 @@ function getProviderInstance(name: VideoProvider): IVideoProvider {
 export function getEnabledProviders(): VideoProvider[] {
   const enabled: VideoProvider[] = [];
   if (process.env.RUNWAY_API_KEY) enabled.push("runway");
-  if (process.env.KLING_API_KEY) enabled.push("kling");
+  if (process.env.KLING_ACCESS_KEY && process.env.KLING_SECRET_KEY) enabled.push("kling");
   if (process.env.LUMA_API_KEY) enabled.push("luma");
   return enabled;
 }

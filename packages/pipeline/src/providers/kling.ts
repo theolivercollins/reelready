@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import type {
   IVideoProvider,
   GenerateClipParams,
@@ -7,13 +8,50 @@ import type {
 
 export class KlingProvider implements IVideoProvider {
   name = "kling" as const;
-  private apiKey: string;
+  private accessKey: string;
+  private secretKey: string;
   private baseUrl = "https://api.klingai.com/v1";
 
   constructor() {
-    const key = process.env.KLING_API_KEY;
-    if (!key) throw new Error("KLING_API_KEY is required");
-    this.apiKey = key;
+    const ak = process.env.KLING_ACCESS_KEY;
+    const sk = process.env.KLING_SECRET_KEY;
+    if (!ak || !sk) throw new Error("KLING_ACCESS_KEY and KLING_SECRET_KEY are required");
+    this.accessKey = ak;
+    this.secretKey = sk;
+  }
+
+  private generateJWT(): string {
+    // Kling API requires a JWT signed with HMAC-SHA256 using the secret key
+    const header = {
+      alg: "HS256",
+      typ: "JWT",
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: this.accessKey,
+      exp: now + 1800, // 30 min expiry
+      nbf: now - 5,
+    };
+
+    const b64Header = Buffer.from(JSON.stringify(header))
+      .toString("base64url");
+    const b64Payload = Buffer.from(JSON.stringify(payload))
+      .toString("base64url");
+
+    const signature = crypto
+      .createHmac("sha256", this.secretKey)
+      .update(`${b64Header}.${b64Payload}`)
+      .digest("base64url");
+
+    return `${b64Header}.${b64Payload}.${signature}`;
+  }
+
+  private getAuthHeaders(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.generateJWT()}`,
+      "Content-Type": "application/json",
+    };
   }
 
   async generateClip(params: GenerateClipParams): Promise<GenerationJob> {
@@ -23,10 +61,7 @@ export class KlingProvider implements IVideoProvider {
       `${this.baseUrl}/videos/image2video`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({
           model_name: "kling-v2",
           image: imageBase64,
@@ -53,7 +88,7 @@ export class KlingProvider implements IVideoProvider {
     const response = await fetch(
       `${this.baseUrl}/videos/image2video/${jobId}`,
       {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
+        headers: this.getAuthHeaders(),
       }
     );
 
