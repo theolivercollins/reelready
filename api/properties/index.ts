@@ -57,7 +57,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
 
 async function handlePost(req: VercelRequest, res: VercelResponse) {
   try {
-    const { address, price, bedrooms, bathrooms, listing_agent, brokerage, tempId, photoPaths } = req.body;
+    const { address, price, bedrooms, bathrooms, listing_agent, brokerage, tempId, photoPaths, driveLink } = req.body;
 
     if (!address || !price || !bedrooms || !bathrooms || !listing_agent) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -73,12 +73,23 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       brokerage: brokerage || undefined,
     });
 
-    // Photos were already uploaded to Supabase Storage by the frontend
-    // under tempId/raw/. Move references to the property record.
     const supabase = getSupabase();
-    const photoRecords: Array<{ property_id: string; file_url: string; file_name: string }> = [];
+    let photoCount = 0;
 
-    if (photoPaths && Array.isArray(photoPaths)) {
+    if (driveLink) {
+      // Google Drive mode — store the link, pipeline will download photos async
+      await supabase
+        .from('properties')
+        .update({ drive_link: driveLink })
+        .eq('id', property.id);
+
+      // Pipeline will handle downloading photos from Drive
+      // For now, respond instantly — photos are fetched in the background
+      photoCount = -1; // indicates "pending from Drive"
+    } else if (photoPaths && Array.isArray(photoPaths)) {
+      // Direct upload mode — photos already in Supabase Storage
+      const photoRecords: Array<{ property_id: string; file_url: string; file_name: string }> = [];
+
       for (const storagePath of photoPaths) {
         const fileName = storagePath.split('/').pop() || 'unknown.jpg';
         const { data: urlData } = supabase.storage
@@ -91,14 +102,15 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
           file_name: fileName,
         });
       }
-    }
 
-    if (photoRecords.length > 0) {
-      await insertPhotos(photoRecords);
-      await getSupabase()
-        .from('properties')
-        .update({ photo_count: photoRecords.length })
-        .eq('id', property.id);
+      if (photoRecords.length > 0) {
+        await insertPhotos(photoRecords);
+        await supabase
+          .from('properties')
+          .update({ photo_count: photoRecords.length })
+          .eq('id', property.id);
+        photoCount = photoRecords.length;
+      }
     }
 
     // Start pipeline in background (non-blocking)
@@ -110,7 +122,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     return res.status(201).json({
       id: property.id,
       status: 'queued',
-      photoCount: photoRecords.length,
+      photoCount,
       message: 'Video generation started',
     });
   } catch (err) {

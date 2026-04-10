@@ -92,6 +92,26 @@ export async function createProperty(
   });
 }
 
+export async function createPropertyFromDrive(data: {
+  address: string; price: number; bedrooms: number; bathrooms: number;
+  listing_agent: string; brokerage: string; driveLink: string;
+}): Promise<{ id: string; status: string; photoCount: number }> {
+  // Instant — just sends the Drive link. Backend downloads photos async.
+  return apiFetch('/api/properties', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      address: data.address,
+      price: data.price,
+      bedrooms: data.bedrooms,
+      bathrooms: data.bathrooms,
+      listing_agent: data.listing_agent,
+      brokerage: data.brokerage,
+      driveLink: data.driveLink,
+    }),
+  });
+}
+
 export async function rerunProperty(id: string): Promise<void> {
   return apiFetch(`/api/properties/${id}/rerun`, { method: 'POST' });
 }
