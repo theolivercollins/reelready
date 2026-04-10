@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { updateScene, log, getSupabase } from '../../../lib/db';
+import { updateScene, log, getSupabase } from '../../../lib/db.js';
 
 export const maxDuration = 300;
 

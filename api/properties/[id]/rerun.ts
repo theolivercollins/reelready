@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getProperty, updatePropertyStatus } from '../../../lib/db';
-import { runPipeline } from '../../../lib/pipeline';
+import { getProperty, updatePropertyStatus } from '../../../lib/db.js';
+import { runPipeline } from '../../../lib/pipeline.js';
 
 export const maxDuration = 300;
 

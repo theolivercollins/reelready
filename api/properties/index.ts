@@ -4,8 +4,8 @@ import {
   getSupabase,
   updatePropertyStatus,
   insertPhotos,
-} from '../../lib/db';
-import { runPipeline } from '../../lib/pipeline';
+} from '../../lib/db.js';
+import { runPipeline } from '../../lib/pipeline.js';
 
 export const maxDuration = 300;
 
