@@ -1,4 +1,4 @@
-import type { CameraMovement, RoomType, VideoProvider } from "@/lib/db";
+import type { CameraMovement, RoomType, VideoProvider } from "@/lib/types";
 
 export interface DirectorSceneOutput {
   scene_number: number;

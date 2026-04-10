@@ -1,0 +1,15 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/logs/route": "/api/logs",
+  "/api/properties/[id]/route": "/api/properties/[id]",
+  "/api/properties/[id]/status/route": "/api/properties/[id]/status",
+  "/api/scenes/[id]/approve/route": "/api/scenes/[id]/approve",
+  "/api/scenes/[id]/route": "/api/scenes/[id]",
+  "/api/scenes/[id]/skip/route": "/api/scenes/[id]/skip",
+  "/api/stats/daily/route": "/api/stats/daily",
+  "/api/stats/overview/route": "/api/stats/overview",
+  "/api/properties/[id]/rerun/route": "/api/properties/[id]/rerun",
+  "/api/scenes/[id]/retry/route": "/api/scenes/[id]/retry",
+  "/api/properties/route": "/api/properties",
+  "/page": "/"
+}

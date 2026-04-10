@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/properties/[id]/rerun": {
+      "maxDuration": 300
+    },
+    "/api/scenes/[id]/retry": {
+      "maxDuration": 300
+    },
+    "/api/properties": {
+      "maxDuration": 300
+    }
+  }
+}

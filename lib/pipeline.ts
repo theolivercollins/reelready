@@ -302,7 +302,7 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
           // Get the source photo
           const { data: photo } = await supabase
             .from("photos")
-            .select("file_url")
+            .select("file_url, room_type")
             .eq("id", scene.photo_id)
             .single();
 
@@ -314,7 +314,7 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
           // Select provider (exclude previous provider on hard reject)
           const excludeProviders: VideoProvider[] = [];
           const provider = selectProvider(
-            scene.room_type as RoomType ?? "other",
+            (photo.room_type as RoomType) ?? "other",
             scene.provider as VideoProvider | null,
             excludeProviders
           );
