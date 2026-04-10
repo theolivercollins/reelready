@@ -1,0 +1,18 @@
+{
+  "name": "@reelready/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@reelready/db": "*",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "bullmq": "^5.30.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "sharp": "^0.33.0",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.27"
+  }
+}
