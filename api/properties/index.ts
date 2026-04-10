@@ -57,7 +57,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
 
 async function handlePost(req: VercelRequest, res: VercelResponse) {
   try {
-    const { address, price, bedrooms, bathrooms, listing_agent, brokerage, photos: photoDataUrls } = req.body;
+    const { address, price, bedrooms, bathrooms, listing_agent, brokerage, tempId, photoPaths } = req.body;
 
     if (!address || !price || !bedrooms || !bathrooms || !listing_agent) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -73,38 +73,23 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       brokerage: brokerage || undefined,
     });
 
-    // If photos are provided as base64 data URLs, upload them
+    // Photos were already uploaded to Supabase Storage by the frontend
+    // under tempId/raw/. Move references to the property record.
     const supabase = getSupabase();
     const photoRecords: Array<{ property_id: string; file_url: string; file_name: string }> = [];
 
-    if (photoDataUrls && Array.isArray(photoDataUrls)) {
-      for (let i = 0; i < photoDataUrls.length; i++) {
-        const photoData = photoDataUrls[i];
-        const fileName = `${Date.now()}_photo_${i}.jpg`;
-        const storagePath = `${property.id}/raw/${fileName}`;
+    if (photoPaths && Array.isArray(photoPaths)) {
+      for (const storagePath of photoPaths) {
+        const fileName = storagePath.split('/').pop() || 'unknown.jpg';
+        const { data: urlData } = supabase.storage
+          .from('property-photos')
+          .getPublicUrl(storagePath);
 
-        // Handle base64 data URL
-        const base64Match = photoData.match(/^data:(.+);base64,(.+)$/);
-        if (base64Match) {
-          const contentType = base64Match[1];
-          const buffer = Buffer.from(base64Match[2], 'base64');
-
-          const { error: uploadError } = await supabase.storage
-            .from('property-photos')
-            .upload(storagePath, buffer, { contentType });
-
-          if (!uploadError) {
-            const { data: urlData } = supabase.storage
-              .from('property-photos')
-              .getPublicUrl(storagePath);
-
-            photoRecords.push({
-              property_id: property.id,
-              file_url: urlData.publicUrl,
-              file_name: fileName,
-            });
-          }
-        }
+        photoRecords.push({
+          property_id: property.id,
+          file_url: urlData.publicUrl,
+          file_name: fileName,
+        });
       }
     }
 

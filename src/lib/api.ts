@@ -1,6 +1,12 @@
+import { createClient } from '@supabase/supabase-js';
 import type { Property, Photo, Scene, PipelineLog, DailyStat } from './types';
 
 const API_BASE = '';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://vrhmaeywqsohlztoouxu.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaG1hZXl3cXNvaGx6dG9vdXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDIxOTIsImV4cCI6MjA5MTQxODE5Mn0.GaiexH5L24zAoLgvjOUiixbHdnQW8kUMXXbyjnM8cM4';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, options);
@@ -39,12 +45,41 @@ export async function fetchPropertyStatus(id: string): Promise<{
 
 export async function createProperty(data: {
   address: string; price: number; bedrooms: number; bathrooms: number;
-  listing_agent: string; brokerage: string; photos: string[];
+  listing_agent: string; brokerage: string; photos: File[];
 }): Promise<{ id: string; status: string; photoCount: number }> {
+  // Generate a temporary property ID for organizing uploads
+  const tempId = crypto.randomUUID();
+
+  // Upload photos directly to Supabase Storage (bypasses 4.5MB body limit)
+  const uploadedPaths: string[] = [];
+  for (let i = 0; i < data.photos.length; i++) {
+    const file = data.photos[i];
+    const fileName = `${Date.now()}_${i}_${file.name}`;
+    const storagePath = `${tempId}/raw/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('property-photos')
+      .upload(storagePath, file, { contentType: file.type });
+
+    if (!error) {
+      uploadedPaths.push(storagePath);
+    }
+  }
+
+  // Send metadata + storage paths to API (small JSON payload)
   return apiFetch('/api/properties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      address: data.address,
+      price: data.price,
+      bedrooms: data.bedrooms,
+      bathrooms: data.bathrooms,
+      listing_agent: data.listing_agent,
+      brokerage: data.brokerage,
+      tempId,
+      photoPaths: uploadedPaths,
+    }),
   });
 }
 

@@ -15,14 +15,7 @@ interface UploadedFile {
   id: string;
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+// Photos are uploaded directly to Supabase Storage (no base64 conversion needed)
 
 const Upload = () => {
   const [address, setAddress] = useState("");
@@ -150,7 +143,6 @@ const Upload = () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const base64Photos = await Promise.all(files.map(f => fileToBase64(f.file)));
       const result = await createProperty({
         address,
         price: Number(price),
@@ -158,7 +150,7 @@ const Upload = () => {
         bathrooms: Number(bathrooms),
         listing_agent: agent,
         brokerage: "",
-        photos: base64Photos,
+        photos: files.map(f => f.file),
       });
       setTrackingId(result.id);
       setSubmitted(true);
