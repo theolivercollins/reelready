@@ -43,30 +43,39 @@ export async function fetchPropertyStatus(id: string): Promise<{
   return apiFetch(`/api/properties/${id}/status`);
 }
 
-export async function createProperty(data: {
-  address: string; price: number; bedrooms: number; bathrooms: number;
-  listing_agent: string; brokerage: string; photos: File[];
-}): Promise<{ id: string; status: string; photoCount: number }> {
-  // Generate a temporary property ID for organizing uploads
+export async function createProperty(
+  data: {
+    address: string; price: number; bedrooms: number; bathrooms: number;
+    listing_agent: string; brokerage: string; photos: File[];
+  },
+  onProgress?: (uploaded: number, total: number) => void,
+): Promise<{ id: string; status: string; photoCount: number }> {
   const tempId = crypto.randomUUID();
+  const total = data.photos.length;
+  let uploaded = 0;
 
-  // Upload photos directly to Supabase Storage (bypasses 4.5MB body limit)
+  // Upload photos in parallel batches of 5 for speed
+  const BATCH_SIZE = 5;
   const uploadedPaths: string[] = [];
-  for (let i = 0; i < data.photos.length; i++) {
-    const file = data.photos[i];
-    const fileName = `${Date.now()}_${i}_${file.name}`;
-    const storagePath = `${tempId}/raw/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from('property-photos')
-      .upload(storagePath, file, { contentType: file.type });
-
-    if (!error) {
-      uploadedPaths.push(storagePath);
-    }
+  for (let i = 0; i < total; i += BATCH_SIZE) {
+    const batch = data.photos.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (file, j) => {
+        const fileName = `${Date.now()}_${i + j}_${file.name}`;
+        const storagePath = `${tempId}/raw/${fileName}`;
+        const { error } = await supabase.storage
+          .from('property-photos')
+          .upload(storagePath, file, { contentType: file.type });
+        uploaded++;
+        onProgress?.(uploaded, total);
+        return error ? null : storagePath;
+      })
+    );
+    uploadedPaths.push(...results.filter((p): p is string => p !== null));
   }
 
-  // Send metadata + storage paths to API (small JSON payload)
+  // API call is instant — just sends paths + metadata
   return apiFetch('/api/properties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

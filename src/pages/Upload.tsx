@@ -41,6 +41,7 @@ const Upload = () => {
   const [presetName, setPresetName] = useState("");
   const [presetSaved, setPresetSaved] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ uploaded: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -143,15 +144,18 @@ const Upload = () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const result = await createProperty({
-        address,
-        price: Number(price),
-        bedrooms: Number(bedrooms),
-        bathrooms: Number(bathrooms),
-        listing_agent: agent,
-        brokerage: "",
-        photos: files.map(f => f.file),
-      });
+      const result = await createProperty(
+        {
+          address,
+          price: Number(price),
+          bedrooms: Number(bedrooms),
+          bathrooms: Number(bathrooms),
+          listing_agent: agent,
+          brokerage: "",
+          photos: files.map(f => f.file),
+        },
+        (uploaded, total) => setUploadProgress({ uploaded, total }),
+      );
       setTrackingId(result.id);
       setSubmitted(true);
     } catch (err: any) {
@@ -527,7 +531,11 @@ const Upload = () => {
               </Button>
               <Button type="submit" className="flex-1 h-12 text-sm rounded-none tracking-[0.15em] uppercase font-medium" disabled={!isValid || submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {submitting ? "Processing..." : "Generate Video"}
+                {submitting
+                  ? uploadProgress
+                    ? `Uploading ${uploadProgress.uploaded}/${uploadProgress.total} photos...`
+                    : "Submitting..."
+                  : "Generate Video"}
                 {!submitting && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </div>
