@@ -117,6 +117,11 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       id: property.id,
       status: 'queued',
       photoCount,
+      _debug: {
+        receivedPhotoPaths: Array.isArray(photoPaths) ? photoPaths.length : typeof photoPaths,
+        receivedDriveLink: !!driveLink,
+        tempId: tempId || null,
+      },
       message: 'Video generation started',
     });
   } catch (err) {

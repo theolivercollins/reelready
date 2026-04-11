@@ -1,8 +1,13 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Play, DollarSign, Clock, Film, Upload, Sparkles, Download, ChevronDown, Plus, Minus } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowRight, Play, DollarSign, Clock, Film, Upload, Sparkles, Download, ChevronDown, Plus, Minus, Mail, CheckCircle, Loader2 } from "lucide-react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import heroVideo from "@/assets/hero-video-loop.mp4.asset.json";
 import heroBg from "@/assets/hero-bg.jpg";
 import interior1 from "@/assets/interior-1.jpg";
@@ -56,10 +61,67 @@ const FAQItem = ({ question, answer }: { question: string; answer: string }) => 
 };
 
 const Index = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const heroRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
+  // Auth modal state
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authFirst, setAuthFirst] = useState("");
+  const [authLast, setAuthLast] = useState("");
+  const [authBrokerage, setAuthBrokerage] = useState("");
+  const [authSent, setAuthSent] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+
+  const openAuth = (tab: "signin" | "signup") => {
+    setAuthTab(tab);
+    setAuthEmail("");
+    setAuthFirst("");
+    setAuthLast("");
+    setAuthBrokerage("");
+    setAuthSent(false);
+    setAuthError("");
+    setAuthOpen(true);
+  };
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigate("/upload");
+    } else {
+      openAuth("signup");
+    }
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const metadata = authTab === "signup"
+        ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
+        : undefined;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: authEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: metadata,
+        },
+      });
+      if (error) throw error;
+      setAuthSent(true);
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const faqs = [
     { question: "How many photos do I need to submit?", answer: "We require a minimum of 10 and accept up to 60 high-quality property photos. The more photos you provide, the more diverse and cinematic your final video will be. We recommend including a mix of exterior, interior, and detail shots." },
@@ -79,14 +141,23 @@ const Index = () => {
           <span className="font-display text-2xl font-semibold tracking-wide text-white">FRAME</span>
         </Link>
         <div className="flex items-center gap-8">
-          <Link to="/dashboard" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
-            Dashboard
-          </Link>
-          <Link to="/upload" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
-            Upload
-          </Link>
-          <Button asChild size="sm" className="tracking-[0.2em] uppercase text-[11px] px-7 rounded-none font-medium bg-white text-foreground hover:bg-white/90">
-            <Link to="/upload">Get Started</Link>
+          {user && (
+            <>
+              <Link to="/account" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
+                Account
+              </Link>
+              <Link to="/upload" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
+                Upload
+              </Link>
+            </>
+          )}
+          {!user && (
+            <button onClick={() => openAuth("signin")} className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
+              Sign In
+            </button>
+          )}
+          <Button size="sm" className="tracking-[0.2em] uppercase text-[11px] px-7 rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
+            Get Started
           </Button>
         </div>
       </nav>
@@ -144,16 +215,14 @@ const Index = () => {
             transition={{ duration: 0.8, delay: 1 }}
             className="flex items-center justify-center gap-4 mt-10"
           >
-            <Button size="lg" asChild className="px-10 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90">
-              <Link to="/upload">
-                Upload Photos <ArrowRight className="ml-2 h-3.5 w-3.5" />
-              </Link>
+            <Button size="lg" className="px-10 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
+              Upload Photos <ArrowRight className="ml-2 h-3.5 w-3.5" />
             </Button>
-            <Button size="lg" variant="outline" asChild className="px-10 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium border-white text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm">
-              <Link to="/dashboard">
-                <Play className="mr-2 h-3.5 w-3.5" /> View Demo
-              </Link>
-            </Button>
+            {!user && (
+              <Button size="lg" variant="outline" className="px-10 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium border-white text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm" onClick={() => openAuth("signin")}>
+                <Play className="mr-2 h-3.5 w-3.5" /> Sign In
+              </Button>
+            )}
           </motion.div>
         </motion.div>
 
@@ -419,10 +488,8 @@ const Index = () => {
           <p className="text-white/70 mt-4 max-w-md text-sm">
             Join hundreds of agents using Key Frame to create cinematic listing videos in a fraction of the time and cost.
           </p>
-          <Button asChild size="lg" className="mt-8 px-12 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90">
-            <Link to="/upload">
-              Start Your First Video <ArrowRight className="ml-2 h-3.5 w-3.5" />
-            </Link>
+          <Button size="lg" className="mt-8 px-12 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
+            Start Your First Video <ArrowRight className="ml-2 h-3.5 w-3.5" />
           </Button>
         </motion.div>
       </section>
