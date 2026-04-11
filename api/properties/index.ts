@@ -4,7 +4,6 @@ import {
   getSupabase,
   insertPhotos,
 } from '../../lib/db.js';
-import { verifyAuth } from '../../lib/auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
@@ -62,9 +61,6 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     if (!address || !price || !bedrooms || !bathrooms || !listing_agent) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    // Attach authenticated user if present
-    const auth = await verifyAuth(req);
 
     // Create property record
     const property = await createProperty({
