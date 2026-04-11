@@ -72,14 +72,6 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       brokerage: brokerage || undefined,
     });
 
-    // Set submitted_by if user is authenticated
-    if (auth) {
-      await supabase
-        .from('properties')
-        .update({ submitted_by: auth.user.id })
-        .eq('id', property.id);
-    }
-
     const supabase = getSupabase();
     let photoCount = 0;
 
