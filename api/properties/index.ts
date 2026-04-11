@@ -126,7 +126,8 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       message: 'Video generation started',
     });
   } catch (err) {
-    console.error('Error creating property:', err);
-    return res.status(500).json({ error: 'Failed to create property' });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Error creating property:', msg, err);
+    return res.status(500).json({ error: 'Failed to create property', detail: msg });
   }
 }
