@@ -11,6 +11,7 @@
     { "src": "/api/scenes/([^/]+)/retry", "dest": "/api/scenes/[id]/retry?id=$1" },
     { "src": "/api/scenes/([^/]+)/skip", "dest": "/api/scenes/[id]/skip?id=$1" },
     { "src": "/api/scenes/([^/]+)", "dest": "/api/scenes/[id]?id=$1" },
+    { "src": "/api/pipeline/([^/]+)", "dest": "/api/pipeline/[propertyId]?propertyId=$1" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

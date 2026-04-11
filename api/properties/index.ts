@@ -2,16 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   createProperty,
   getSupabase,
-  updatePropertyStatus,
   insertPhotos,
 } from '../../lib/db.js';
-// Dynamic import to avoid loading heavy pipeline deps for GET requests
-async function loadPipeline() {
-  const mod = await import('../../lib/pipeline.js');
-  return mod.runPipeline;
-}
-
-export const maxDuration = 300;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
@@ -113,12 +105,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Start pipeline in background (non-blocking)
-    const runPipeline = await loadPipeline();
-    runPipeline(property.id).catch(async (err: unknown) => {
-      console.error('Pipeline error:', err);
-    });
-
+    // Pipeline is triggered separately via POST /api/pipeline/[propertyId]
     return res.status(201).json({
       id: property.id,
       status: 'queued',

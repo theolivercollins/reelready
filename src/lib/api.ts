@@ -76,7 +76,7 @@ export async function createProperty(
   }
 
   // API call is instant — just sends paths + metadata
-  return apiFetch('/api/properties', {
+  const result = await apiFetch<{ id: string; status: string; photoCount: number }>('/api/properties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -90,14 +90,18 @@ export async function createProperty(
       photoPaths: uploadedPaths,
     }),
   });
+
+  // Trigger pipeline in a separate long-running function (fire-and-forget)
+  triggerPipeline(result.id);
+
+  return result;
 }
 
 export async function createPropertyFromDrive(data: {
   address: string; price: number; bedrooms: number; bathrooms: number;
   listing_agent: string; brokerage: string; driveLink: string;
 }): Promise<{ id: string; status: string; photoCount: number }> {
-  // Instant — just sends the Drive link. Backend downloads photos async.
-  return apiFetch('/api/properties', {
+  const result = await apiFetch<{ id: string; status: string; photoCount: number }>('/api/properties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -110,10 +114,21 @@ export async function createPropertyFromDrive(data: {
       driveLink: data.driveLink,
     }),
   });
+
+  // Trigger pipeline in a separate long-running function (fire-and-forget)
+  triggerPipeline(result.id);
+
+  return result;
+}
+
+// Fire-and-forget: triggers the pipeline in a separate 300s function
+function triggerPipeline(propertyId: string) {
+  fetch(`/api/pipeline/${propertyId}`, { method: 'POST' }).catch(() => {});
 }
 
 export async function rerunProperty(id: string): Promise<void> {
-  return apiFetch(`/api/properties/${id}/rerun`, { method: 'POST' });
+  await apiFetch(`/api/properties/${id}/rerun`, { method: 'POST' });
+  triggerPipeline(id);
 }
 
 export async function fetchLogs(params?: {
