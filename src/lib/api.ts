@@ -1,15 +1,18 @@
-import { createClient } from '@supabase/supabase-js';
 import type { Property, Photo, Scene, PipelineLog, DailyStat } from './types';
+import { supabase } from './supabase';
 
 const API_BASE = '';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://vrhmaeywqsohlztoouxu.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaG1hZXl3cXNvaGx6dG9vdXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDIxOTIsImV4cCI6MjA5MTQxODE5Mn0.GaiexH5L24zAoLgvjOUiixbHdnQW8kUMXXbyjnM8cM4';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, options);
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    ...(options?.headers as Record<string, string>),
+  };
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`API error ${res.status}: ${text || res.statusText}`);
@@ -69,10 +72,18 @@ export async function createProperty(
           .upload(storagePath, file, { contentType: file.type });
         uploaded++;
         onProgress?.(uploaded, total);
-        return error ? null : storagePath;
+        if (error) {
+          console.error(`Failed to upload ${file.name}:`, error.message);
+          return null;
+        }
+        return storagePath;
       })
     );
     uploadedPaths.push(...results.filter((p): p is string => p !== null));
+  }
+
+  if (uploadedPaths.length === 0) {
+    throw new Error(`All ${total} photo uploads failed. Check browser console for details.`);
   }
 
   // API call is instant — just sends paths + metadata

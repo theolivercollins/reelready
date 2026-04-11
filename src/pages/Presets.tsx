@@ -18,11 +18,11 @@ const Presets = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setPresets(getPresets());
+    getPresets().then(setPresets);
   }, []);
 
-  const handleDelete = (id: string) => {
-    deletePreset(id);
+  const handleDelete = async (id: string) => {
+    await deletePreset(id);
     setPresets(prev => prev.filter(p => p.id !== id));
   };
 

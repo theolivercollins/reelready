@@ -49,6 +49,8 @@ const Upload = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  const [hasPresets, setHasPresets] = useState(false);
+
   const applyPreset = (preset: Preset) => {
     setSelectedPackage(preset.selectedPackage);
     setSelectedDuration(preset.selectedDuration);
@@ -62,22 +64,22 @@ const Upload = () => {
   useEffect(() => {
     const presetId = searchParams.get("preset");
     if (presetId) {
-      const presets = getPresets();
-      const preset = presets.find(p => p.id === presetId);
-      if (preset) applyPreset(preset);
+      getPresets().then(presets => {
+        const preset = presets.find(p => p.id === presetId);
+        if (preset) applyPreset(preset);
+      });
     }
+    getPresets().then(presets => setHasPresets(presets.length > 0));
   }, [searchParams]);
 
-  const handleUseLastPreset = () => {
-    const presets = getPresets();
+  const handleUseLastPreset = async () => {
+    const presets = await getPresets();
     if (presets.length > 0) applyPreset(presets[presets.length - 1]);
   };
 
-  const hasPresets = getPresets().length > 0;
-
-  const handleSavePreset = () => {
+  const handleSavePreset = async () => {
     if (!presetName.trim()) return;
-    savePreset({
+    await savePreset({
       name: presetName.trim(),
       selectedPackage,
       selectedDuration,

@@ -1,13 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme";
+import { AuthProvider } from "@/lib/auth";
+import { RequireAuth, RequireAdmin } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Upload from "./pages/Upload";
 import Presets from "./pages/Presets";
 import Status from "./pages/Status";
+import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
+import Account from "./pages/Account";
+import AccountProperties from "./pages/account/Properties";
+import AccountBilling from "./pages/account/Billing";
+import AccountProfile from "./pages/account/Profile";
 import Dashboard from "./pages/Dashboard";
 import DashboardOverview from "./pages/dashboard/Overview";
 import DashboardPipeline from "./pages/dashboard/Pipeline";
@@ -21,29 +29,49 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <ThemeProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/presets" element={<Presets />} />
-            <Route path="/status/:id" element={<Status />} />
-            <Route path="/dashboard" element={<Dashboard />}>
-              <Route index element={<DashboardOverview />} />
-              <Route path="pipeline" element={<DashboardPipeline />} />
-              <Route path="properties" element={<DashboardProperties />} />
-              <Route path="properties/:id" element={<PropertyDetail />} />
-              <Route path="logs" element={<DashboardLogs />} />
-              <Route path="settings" element={<DashboardSettings />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/status/:id" element={<Status />} />
+
+              {/* Authenticated user routes */}
+              <Route element={<RequireAuth />}>
+                <Route path="/upload" element={<Upload />} />
+                <Route path="/presets" element={<Presets />} />
+                <Route path="/account" element={<Account />}>
+                  <Route index element={<Navigate to="properties" replace />} />
+                  <Route path="properties" element={<AccountProperties />} />
+                  <Route path="billing" element={<AccountBilling />} />
+                  <Route path="profile" element={<AccountProfile />} />
+                </Route>
+              </Route>
+
+              {/* Admin routes */}
+              <Route element={<RequireAdmin />}>
+                <Route path="/dashboard" element={<Dashboard />}>
+                  <Route index element={<DashboardOverview />} />
+                  <Route path="pipeline" element={<DashboardPipeline />} />
+                  <Route path="properties" element={<DashboardProperties />} />
+                  <Route path="properties/:id" element={<PropertyDetail />} />
+                  <Route path="logs" element={<DashboardLogs />} />
+                  <Route path="settings" element={<DashboardSettings />} />
+                </Route>
+              </Route>
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </AuthProvider>
   </ThemeProvider>
 );
 

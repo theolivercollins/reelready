@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "./supabase";
+import { migrateLocalPresets } from "./presets";
 import type { User, Session } from "@supabase/supabase-js";
 
 export interface UserProfile {
@@ -85,7 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        fetchProfile(s.user.id);
+        fetchProfile(s.user.id).then(() => {
+          // Migrate any localStorage presets to server on login
+          migrateLocalPresets().catch(() => {});
+        });
       } else {
         setProfile(null);
       }
