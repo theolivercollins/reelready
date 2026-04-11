@@ -1,4 +1,4 @@
-import type { CameraMovement, RoomType, VideoProvider } from "../types";
+import type { CameraMovement, RoomType, VideoProvider } from "../types.js";
 
 export interface DirectorSceneOutput {
   scene_number: number;

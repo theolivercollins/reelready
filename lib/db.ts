@@ -10,7 +10,7 @@ import type {
   VideoProvider,
   LogStage,
   LogLevel,
-} from "./types";
+} from "./types.js";
 
 export type {
   Property,

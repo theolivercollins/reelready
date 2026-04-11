@@ -3,7 +3,7 @@ import type {
   GenerateClipParams,
   GenerationJob,
   GenerationResult,
-} from "./provider.interface";
+} from "./provider.interface.js";
 
 export class RunwayProvider implements IVideoProvider {
   name = "runway" as const;

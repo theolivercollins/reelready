@@ -1,8 +1,8 @@
-import type { RoomType, VideoProvider } from "../db";
-import type { IVideoProvider } from "./provider.interface";
-import { RunwayProvider } from "./runway";
-import { KlingProvider } from "./kling";
-import { LumaProvider } from "./luma";
+import type { RoomType, VideoProvider } from "../db.js";
+import type { IVideoProvider } from "./provider.interface.js";
+import { RunwayProvider } from "./runway.js";
+import { KlingProvider } from "./kling.js";
+import { LumaProvider } from "./luma.js";
 
 // Default routing: which provider handles which room types best
 const ROOM_TYPE_ROUTING: Record<RoomType, VideoProvider> = {

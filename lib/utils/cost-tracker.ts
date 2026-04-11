@@ -1,4 +1,4 @@
-import type { VideoProvider } from "../db";
+import type { VideoProvider } from "../db.js";
 
 // Prices in cents per second of generated video
 const GENERATION_COST_PER_SECOND: Record<VideoProvider, number> = {

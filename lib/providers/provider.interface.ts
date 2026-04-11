@@ -1,4 +1,4 @@
-import type { VideoProvider } from "../db";
+import type { VideoProvider } from "../db.js";
 
 export interface GenerateClipParams {
   sourceImage: Buffer;
