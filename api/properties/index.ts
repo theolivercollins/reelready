@@ -51,6 +51,13 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
   try {
     const { address, price, bedrooms, bathrooms, listing_agent, brokerage, tempId, photoPaths, driveLink } = req.body;
 
+    console.log('POST /api/properties body:', JSON.stringify({
+      address, price, bedrooms, bathrooms, listing_agent,
+      tempId, driveLink,
+      photoPathsCount: Array.isArray(photoPaths) ? photoPaths.length : 'not array',
+      photoPathsSample: Array.isArray(photoPaths) ? photoPaths.slice(0, 2) : photoPaths,
+    }));
+
     if (!address || !price || !bedrooms || !bathrooms || !listing_agent) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
