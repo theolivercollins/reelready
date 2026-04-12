@@ -55,10 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data) {
       setProfile(data as UserProfile);
     } else {
-      // First login — create profile
+      // First login — create profile with signup metadata if available
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const meta = currentUser?.user_metadata;
       const { data: newProfile } = await supabase
         .from("user_profiles")
-        .insert({ user_id: userId, email: user?.email })
+        .insert({
+          user_id: userId,
+          email: currentUser?.email,
+          first_name: meta?.first_name || null,
+          last_name: meta?.last_name || null,
+          brokerage: meta?.brokerage || null,
+        })
         .select()
         .single();
       if (newProfile) setProfile(newProfile as UserProfile);

@@ -46,6 +46,9 @@ export async function fetchPropertyStatus(id: string): Promise<{
   return apiFetch(`/api/properties/${id}/status`);
 }
 
+const SUPABASE_URL = 'https://vrhmaeywqsohlztoouxu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaG1hZXl3cXNvaGx6dG9vdXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDIxOTIsImV4cCI6MjA5MTQxODE5Mn0.GaiexH5L24zAoLgvjOUiixbHdnQW8kUMXXbyjnM8cM4';
+
 export async function createProperty(
   data: {
     address: string; price: number; bedrooms: number; bathrooms: number;
@@ -56,8 +59,9 @@ export async function createProperty(
   const tempId = crypto.randomUUID();
   const total = data.photos.length;
   let uploaded = 0;
+  const errors: string[] = [];
 
-  // Upload photos in parallel batches of 5 for speed
+  // Upload directly to Supabase Storage REST API (no JS client wrapper)
   const BATCH_SIZE = 5;
   const uploadedPaths: string[] = [];
 
@@ -65,25 +69,52 @@ export async function createProperty(
     const batch = data.photos.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(
       batch.map(async (file, j) => {
-        const fileName = `${Date.now()}_${i + j}_${file.name}`;
+        const fileName = `${Date.now()}_${i + j}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
         const storagePath = `${tempId}/raw/${fileName}`;
-        const { error } = await supabase.storage
-          .from('property-photos')
-          .upload(storagePath, file, { contentType: file.type });
-        uploaded++;
-        onProgress?.(uploaded, total);
-        if (error) {
-          console.error(`Failed to upload ${file.name}:`, error.message);
+        try {
+          const res = await fetch(
+            `${SUPABASE_URL}/storage/v1/object/property-photos/${storagePath}`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': file.type || 'image/jpeg',
+                'x-upsert': 'true',
+              },
+              body: file,
+            }
+          );
+          uploaded++;
+          onProgress?.(uploaded, total);
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            const msg = `${res.status} ${text}`;
+            console.error(`Upload failed for ${file.name}: ${msg}`);
+            errors.push(`${file.name}: ${msg}`);
+            return null;
+          }
+          return storagePath;
+        } catch (err) {
+          uploaded++;
+          onProgress?.(uploaded, total);
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`Network error uploading ${file.name}: ${msg}`);
+          errors.push(`${file.name}: ${msg}`);
           return null;
         }
-        return storagePath;
       })
     );
     uploadedPaths.push(...results.filter((p): p is string => p !== null));
   }
 
   if (uploadedPaths.length === 0) {
-    throw new Error(`All ${total} photo uploads failed. Check browser console for details.`);
+    throw new Error(
+      `All ${total} photo uploads failed.\n\nFirst error: ${errors[0] || 'unknown'}\n\nCheck browser console (F12) for details.`
+    );
+  }
+
+  if (uploadedPaths.length < total) {
+    console.warn(`Only ${uploadedPaths.length}/${total} photos uploaded successfully`);
   }
 
   // API call is instant — just sends paths + metadata

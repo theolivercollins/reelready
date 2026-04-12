@@ -527,6 +527,135 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Auth Modal */}
+      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
+        <DialogContent className="max-w-md p-0 gap-0 rounded-none overflow-hidden">
+          {authSent ? (
+            <div className="p-8 text-center space-y-4">
+              <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto" />
+              <h2 className="font-display text-xl font-semibold">Check your email</h2>
+              <p className="text-sm text-muted-foreground">
+                We sent a magic link to <span className="font-medium text-foreground">{authEmail}</span>. Click the link to {authTab === "signup" ? "create your account" : "sign in"}.
+              </p>
+              <button
+                onClick={() => { setAuthSent(false); setAuthEmail(""); }}
+                className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Tabs */}
+              <div className="flex border-b border-border">
+                <button
+                  onClick={() => setAuthTab("signin")}
+                  className={`flex-1 py-3.5 text-[11px] tracking-[0.15em] uppercase font-medium transition-colors ${
+                    authTab === "signin"
+                      ? "text-foreground border-b-2 border-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => setAuthTab("signup")}
+                  className={`flex-1 py-3.5 text-[11px] tracking-[0.15em] uppercase font-medium transition-colors ${
+                    authTab === "signup"
+                      ? "text-foreground border-b-2 border-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Create Account
+                </button>
+              </div>
+
+              <form onSubmit={handleAuthSubmit} className="p-6 space-y-4">
+                {authTab === "signup" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">First Name</Label>
+                        <Input
+                          value={authFirst}
+                          onChange={(e) => setAuthFirst(e.target.value)}
+                          placeholder="Jane"
+                          required
+                          className="rounded-none h-10"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">Last Name</Label>
+                        <Input
+                          value={authLast}
+                          onChange={(e) => setAuthLast(e.target.value)}
+                          placeholder="Smith"
+                          required
+                          className="rounded-none h-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">Brokerage</Label>
+                      <Input
+                        value={authBrokerage}
+                        onChange={(e) => setAuthBrokerage(e.target.value)}
+                        placeholder="e.g. Compass, Keller Williams"
+                        required
+                        className="rounded-none h-10"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      required
+                      autoFocus
+                      className="rounded-none h-10 pl-10"
+                    />
+                  </div>
+                </div>
+
+                {authError && (
+                  <p className="text-sm text-red-500">{authError}</p>
+                )}
+
+                <Button type="submit" className="w-full h-11 rounded-none tracking-[0.15em] uppercase text-[11px] font-medium" disabled={authLoading || !authEmail}>
+                  {authLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      {authTab === "signup" ? "Create Account" : "Send Magic Link"}
+                      <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
+
+                <p className="text-center text-[11px] text-muted-foreground">
+                  {authTab === "signin" ? (
+                    <>Don't have an account?{" "}
+                      <button type="button" onClick={() => setAuthTab("signup")} className="text-foreground underline underline-offset-2">Create one</button>
+                    </>
+                  ) : (
+                    <>Already have an account?{" "}
+                      <button type="button" onClick={() => setAuthTab("signin")} className="text-foreground underline underline-offset-2">Sign in</button>
+                    </>
+                  )}
+                </p>
+              </form>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Footer */}
       <footer className="border-t border-foreground/10 px-8 md:px-16 py-16">
         <div className="max-w-6xl mx-auto">
