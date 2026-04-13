@@ -33,8 +33,8 @@ export function sleep(ms: number): Promise<void> {
 export async function pollUntilComplete(
   provider: IVideoProvider,
   jobId: string,
-  timeoutMs: number = 180_000,
-  intervalMs: number = 3_000
+  timeoutMs: number = 270_000,
+  intervalMs: number = 5_000
 ): Promise<GenerationResult> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {

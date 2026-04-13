@@ -7,7 +7,7 @@ import { X, CheckCircle2, Loader2, Check, Mic, Bookmark, BookmarkCheck, RotateCc
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { getPresets, savePreset, Preset } from "@/lib/presets";
-import { createProperty, createPropertyFromDrive } from "@/lib/api";
+import { createProperty } from "@/lib/api";
 
 interface UploadedFile {
   file: File;
@@ -42,8 +42,6 @@ const Upload = () => {
   const [presetSaved, setPresetSaved] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ uploaded: number; total: number } | null>(null);
-  const [driveLink, setDriveLink] = useState("");
-  const [uploadMode, setUploadMode] = useState<"files" | "drive">("files");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -123,7 +121,7 @@ const Upload = () => {
 
   const needsDaysOnMarket = selectedPackage === "just_pended" || selectedPackage === "just_closed";
   const needsSoldPrice = selectedPackage === "just_closed";
-  const hasPhotos = uploadMode === "drive" ? driveLink.includes("drive.google.com") : files.length >= 10;
+  const hasPhotos = files.length >= 10;
   const isValid = address && price && bedrooms && bathrooms && agent && selectedPackage && selectedDuration && selectedOrientation && hasPhotos
     && (!needsDaysOnMarket || daysOnMarket)
     && (!needsSoldPrice || soldPrice);
@@ -150,36 +148,20 @@ const Upload = () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      if (uploadMode === "drive") {
-        // Google Drive mode — instant, no photo upload needed
-        const result = await createPropertyFromDrive({
+      const result = await createProperty(
+        {
           address,
           price: Number(price),
           bedrooms: Number(bedrooms),
           bathrooms: Number(bathrooms),
           listing_agent: agent,
           brokerage: "",
-          driveLink,
-        });
-        setTrackingId(result.id);
-        setSubmitted(true);
-      } else {
-        // File upload mode
-        const result = await createProperty(
-          {
-            address,
-            price: Number(price),
-            bedrooms: Number(bedrooms),
-            bathrooms: Number(bathrooms),
-            listing_agent: agent,
-            brokerage: "",
-            photos: files.map(f => f.file),
-          },
-          (uploaded, total) => setUploadProgress({ uploaded, total }),
-        );
-        setTrackingId(result.id);
-        setSubmitted(true);
-      }
+          photos: files.map(f => f.file),
+        },
+        (uploaded, total) => setUploadProgress({ uploaded, total }),
+      );
+      setTrackingId(result.id);
+      setSubmitted(true);
     } catch (err: any) {
       setSubmitError(err.message || "Failed to submit property");
     } finally {
@@ -196,9 +178,9 @@ const Upload = () => {
       <div className="min-h-screen bg-background flex flex-col">
         <nav className="border-b border-border px-8 md:px-16 py-5 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-1.5">
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">KEY</span>
+            <span className="font-display text-xl font-semibold tracking-wide text-foreground">REEL</span>
             <div className="h-5 w-px bg-foreground/30 mx-1" />
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">FRAME</span>
+            <span className="font-display text-xl font-semibold tracking-wide text-foreground">READY</span>
           </Link>
         </nav>
         <div className="flex-1 flex items-center justify-center p-6">
@@ -238,9 +220,9 @@ const Upload = () => {
       <nav className="border-b border-border px-8 md:px-16 py-5 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-1.5">
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">KEY</span>
+            <span className="font-display text-xl font-semibold tracking-wide text-foreground">REEL</span>
             <div className="h-5 w-px bg-foreground/30 mx-1" />
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">FRAME</span>
+            <span className="font-display text-xl font-semibold tracking-wide text-foreground">READY</span>
           </Link>
           <div className="h-4 w-px bg-border" />
           <span className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium">New Video</span>
@@ -429,73 +411,33 @@ const Upload = () => {
           <section>
             <div className="flex items-center justify-between mb-3">
               <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground">Photos</Label>
-              {uploadMode === "files" && files.length > 0 && (
+              {files.length > 0 && (
                 <span className="text-[11px] text-muted-foreground font-mono">{files.length}/60 • {formatSize(totalSize)}</span>
               )}
             </div>
 
-            {/* Upload mode toggle */}
-            <div className="flex gap-2 mb-3">
+            <div
+              className={`border-2 border-dashed rounded-none p-10 text-center cursor-pointer transition-all ${
+                isDragging ? "border-foreground bg-foreground/[0.03]" : "border-border hover:border-foreground/30"
+              }`}
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.heic,.webp" className="hidden" onChange={e => e.target.files && handleFiles(e.target.files)} />
+              <input ref={folderInputRef} type="file" {...{ webkitdirectory: "", directory: "" } as any} className="hidden" onChange={e => e.target.files && handleFiles(e.target.files)} />
+              <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium">Drop photos here or click to browse</p>
+              <p className="text-[11px] text-muted-foreground mt-1">JPG, PNG, HEIC, WebP • 10–60 photos</p>
               <button
                 type="button"
-                onClick={() => setUploadMode("files")}
-                className={`flex-1 py-2 text-[11px] tracking-[0.1em] uppercase font-medium border transition-all ${
-                  uploadMode === "files" ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground/30"
-                }`}
+                onClick={e => { e.stopPropagation(); folderInputRef.current?.click(); }}
+                className="mt-3 text-[11px] text-primary underline underline-offset-2 hover:text-primary/80"
               >
-                Upload Files
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadMode("drive")}
-                className={`flex-1 py-2 text-[11px] tracking-[0.1em] uppercase font-medium border transition-all ${
-                  uploadMode === "drive" ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground/30"
-                }`}
-              >
-                Google Drive Link
+                Or select an entire folder
               </button>
             </div>
-
-            {uploadMode === "drive" ? (
-              <div className="space-y-2">
-                <Input
-                  value={driveLink}
-                  onChange={e => setDriveLink(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/..."
-                  className="rounded-none h-11 font-mono text-sm"
-                />
-                <p className="text-[11px] text-muted-foreground">Paste a shared Google Drive folder link. Photos will be pulled automatically in the background.</p>
-                {driveLink && !driveLink.includes("drive.google.com") && (
-                  <p className="text-[11px] text-destructive">Please enter a valid Google Drive link</p>
-                )}
-                {driveLink && driveLink.includes("drive.google.com") && (
-                  <p className="text-[11px] text-primary">Drive link detected — photos will be downloaded after you submit</p>
-                )}
-              </div>
-            ) : (
-              <div
-                className={`border-2 border-dashed rounded-none p-10 text-center cursor-pointer transition-all ${
-                  isDragging ? "border-foreground bg-foreground/[0.03]" : "border-border hover:border-foreground/30"
-                }`}
-                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.heic,.webp" className="hidden" onChange={e => e.target.files && handleFiles(e.target.files)} />
-                <input ref={folderInputRef} type="file" {...{ webkitdirectory: "", directory: "" } as any} className="hidden" onChange={e => e.target.files && handleFiles(e.target.files)} />
-                <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm font-medium">Drop photos here or click to browse</p>
-                <p className="text-[11px] text-muted-foreground mt-1">JPG, PNG, HEIC, WebP • 10–60 photos</p>
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); folderInputRef.current?.click(); }}
-                  className="mt-3 text-[11px] text-primary underline underline-offset-2 hover:text-primary/80"
-                >
-                  Or select an entire folder
-                </button>
-              </div>
-            )}
 
             {files.length > 0 && (
               <div className="mt-4 space-y-3">

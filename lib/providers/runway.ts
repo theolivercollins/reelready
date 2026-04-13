@@ -31,7 +31,7 @@ export class RunwayProvider implements IVideoProvider {
         model: "gen4_turbo",
         promptImage: dataUrl,
         promptText: params.prompt,
-        duration: Math.min(Math.max(Math.round(params.durationSeconds), 5), 10),
+        duration: params.durationSeconds <= 7 ? 5 : 10,
         ratio: params.aspectRatio === "16:9" ? "1280:720" : "720:1280",
       }),
     });

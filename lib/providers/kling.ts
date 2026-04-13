@@ -63,10 +63,10 @@ export class KlingProvider implements IVideoProvider {
         method: "POST",
         headers: this.getAuthHeaders(),
         body: JSON.stringify({
-          model_name: "kling-v2",
+          model_name: "kling-v2-master",
           image: imageBase64,
           prompt: params.prompt,
-          duration: String(Math.round(params.durationSeconds)),
+          duration: params.durationSeconds <= 5 ? "5" : "10",
           aspect_ratio: params.aspectRatio,
           mode: "pro",
         }),
