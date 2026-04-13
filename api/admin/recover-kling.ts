@@ -1,0 +1,101 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+export const maxDuration = 300;
+
+// One-shot recovery endpoint for Kling tasks that were accepted + paid for
+// but never collected (e.g. the pipeline function hit maxDuration before
+// poll completion). Given a propertyId and a list of Kling task IDs, this
+// calls Kling checkStatus, downloads the completed clip, uploads to
+// Supabase Storage, and inserts a scene row so the clip appears in the
+// property's deliverables view.
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const body = req.body as { propertyId?: string; taskIds?: string[] };
+  const propertyId = body.propertyId;
+  const taskIds = body.taskIds;
+  if (!propertyId || !Array.isArray(taskIds) || taskIds.length === 0) {
+    return res.status(400).json({ error: 'Require { propertyId, taskIds: string[] }' });
+  }
+
+  try {
+    const { KlingProvider } = await import('../../lib/providers/kling.js');
+    const { getSupabase } = await import('../../lib/db.js');
+    const kling = new KlingProvider();
+    const supabase = getSupabase();
+
+    // Need a placeholder photo_id since scenes.photo_id is NOT NULL. Use any
+    // selected photo for this property. The clip content is what matters for
+    // recovery; the photo linkage is best-effort.
+    const { data: photos } = await supabase
+      .from('photos')
+      .select('id')
+      .eq('property_id', propertyId)
+      .eq('selected', true)
+      .limit(1);
+    const placeholderPhotoId = photos?.[0]?.id;
+    if (!placeholderPhotoId) {
+      return res.status(400).json({ error: 'No selected photos found for property' });
+    }
+
+    // Next scene_number — start from max(existing) + 1, but push to 100+ so
+    // recovered scenes are clearly distinct from the original shot plan.
+    const { data: maxRow } = await supabase
+      .from('scenes')
+      .select('scene_number')
+      .eq('property_id', propertyId)
+      .order('scene_number', { ascending: false })
+      .limit(1);
+    let nextSceneNum = Math.max(((maxRow?.[0]?.scene_number as number) ?? 0) + 1, 100);
+
+    const results: Array<{ taskId: string; ok: boolean; scene_number?: number; clip_url?: string; reason?: string }> = [];
+
+    for (const taskId of taskIds) {
+      try {
+        const status = await kling.checkStatus(taskId);
+        if (status.status !== 'complete' || !status.videoUrl) {
+          results.push({ taskId, ok: false, reason: status.error ?? `status=${status.status}` });
+          continue;
+        }
+
+        const clipBuffer = await kling.downloadClip(status.videoUrl);
+        const clipPath = `${propertyId}/clips/recovered_kling_${taskId}.mp4`;
+        const { error: uploadErr } = await supabase.storage
+          .from('property-videos')
+          .upload(clipPath, clipBuffer, { contentType: 'video/mp4', upsert: true });
+        if (uploadErr) throw uploadErr;
+
+        const { data: urlData } = supabase.storage.from('property-videos').getPublicUrl(clipPath);
+
+        const sceneNum = nextSceneNum++;
+        const { error: insertErr } = await supabase.from('scenes').insert({
+          property_id: propertyId,
+          photo_id: placeholderPhotoId,
+          scene_number: sceneNum,
+          camera_movement: 'slow_pan',
+          prompt: `[Recovered] Kling task ${taskId}`,
+          duration_seconds: 5,
+          status: 'qc_pass',
+          provider: 'kling',
+          clip_url: urlData.publicUrl,
+          attempt_count: 1,
+          qc_verdict: 'auto_pass',
+          qc_confidence: 1.0,
+        });
+        if (insertErr) throw insertErr;
+
+        results.push({ taskId, ok: true, scene_number: sceneNum, clip_url: urlData.publicUrl });
+      } catch (err) {
+        results.push({ taskId, ok: false, reason: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    return res.status(200).json({ propertyId, results });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ error: 'Recovery failed', detail: msg });
+  }
+}
