@@ -1,16 +1,27 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { User, LogOut, LayoutDashboard, UserCircle, Upload as UploadIcon } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LogOut, LayoutDashboard, UserCircle, Upload as UploadIcon, User } from "lucide-react";
+import { Wordmark } from "@/components/brand/Wordmark";
+import { ThemeToggle } from "@/components/brand/ThemeToggle";
 
 export function TopNav() {
   const { user, profile, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Index.tsx renders its own hero-style navigation with auth modal hookup.
+  // Render nothing here on the landing page so the two don't stack.
+  if (location.pathname === "/") return null;
+
   const isAdmin = profile?.role === "admin";
-  const isHome = location.pathname === "/";
 
   async function handleSignOut() {
     await signOut();
@@ -18,70 +29,44 @@ export function TopNav() {
   }
 
   return (
-    <header
-      className={`sticky top-0 z-50 w-full border-b ${
-        isHome
-          ? "border-white/10 bg-black/30 backdrop-blur-md"
-          : "border-border bg-background/80 backdrop-blur-md"
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 flex items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span
-            className={`font-display text-lg md:text-xl font-semibold tracking-tight ${
-              isHome ? "text-white" : "text-foreground"
-            }`}
-          >
-            Listing Elevate
-          </span>
-        </Link>
+    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/55 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/40">
+      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-6 md:h-[72px] md:px-10">
+        <Wordmark size="md" />
 
         <nav className="flex items-center gap-2 md:gap-4">
           {user ? (
             <>
               <Link
                 to="/upload"
-                className={`hidden sm:inline text-[11px] md:text-xs tracking-[0.2em] uppercase font-medium transition-colors ${
-                  isHome ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className="label hidden text-muted-foreground transition-colors hover:text-foreground sm:inline"
               >
-                Upload
+                New video
               </Link>
               {isAdmin && (
                 <Link
                   to="/dashboard"
-                  className={`hidden sm:inline text-[11px] md:text-xs tracking-[0.2em] uppercase font-medium transition-colors ${
-                    isHome ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className="label hidden text-muted-foreground transition-colors hover:text-foreground sm:inline"
                 >
                   Dashboard
                 </Link>
               )}
-
+              <ThemeToggle className="ml-2" />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`rounded-full h-8 w-8 ${
-                      isHome ? "hover:bg-white/10 text-white" : ""
-                    }`}
+                  <button
+                    type="button"
+                    className="ml-1 flex h-9 w-9 items-center justify-center border border-border text-foreground transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-foreground/40 hover:bg-secondary"
+                    aria-label="Account menu"
                   >
-                    <div
-                      className={`h-7 w-7 rounded-full flex items-center justify-center ${
-                        isHome ? "bg-white/15" : "bg-primary/15"
-                      }`}
-                    >
-                      <User className={`h-4 w-4 ${isHome ? "text-white" : "text-primary"}`} />
-                    </div>
-                  </Button>
+                    <User className="h-4 w-4" />
+                  </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground truncate">{user.email}</div>
+                <DropdownMenuContent align="end" className="w-60">
+                  <div className="label truncate px-3 py-2 text-muted-foreground">{user.email}</div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link to="/upload" className="cursor-pointer">
-                      <UploadIcon className="mr-2 h-4 w-4" /> Upload
+                      <UploadIcon className="mr-2 h-4 w-4" /> New video
                     </Link>
                   </DropdownMenuItem>
                   {isAdmin ? (
@@ -99,31 +84,22 @@ export function TopNav() {
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={handleSignOut} className="cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                    <LogOut className="mr-2 h-4 w-4" /> Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
           ) : (
             <>
+              <ThemeToggle />
               <Link
                 to="/login"
-                className={`text-[11px] md:text-xs tracking-[0.2em] uppercase font-medium transition-colors ${
-                  isHome ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className="label hidden text-muted-foreground transition-colors hover:text-foreground md:inline"
               >
-                Sign In
+                Sign in
               </Link>
-              <Button
-                size="sm"
-                className={`tracking-[0.2em] uppercase text-[11px] px-5 rounded-none font-medium ${
-                  isHome
-                    ? "bg-white text-foreground hover:bg-white/90"
-                    : "bg-foreground text-background hover:bg-foreground/90"
-                }`}
-                asChild
-              >
-                <Link to="/login">Get Started</Link>
+              <Button asChild size="sm">
+                <Link to="/login">Get started</Link>
               </Button>
             </>
           )}

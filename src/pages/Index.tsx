@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Play, DollarSign, Clock, Film, Upload, Sparkles, Download, ChevronDown, Plus, Minus, Mail, CheckCircle, Loader2 } from "lucide-react";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { ArrowRight, ArrowUpRight, Mail, Loader2, CheckCircle, Plus, Minus, Sun, Moon } from "lucide-react";
+import { motion, useScroll, useTransform, type Variants } from "framer-motion";
 import { useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
+import { Wordmark } from "@/components/brand/Wordmark";
 import heroVideo from "@/assets/hero-video-loop.mp4.asset.json";
 import heroBg from "@/assets/hero-bg.jpg";
 import interior1 from "@/assets/interior-1.jpg";
@@ -22,55 +24,64 @@ import showcaseAerial from "@/assets/showcase-aerial.mp4.asset.json";
 import showcaseExterior from "@/assets/showcase-exterior.mp4.asset.json";
 import showcaseBeach from "@/assets/showcase-beach.mp4.asset.json";
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 32 },
   visible: (i: number = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+    transition: { duration: 1.1, delay: i * 0.08, ease: EASE },
   }),
 };
 
-const stagger = {
+const stagger: Variants = {
   visible: { transition: { staggerChildren: 0.12 } },
 };
 
-const FAQItem = ({ question, answer }: { question: string; answer: string }) => {
+function FAQItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-foreground/10">
+    <div className="border-b border-border">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between py-6 text-left group"
+        className="group flex w-full items-center justify-between py-7 text-left"
       >
-        <span className="font-display text-base md:text-lg font-medium text-foreground pr-8">{question}</span>
-        <div className="shrink-0 h-8 w-8 rounded-full border border-foreground/20 flex items-center justify-center group-hover:bg-foreground group-hover:text-background transition-all">
+        <span className="pr-8 text-base font-semibold tracking-[-0.01em] text-foreground md:text-lg">
+          {question}
+        </span>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border text-muted-foreground transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:border-foreground group-hover:text-foreground">
           {open ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
         </div>
       </button>
       <motion.div
         initial={false}
         animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
-        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.5, ease: EASE }}
         className="overflow-hidden"
       >
-        <p className="text-sm text-muted-foreground leading-relaxed pb-6 max-w-2xl">{answer}</p>
+        <p className="max-w-2xl pb-7 text-sm leading-relaxed text-muted-foreground">
+          {answer}
+        </p>
       </motion.div>
     </div>
   );
-};
+}
 
 const Index = () => {
   const { user, profile } = useAuth();
   const accountHref = profile?.role === "admin" ? "/dashboard" : "/account";
   const accountLabel = profile?.role === "admin" ? "Dashboard" : "Account";
   const navigate = useNavigate();
+  const { theme, toggle: toggleTheme } = useTheme();
   const heroRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
-  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0]);
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 120]);
 
-  // Auth modal state
+  // Auth modal
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
   const [authEmail, setAuthEmail] = useState("");
@@ -93,11 +104,8 @@ const Index = () => {
   };
 
   const handleGetStarted = () => {
-    if (user) {
-      navigate("/upload");
-    } else {
-      openAuth("signup");
-    }
+    if (user) navigate("/upload");
+    else openAuth("signup");
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -108,7 +116,6 @@ const Index = () => {
       const metadata = authTab === "signup"
         ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
         : undefined;
-
       const { error } = await supabase.auth.signInWithOtp({
         email: authEmail,
         options: {
@@ -125,18 +132,90 @@ const Index = () => {
     }
   };
 
+  const showcase = [
+    { src: showcaseInterior.url, poster: interior1, label: "Interior", index: "01", tall: true },
+    { src: showcaseKitchen.url, poster: kitchen1, label: "Kitchen", index: "02" },
+    { src: showcaseBathroom.url, poster: bathroom1, label: "Bathroom", index: "03" },
+    { src: showcaseExterior.url, poster: exterior1, label: "Exterior", index: "04" },
+    { src: showcaseAerial.url, poster: aerial1, label: "Aerial", index: "05" },
+    { src: showcaseBeach.url, poster: aerial1, label: "Coastal", index: "06" },
+  ];
+
   const faqs = [
-    { question: "How many photos do I need to submit?", answer: "We require a minimum of 10 and accept up to 60 high-quality property photos. The more photos you provide, the more diverse and cinematic your final video will be. We recommend including a mix of exterior, interior, and detail shots." },
-    { question: "What is the turnaround time?", answer: "Standard delivery is within 72 hours of submission. Our AI-powered pipeline processes your photos through multiple stages — scene planning, video generation, quality control, and final assembly — to ensure a polished, cinematic result." },
-    { question: "What video formats do I receive?", answer: "You can choose vertical (9:16 for Instagram Reels, TikTok), horizontal (16:9 for YouTube, MLS), or both formats. Each video includes professional transitions, music, and optional AI voiceover narration." },
-    { question: "Can I request revisions?", answer: "Yes. If you're not satisfied with your video, we offer one round of revisions at no additional cost. Simply provide feedback through your status page and we'll make adjustments within 48 hours." },
-    { question: "How does pricing compare to traditional videography?", answer: "Traditional real estate videography typically costs $500–$2,000+ per property and takes 1–2 weeks. Listing Elevate starts at just $75 with 72-hour delivery, saving you up to 85% while delivering cinematic quality." },
+    { q: "How many photos do I need?", a: "Upload 10 to 60 high-resolution property photos. More photos give the engine more material to compose from — a mix of exterior, interior, and detail shots produces the most cinematic result." },
+    { q: "How fast is delivery?", a: "Every video is delivered within 72 hours. The pipeline runs a six-stage process — intake, analysis, scripting, generation, quality control, and assembly — around the clock." },
+    { q: "What formats do I receive?", a: "Vertical 9:16 for Reels and TikTok, horizontal 16:9 for YouTube and MLS, or both. Every video ships with transitions, music, and optional AI voiceover included." },
+    { q: "Can I request revisions?", a: "Yes. One revision round is included at no additional cost. Flag anything you want changed from your status page and we'll deliver the update within 48 hours." },
+    { q: "How does pricing compare to traditional video?", a: "Real estate videographers charge $500 to $2,000 per listing with a one to two week turnaround. Listing Elevate starts at $75, delivered in 72 hours. Up to 85% less, at cinematic quality." },
   ];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Hero — full-bleed cinematic video */}
-      <section ref={heroRef} className="relative h-screen w-full flex items-center justify-center overflow-hidden">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* ─── Navigation (liquid glass) ─── */}
+      <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-white/[0.04] backdrop-blur-2xl backdrop-saturate-[180%] supports-[backdrop-filter]:bg-white/[0.05]">
+        <nav className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-8 md:h-[76px] md:px-12">
+          <Link to="/" className="inline-flex items-center gap-2.5 text-white transition-opacity hover:opacity-80">
+            <span className="relative inline-block h-6 w-6" aria-hidden>
+              <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1" y="1" width="22" height="22" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="5" y="14" width="3" height="5" fill="currentColor" />
+                <rect x="10.5" y="10" width="3" height="9" fill="currentColor" />
+                <rect x="16" y="6" width="3" height="13" fill="currentColor" />
+              </svg>
+            </span>
+            <span className="text-base font-semibold tracking-[-0.01em] leading-none">
+              Listing<span className="text-accent">.</span>Elevate
+            </span>
+          </Link>
+          <div className="hidden items-center gap-10 md:flex">
+            <a href="#process" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Process</a>
+            <a href="#showcase" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Showcase</a>
+            <a href="#pricing" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Pricing</a>
+            <a href="#faq" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">FAQ</a>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="inline-flex h-9 w-9 items-center justify-center border border-white/20 text-white/80 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-white/60 hover:bg-white/10"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            {user ? (
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="border-white/30 bg-white/5 text-white hover:border-white hover:bg-white hover:text-black"
+              >
+                <Link to={accountHref}>{accountLabel}</Link>
+              </Button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openAuth("signin")}
+                  className="hidden text-[13px] font-medium text-white/70 transition-colors hover:text-white md:block"
+                >
+                  Sign in
+                </button>
+                <Button
+                  size="sm"
+                  onClick={handleGetStarted}
+                  className="bg-white text-black hover:bg-white/90"
+                >
+                  Get started
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+          </div>
+        </nav>
+      </header>
+
+      {/* ─── Hero ─── */}
+      <section ref={heroRef} className="relative flex h-screen min-h-[720px] w-full items-center justify-center overflow-hidden">
         <motion.div style={{ scale: heroScale }} className="absolute inset-0">
           <video
             autoPlay
@@ -144,345 +223,201 @@ const Index = () => {
             muted
             playsInline
             poster={heroBg}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
           >
             <source src={heroVideo.url} type="video/mp4" />
           </video>
         </motion.div>
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/70 backdrop-blur-[2px]" />
-        <div className="absolute inset-0" style={{ boxShadow: "inset 0 120px 140px -40px rgba(0,0,0,0.5), inset 0 -120px 140px -40px rgba(0,0,0,0.5)" }} />
+        {/* Cinematic gradient — always dark over video, independent of theme */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/35 to-black/90" />
+        <div
+          className="absolute inset-0"
+          style={{
+            boxShadow:
+              "inset 0 160px 180px -60px rgba(0,0,0,0.7), inset 0 -160px 200px -40px rgba(0,0,0,0.85)",
+          }}
+        />
 
         <motion.div
-          style={{ opacity: heroOpacity }}
-          className="relative z-10 text-center max-w-3xl px-8"
+          style={{ opacity: heroOpacity, y: heroY }}
+          className="relative z-10 mx-auto w-full max-w-[1440px] px-8 md:px-12"
         >
-          <motion.span
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="text-[11px] tracking-[0.4em] uppercase text-white/70 font-medium block mb-6"
-          >
-            Cinematic Real Estate Video
-          </motion.span>
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold leading-[1.05] tracking-tight text-white"
-          >
-            Every Listing Deserves
-            <br />
-            <em className="italic text-accent">a Premiere.</em>
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.8 }}
-            className="text-sm md:text-base text-white/70 max-w-md mx-auto leading-relaxed mt-6"
-          >
-            Upload your property photos and receive stunning, cinematic listing videos — crafted by AI, delivered in hours.
-          </motion.p>
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 1 }}
-            className="flex items-center justify-center gap-4 mt-10"
+            initial="hidden"
+            animate="visible"
+            variants={stagger}
+            className="max-w-4xl"
           >
-            <Button size="lg" className="px-10 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
-              Upload Photos <ArrowRight className="ml-2 h-3.5 w-3.5" />
-            </Button>
-            {!user && (
-              <Button size="lg" variant="outline" className="px-10 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium border-white text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm" onClick={() => openAuth("signin")}>
-                <Play className="mr-2 h-3.5 w-3.5" /> Sign In
+            <motion.span
+              variants={fadeUp}
+              className="label block text-white/60"
+            >
+              — Listing Elevate. Cinematic, on demand.
+            </motion.span>
+            <motion.h1
+              variants={fadeUp}
+              className="mt-8 font-semibold tracking-[-0.035em] text-white"
+              style={{ fontSize: "clamp(3rem, 8vw, 7rem)", lineHeight: 0.95 }}
+            >
+              Every property,
+              <br />
+              in motion.
+            </motion.h1>
+            <motion.p
+              variants={fadeUp}
+              className="mt-10 max-w-xl text-base leading-relaxed text-white/75 md:text-lg"
+            >
+              Upload photos. Receive a directed, edited, cinematic listing video within 72 hours. No crew, no scheduling, no post-production.
+            </motion.p>
+            <motion.div variants={fadeUp} className="mt-12 flex flex-wrap items-center gap-4">
+              <Button
+                size="xl"
+                onClick={handleGetStarted}
+                className="bg-white text-black hover:bg-white/90"
+              >
+                Start a video
+                <ArrowRight className="h-4 w-4" />
               </Button>
-            )}
+              {!user && (
+                <button
+                  type="button"
+                  onClick={() => openAuth("signin")}
+                  className="group inline-flex items-center gap-2 text-[13px] font-medium text-white/80 transition-colors hover:text-white"
+                >
+                  <span className="border-b border-white/30 pb-1 transition-colors group-hover:border-white">
+                    Sign in to your account
+                  </span>
+                  <ArrowUpRight className="h-4 w-4" />
+                </button>
+              )}
+            </motion.div>
           </motion.div>
         </motion.div>
 
+        {/* Bottom meta strip */}
         <motion.div
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.5, duration: 1, ease: EASE }}
+          className="absolute bottom-8 left-0 right-0 z-10 mx-auto flex max-w-[1440px] items-end justify-between px-8 md:px-12"
         >
-          <ChevronDown className="h-6 w-6 text-white/50" />
+          <div className="label text-white/50">
+            <span className="tabular text-white/80">72h</span> delivery
+          </div>
+          <div className="hidden label text-white/50 md:block">
+            From <span className="tabular text-white/80">$75</span>
+          </div>
+          <div className="label text-white/50">
+            Scroll to explore
+          </div>
         </motion.div>
       </section>
 
-      {/* How It Works */}
-      <section className="px-8 md:px-16 py-24 md:py-32">
-        <div className="max-w-6xl mx-auto">
+      {/* ─── Section: Process ─── */}
+      <section id="process" className="relative border-t border-border px-8 py-32 md:px-12 md:py-40">
+        <div className="mx-auto max-w-[1440px]">
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
+            viewport={{ once: true, margin: "-120px" }}
             variants={stagger}
-            className="text-center mb-20"
+            className="grid gap-12 md:grid-cols-[1fr_2fr] md:gap-20"
           >
-            <motion.span variants={fadeUp} custom={0} className="text-[11px] tracking-[0.35em] uppercase text-muted-foreground font-medium">
-              The Process
-            </motion.span>
-            <motion.h2 variants={fadeUp} custom={1} className="font-display text-3xl md:text-5xl font-semibold text-foreground mt-4">
-              Three Simple Steps
-            </motion.h2>
-            <motion.p variants={fadeUp} custom={2} className="text-muted-foreground mt-4 max-w-lg mx-auto">
-              From photos to premiere-ready video in 72 hours. No filming crew, no scheduling, no hassle.
+            <motion.div variants={fadeUp}>
+              <span className="label text-muted-foreground">— 01 / Process</span>
+              <h2 className="display-lg mt-6 text-foreground">
+                Three steps.
+                <br />
+                <span className="text-muted-foreground">No crew.</span>
+              </h2>
+            </motion.div>
+            <motion.p
+              variants={fadeUp}
+              custom={1}
+              className="self-end text-base leading-relaxed text-muted-foreground md:text-lg"
+            >
+              The same cinematic pipeline that powers premium listing firms, compressed into a 72-hour automated workflow. Upload, wait, deliver.
             </motion.p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-80px" }}
+            variants={stagger}
+            className="mt-20 grid gap-px bg-border md:grid-cols-3"
+          >
             {[
               {
-                icon: <Upload className="h-6 w-6" />,
-                step: "01",
-                title: "Upload Photos",
-                desc: "Submit 10–60 high-quality property photos through our premium upload portal. Select your video type, duration, and format.",
+                index: "01",
+                title: "Upload",
+                copy: "Drop 10 to 60 property photos. Select your package, duration, and format. Three minutes, start to finish.",
                 image: kitchen1,
               },
               {
-                icon: <Sparkles className="h-6 w-6" />,
-                step: "02",
-                title: "AI Production",
-                desc: "Our cinematic AI pipeline analyzes each photo, plans the shot sequence, generates smooth camera movements, and assembles your video.",
-                image: bathroom1,
+                index: "02",
+                title: "Direct",
+                copy: "The engine analyses each frame, drafts a shot list, runs multi-model QA, and generates cinematic camera moves.",
+                image: interior1,
               },
               {
-                icon: <Download className="h-6 w-6" />,
-                step: "03",
-                title: "Download & Share",
-                desc: "Receive your polished listing video within 72 hours. Download in vertical, horizontal, or both formats — ready for every platform.",
+                index: "03",
+                title: "Deliver",
+                copy: "Your final cut arrives within 72 hours — in vertical, horizontal, or both. Ready for every channel.",
                 image: aerial1,
               },
-            ].map((item, i) => (
+            ].map((step, i) => (
               <motion.div
-                key={item.step}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-50px" }}
+                key={step.index}
                 variants={fadeUp}
                 custom={i}
-                className="relative group"
+                className="group relative overflow-hidden bg-background"
               >
-                <div className="relative h-[320px] overflow-hidden">
+                <div className="aspect-[4/5] overflow-hidden">
                   <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    src={step.image}
+                    alt={step.title}
+                    className="h-full w-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
                     loading="lazy"
-                    width={800}
-                    height={600}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                  <div className="absolute top-6 left-6">
-                    <span className="font-mono text-white/50 text-sm">{item.step}</span>
-                  </div>
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <div className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-white mb-3">
-                      {item.icon}
-                    </div>
-                    <h3 className="font-display text-xl font-semibold text-white">{item.title}</h3>
-                    <p className="text-sm text-white/70 mt-2 leading-relaxed">{item.desc}</p>
-                  </div>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-8">
+                  <span className="label text-white/50">— {step.index}</span>
+                  <h3 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-white md:text-3xl">
+                    {step.title}
+                  </h3>
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/75">
+                    {step.copy}
+                  </p>
                 </div>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* AI Video Showcase */}
-      <section className="px-8 md:px-16 py-20 md:py-28 bg-muted/30">
-        <div className="max-w-6xl mx-auto">
+      {/* ─── Section: Showcase ─── */}
+      <section id="showcase" className="border-t border-border bg-secondary/30 px-8 py-32 md:px-12 md:py-40">
+        <div className="mx-auto max-w-[1440px]">
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
+            viewport={{ once: true, margin: "-120px" }}
             variants={stagger}
-            className="text-center mb-16"
+            className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between"
           >
-            <motion.span variants={fadeUp} custom={0} className="text-[11px] tracking-[0.35em] uppercase text-muted-foreground font-medium">
-              From Photos to Film
-            </motion.span>
-            <motion.h2 variants={fadeUp} custom={1} className="font-display text-3xl md:text-5xl font-semibold text-foreground mt-4">
-              AI-Generated Showcase
-            </motion.h2>
-            <motion.p variants={fadeUp} custom={2} className="text-muted-foreground mt-4 max-w-lg mx-auto text-sm">
-              See what our AI pipeline produces — every video below was generated entirely from property photos.
+            <motion.div variants={fadeUp}>
+              <span className="label text-muted-foreground">— 02 / Showcase</span>
+              <h2 className="display-lg mt-6 text-foreground">
+                Generated from stills.
+                <br />
+                <span className="text-muted-foreground">Every frame.</span>
+              </h2>
+            </motion.div>
+            <motion.p variants={fadeUp} custom={1} className="max-w-md text-base leading-relaxed text-muted-foreground">
+              Six cuts. Every one produced end-to-end from property photography by the Listing Elevate pipeline.
             </motion.p>
-          </motion.div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-            {[
-              { src: showcaseInterior.url, poster: interior1, label: "Interior", desc: "Living & Bedroom", span: "md:col-span-2 md:row-span-2" },
-              { src: showcaseKitchen.url, poster: kitchen1, label: "Kitchen", desc: "Gourmet Spaces", span: "" },
-              { src: showcaseBathroom.url, poster: bathroom1, label: "Bathroom", desc: "Spa & Bath", span: "" },
-              { src: showcaseBeach.url, poster: aerial1, label: "Beach", desc: "Coastal Areas", span: "" },
-              { src: showcaseExterior.url, poster: exterior1, label: "Exterior", desc: "Curb Appeal", span: "" },
-              { src: showcaseAerial.url, poster: aerial1, label: "Aerial", desc: "Drone Views", span: "" },
-            ].map((vid, i) => (
-              <motion.div
-                key={vid.label}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={fadeUp}
-                custom={i * 0.5}
-                className={`relative overflow-hidden group rounded-sm ${vid.span}`}
-              >
-                <video
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  poster={vid.poster}
-                  className={`w-full ${vid.span ? "h-full min-h-[300px] md:min-h-[500px]" : "h-[200px] md:h-[240px]"} object-cover transition-transform duration-700 group-hover:scale-105`}
-                >
-                  <source src={vid.src} type="video/mp4" />
-                </video>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <div className="absolute bottom-4 left-4">
-                  <span className="text-[10px] tracking-[0.25em] uppercase text-white/60 font-medium block">{vid.desc}</span>
-                  <span className="font-display text-sm font-semibold text-white">{vid.label}</span>
-                </div>
-                <div className="absolute top-3 right-3 h-6 w-6 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center">
-                  <Play className="h-3 w-3 text-white" />
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Comparison stats */}
-      <motion.section
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-100px" }}
-        variants={stagger}
-        className="px-8 md:px-16 py-24 md:py-32"
-      >
-        <div className="max-w-5xl mx-auto">
-          <motion.div variants={fadeUp} custom={0} className="text-center mb-16">
-            <span className="text-[11px] tracking-[0.35em] uppercase text-muted-foreground font-medium">
-              The Advantage
-            </span>
-            <h2 className="font-display text-3xl md:text-5xl font-semibold text-foreground mt-4">
-              Why Listing Elevate?
-            </h2>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 border-t border-foreground/10">
-            {[
-              {
-                icon: <DollarSign className="h-4 w-4 text-accent" />,
-                label: "Cost",
-                ours: "$75",
-                oursSub: "Listing Elevate",
-                theirs: "$500+",
-                theirsSub: "Traditional",
-              },
-              {
-                icon: <Clock className="h-4 w-4 text-accent" />,
-                label: "Turnaround",
-                ours: "72 hrs",
-                oursSub: "Listing Elevate",
-                theirs: "1–2 wks",
-                theirsSub: "Traditional",
-              },
-              {
-                icon: <Film className="h-4 w-4 text-accent" />,
-                label: "Output",
-                ours: "Both Formats",
-                oursSub: "Vertical + Horizontal included",
-                theirs: null,
-                theirsSub: "Traditional — extra charge per format",
-              },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                variants={fadeUp}
-                custom={i + 1}
-                className={`py-10 ${i === 0 ? "md:pr-12 md:border-r" : i === 1 ? "md:px-12 md:border-r border-t md:border-t-0" : "md:pl-12 border-t md:border-t-0"} border-foreground/10`}
-              >
-                <div className="flex items-center gap-2 mb-5">
-                  {stat.icon}
-                  <span className="text-[11px] tracking-[0.25em] uppercase text-muted-foreground font-medium">{stat.label}</span>
-                </div>
-                <div className="flex items-baseline gap-4">
-                  <div>
-                    <div className="font-display text-3xl md:text-4xl font-semibold text-foreground">{stat.ours}</div>
-                    <div className="text-[11px] text-muted-foreground mt-1.5 tracking-wide uppercase">{stat.oursSub}</div>
-                  </div>
-                  {stat.theirs && (
-                    <>
-                      <span className="text-muted-foreground/30 text-xs">vs</span>
-                      <div>
-                        <div className="font-display text-3xl md:text-4xl font-semibold text-muted-foreground/25 line-through">{stat.theirs}</div>
-                        <div className="text-[11px] text-muted-foreground mt-1.5 tracking-wide uppercase">{stat.theirsSub}</div>
-                      </div>
-                    </>
-                  )}
-                </div>
-                {!stat.theirs && (
-                  <div className="mt-3">
-                    <span className="text-[11px] text-muted-foreground tracking-wide">{stat.theirsSub}</span>
-                  </div>
-                )}
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </motion.section>
-
-      {/* Full-bleed CTA image */}
-      <section className="relative h-[50vh] md:h-[60vh] overflow-hidden">
-        <motion.img
-          src={aerial1}
-          alt="Aerial estate view"
-          className="w-full h-full object-cover"
-          loading="lazy"
-          width={1920}
-          height={768}
-          initial={{ scale: 1.1 }}
-          whileInView={{ scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-        />
-        <div className="absolute inset-0 bg-black/40" />
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="absolute inset-0 flex flex-col items-center justify-center text-center px-8"
-        >
-          <h2 className="font-display text-3xl md:text-5xl font-semibold text-white max-w-2xl">
-            Ready to Elevate Your Listings?
-          </h2>
-          <p className="text-white/70 mt-4 max-w-md text-sm">
-            Join hundreds of agents using Listing Elevate to create cinematic listing videos in a fraction of the time and cost.
-          </p>
-          <Button size="lg" className="mt-8 px-12 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
-            Start Your First Video <ArrowRight className="ml-2 h-3.5 w-3.5" />
-          </Button>
-        </motion.div>
-      </section>
-
-      {/* FAQ */}
-      <section className="px-8 md:px-16 py-24 md:py-32">
-        <div className="max-w-3xl mx-auto">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={stagger}
-            className="mb-16"
-          >
-            <motion.span variants={fadeUp} custom={0} className="text-[11px] tracking-[0.35em] uppercase text-muted-foreground font-medium">
-              Common Questions
-            </motion.span>
-            <motion.h2 variants={fadeUp} custom={1} className="font-display text-3xl md:text-5xl font-semibold text-foreground mt-4">
-              FAQ
-            </motion.h2>
           </motion.div>
 
           <motion.div
@@ -490,136 +425,326 @@ const Index = () => {
             whileInView="visible"
             viewport={{ once: true }}
             variants={stagger}
+            className="mt-20 grid grid-cols-2 gap-1 md:grid-cols-4 md:grid-rows-2"
           >
-            {faqs.map((faq, i) => (
+            {showcase.map((v, i) => (
+              <motion.figure
+                key={v.label}
+                variants={fadeUp}
+                custom={i}
+                className={`group relative overflow-hidden bg-black ${i === 0 ? "md:col-span-2 md:row-span-2" : ""}`}
+              >
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  poster={v.poster}
+                  className={`w-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04] ${
+                    i === 0 ? "h-full min-h-[420px] md:min-h-[640px]" : "h-[220px] md:h-[310px]"
+                  }`}
+                >
+                  <source src={v.src} type="video/mp4" />
+                </video>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5">
+                  <span className="label text-white/90">{v.label}</span>
+                  <span className="label tabular text-white/40">— {v.index}</span>
+                </figcaption>
+              </motion.figure>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ─── Section: Pricing / Compare ─── */}
+      <section id="pricing" className="border-t border-border px-8 py-32 md:px-12 md:py-40">
+        <div className="mx-auto max-w-[1440px]">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-120px" }}
+            variants={stagger}
+            className="max-w-2xl"
+          >
+            <motion.span variants={fadeUp} className="label text-muted-foreground">
+              — 03 / The economics
+            </motion.span>
+            <motion.h2 variants={fadeUp} custom={1} className="display-lg mt-6">
+              85% less.
+              <br />
+              <span className="text-muted-foreground">Same cinema.</span>
+            </motion.h2>
+          </motion.div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-80px" }}
+            variants={stagger}
+            className="mt-20 grid gap-px border border-border bg-border md:grid-cols-3"
+          >
+            {[
+              { label: "Starting at", ours: "$75", theirs: "$500+", theirsLabel: "Traditional videographer" },
+              { label: "Turnaround", ours: "72 hours", theirs: "1–2 weeks", theirsLabel: "Production + post" },
+              { label: "Formats included", ours: "Both", theirs: "One", theirsLabel: "Vertical or horizontal" },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                variants={fadeUp}
+                custom={i}
+                className="bg-background p-10"
+              >
+                <span className="label text-muted-foreground">{stat.label}</span>
+                <div className="mt-6 flex items-baseline gap-4">
+                  <span className="tabular text-5xl font-semibold tracking-[-0.035em] text-foreground md:text-6xl">
+                    {stat.ours}
+                  </span>
+                  <span className="tabular text-sm text-muted-foreground/60 line-through">{stat.theirs}</span>
+                </div>
+                <p className="mt-4 text-xs text-muted-foreground">{stat.theirsLabel}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <div className="mt-16 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
+            <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
+              Four packages, three durations, two orientations. Start with a 15-second Just Listed at $75 — upgrade any time.
+            </p>
+            <Button size="lg" onClick={handleGetStarted}>
+              See packages
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Full-bleed CTA ─── */}
+      <section className="relative h-[70vh] min-h-[560px] overflow-hidden border-t border-border">
+        <motion.img
+          src={aerial1}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+          initial={{ scale: 1.12 }}
+          whileInView={{ scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 2, ease: EASE }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/90" />
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 1.1, ease: EASE }}
+          className="relative z-10 mx-auto flex h-full max-w-[1440px] flex-col items-start justify-end px-8 pb-24 md:px-12 md:pb-32"
+        >
+          <span className="label text-white/60">— The next step</span>
+          <h2 className="mt-6 max-w-3xl font-semibold tracking-[-0.035em] text-white" style={{ fontSize: "clamp(2.5rem, 6vw, 5.5rem)", lineHeight: 1 }}>
+            Your next listing,
+            <br />
+            elevated.
+          </h2>
+          <Button
+            size="xl"
+            className="mt-12 bg-white text-black hover:bg-white/90"
+            onClick={handleGetStarted}
+          >
+            Start your first video
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </motion.div>
+      </section>
+
+      {/* ─── FAQ ─── */}
+      <section id="faq" className="border-t border-border px-8 py-32 md:px-12 md:py-40">
+        <div className="mx-auto grid max-w-[1440px] gap-16 md:grid-cols-[1fr_2fr] md:gap-24">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-120px" }}
+            variants={stagger}
+          >
+            <motion.span variants={fadeUp} className="label text-muted-foreground">
+              — 04 / Frequently asked
+            </motion.span>
+            <motion.h2 variants={fadeUp} custom={1} className="display-lg mt-6">
+              Questions,
+              <br />
+              <span className="text-muted-foreground">answered.</span>
+            </motion.h2>
+          </motion.div>
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-60px" }}
+            variants={stagger}
+            className="border-t border-border"
+          >
+            {faqs.map((f, i) => (
               <motion.div key={i} variants={fadeUp} custom={i}>
-                <FAQItem question={faq.question} answer={faq.answer} />
+                <FAQItem question={f.q} answer={f.a} />
               </motion.div>
             ))}
           </motion.div>
         </div>
       </section>
 
-      {/* Auth Modal */}
+      {/* ─── Footer ─── */}
+      <footer className="border-t border-border bg-secondary/20 px-8 py-20 md:px-12">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="grid gap-16 md:grid-cols-[2fr_1fr_1fr_1fr]">
+            <div>
+              <Wordmark size="lg" />
+              <p className="mt-6 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                Cinematic real-estate video, automated. Every listing, in motion — delivered in 72 hours.
+              </p>
+            </div>
+            <div>
+              <h4 className="label mb-5 text-foreground">Platform</h4>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                <li><Link to="/upload" className="transition-colors hover:text-foreground">New video</Link></li>
+                <li><Link to="/presets" className="transition-colors hover:text-foreground">Presets</Link></li>
+                <li><Link to={accountHref} className="transition-colors hover:text-foreground">{accountLabel}</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="label mb-5 text-foreground">Company</h4>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                <li><a href="#process" className="transition-colors hover:text-foreground">Process</a></li>
+                <li><a href="#showcase" className="transition-colors hover:text-foreground">Showcase</a></li>
+                <li><a href="#pricing" className="transition-colors hover:text-foreground">Pricing</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="label mb-5 text-foreground">Contact</h4>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                <li><a href="mailto:help@listingelevate.com" className="transition-colors hover:text-foreground">help@listingelevate.com</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-20 flex flex-col gap-4 border-t border-border pt-10 md:flex-row md:items-center md:justify-between">
+            <span className="label text-muted-foreground">© 2026 Listing Elevate</span>
+            <div className="flex gap-8">
+              <span className="label text-muted-foreground">Privacy</span>
+              <span className="label text-muted-foreground">Terms</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* ─── Auth modal ─── */}
       <Dialog open={authOpen} onOpenChange={setAuthOpen}>
-        <DialogContent className="max-w-md p-0 gap-0 rounded-none overflow-hidden">
+        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-none p-0">
           {authSent ? (
-            <div className="p-8 text-center space-y-4">
-              <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto" />
-              <h2 className="font-display text-xl font-semibold">Check your email</h2>
+            <div className="space-y-5 p-10 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center border border-accent/30 bg-accent/10 text-accent">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+              <h2 className="text-xl font-semibold tracking-[-0.02em]">Check your email.</h2>
               <p className="text-sm text-muted-foreground">
-                We sent a magic link to <span className="font-medium text-foreground">{authEmail}</span>. Click the link to {authTab === "signup" ? "create your account" : "sign in"}.
+                Magic link sent to <span className="font-medium text-foreground">{authEmail}</span>.
               </p>
               <button
-                onClick={() => { setAuthSent(false); setAuthEmail(""); }}
-                className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
+                type="button"
+                onClick={() => {
+                  setAuthSent(false);
+                  setAuthEmail("");
+                }}
+                className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
               >
                 Use a different email
               </button>
             </div>
           ) : (
             <>
-              {/* Tabs */}
               <div className="flex border-b border-border">
-                <button
-                  onClick={() => setAuthTab("signin")}
-                  className={`flex-1 py-3.5 text-[11px] tracking-[0.15em] uppercase font-medium transition-colors ${
-                    authTab === "signin"
-                      ? "text-foreground border-b-2 border-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => setAuthTab("signup")}
-                  className={`flex-1 py-3.5 text-[11px] tracking-[0.15em] uppercase font-medium transition-colors ${
-                    authTab === "signup"
-                      ? "text-foreground border-b-2 border-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Create Account
-                </button>
+                {(["signin", "signup"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setAuthTab(t)}
+                    className={`relative flex-1 py-4 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors ${
+                      authTab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t === "signin" ? "Sign in" : "Create account"}
+                    {authTab === t && (
+                      <motion.span
+                        layoutId="auth-tab-underline"
+                        className="absolute inset-x-0 bottom-[-1px] h-[2px] bg-foreground"
+                        transition={{ duration: 0.4, ease: EASE }}
+                      />
+                    )}
+                  </button>
+                ))}
               </div>
 
-              <form onSubmit={handleAuthSubmit} className="p-6 space-y-4">
+              <form onSubmit={handleAuthSubmit} className="space-y-5 p-8">
                 {authTab === "signup" && (
                   <>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">First Name</Label>
-                        <Input
-                          value={authFirst}
-                          onChange={(e) => setAuthFirst(e.target.value)}
-                          placeholder="Jane"
-                          required
-                          className="rounded-none h-10"
-                        />
+                      <div className="space-y-2">
+                        <Label className="label text-muted-foreground">First name</Label>
+                        <Input value={authFirst} onChange={(e) => setAuthFirst(e.target.value)} placeholder="Jane" required />
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">Last Name</Label>
-                        <Input
-                          value={authLast}
-                          onChange={(e) => setAuthLast(e.target.value)}
-                          placeholder="Smith"
-                          required
-                          className="rounded-none h-10"
-                        />
+                      <div className="space-y-2">
+                        <Label className="label text-muted-foreground">Last name</Label>
+                        <Input value={authLast} onChange={(e) => setAuthLast(e.target.value)} placeholder="Smith" required />
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">Brokerage</Label>
-                      <Input
-                        value={authBrokerage}
-                        onChange={(e) => setAuthBrokerage(e.target.value)}
-                        placeholder="e.g. Compass, Keller Williams"
-                        required
-                        className="rounded-none h-10"
-                      />
+                    <div className="space-y-2">
+                      <Label className="label text-muted-foreground">Brokerage</Label>
+                      <Input value={authBrokerage} onChange={(e) => setAuthBrokerage(e.target.value)} placeholder="Compass, Keller Williams…" required />
                     </div>
                   </>
                 )}
 
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground">Email</Label>
+                <div className="space-y-2">
+                  <Label className="label text-muted-foreground">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
                     <Input
                       type="email"
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
-                      placeholder="you@example.com"
+                      placeholder="you@brokerage.com"
                       required
                       autoFocus
-                      className="rounded-none h-10 pl-10"
+                      className="pl-11"
                     />
                   </div>
                 </div>
 
                 {authError && (
-                  <p className="text-sm text-red-500">{authError}</p>
+                  <p className="text-xs text-destructive">{authError}</p>
                 )}
 
-                <Button type="submit" className="w-full h-11 rounded-none tracking-[0.15em] uppercase text-[11px] font-medium" disabled={authLoading || !authEmail}>
+                <Button type="submit" className="w-full" size="lg" disabled={authLoading || !authEmail}>
                   {authLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      {authTab === "signup" ? "Create Account" : "Send Magic Link"}
-                      <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                      {authTab === "signup" ? "Create account" : "Send magic link"}
+                      <ArrowRight className="h-4 w-4" />
                     </>
                   )}
                 </Button>
 
-                <p className="text-center text-[11px] text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   {authTab === "signin" ? (
-                    <>Don't have an account?{" "}
-                      <button type="button" onClick={() => setAuthTab("signup")} className="text-foreground underline underline-offset-2">Create one</button>
+                    <>
+                      No account?{" "}
+                      <button type="button" onClick={() => setAuthTab("signup")} className="text-foreground underline underline-offset-4">
+                        Create one
+                      </button>
                     </>
                   ) : (
-                    <>Already have an account?{" "}
-                      <button type="button" onClick={() => setAuthTab("signin")} className="text-foreground underline underline-offset-2">Sign in</button>
+                    <>
+                      Already registered?{" "}
+                      <button type="button" onClick={() => setAuthTab("signin")} className="text-foreground underline underline-offset-4">
+                        Sign in
+                      </button>
                     </>
                   )}
                 </p>
@@ -628,43 +753,6 @@ const Index = () => {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Footer */}
-      <footer className="border-t border-foreground/10 px-8 md:px-16 py-16">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-1.5 mb-4">
-                <span className="font-display text-xl font-semibold tracking-tight text-foreground">Listing Elevate</span>
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
-                Cinematic real estate videos powered by AI. Transform your property photos into stunning listing videos in 72 hours.
-              </p>
-            </div>
-            <div>
-              <h4 className="text-[11px] tracking-[0.25em] uppercase font-medium text-foreground mb-4">Platform</h4>
-              <div className="space-y-3">
-                <Link to="/upload" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Upload Photos</Link>
-                <Link to="/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Dashboard</Link>
-                <Link to="/presets" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Presets</Link>
-              </div>
-            </div>
-            <div>
-              <h4 className="text-[11px] tracking-[0.25em] uppercase font-medium text-foreground mb-4">Support</h4>
-              <div className="space-y-3">
-                <span className="block text-sm text-muted-foreground">help@listingelevate.com</span>
-              </div>
-            </div>
-          </div>
-          <div className="border-t border-foreground/10 mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <span className="text-[11px] text-muted-foreground tracking-wide">© 2026 Listing Elevate. All rights reserved.</span>
-            <div className="flex gap-6">
-              <span className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer tracking-wide">Privacy</span>
-              <span className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer tracking-wide">Terms</span>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
