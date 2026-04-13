@@ -3,13 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, ArrowUpRight, Mail, Loader2, CheckCircle, Plus, Minus } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Mail, Loader2, CheckCircle, Plus, Minus, Sun, Moon } from "lucide-react";
 import { motion, useScroll, useTransform, type Variants } from "framer-motion";
 import { useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { ThemeToggle } from "@/components/brand/ThemeToggle";
 import heroVideo from "@/assets/hero-video-loop.mp4.asset.json";
 import heroBg from "@/assets/hero-bg.jpg";
 import interior1 from "@/assets/interior-1.jpg";
@@ -74,6 +74,7 @@ const Index = () => {
   const accountHref = profile?.role === "admin" ? "/dashboard" : "/account";
   const accountLabel = profile?.role === "admin" ? "Dashboard" : "Account";
   const navigate = useNavigate();
+  const { theme, toggle: toggleTheme } = useTheme();
   const heroRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
@@ -150,20 +151,44 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* ─── Navigation ─── */}
-      <header className="fixed left-0 right-0 top-0 z-40 border-b border-border/0 bg-background/60 backdrop-blur-xl transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
-        <nav className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-8 md:h-20 md:px-12">
-          <Wordmark size="md" />
+      {/* ─── Navigation (liquid glass) ─── */}
+      <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-white/[0.04] backdrop-blur-2xl backdrop-saturate-[180%] supports-[backdrop-filter]:bg-white/[0.05]">
+        <nav className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-8 md:h-[76px] md:px-12">
+          <Link to="/" className="inline-flex items-center gap-2.5 text-white transition-opacity hover:opacity-80">
+            <span className="relative inline-block h-6 w-6" aria-hidden>
+              <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1" y="1" width="22" height="22" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="5" y="14" width="3" height="5" fill="currentColor" />
+                <rect x="10.5" y="10" width="3" height="9" fill="currentColor" />
+                <rect x="16" y="6" width="3" height="13" fill="currentColor" />
+              </svg>
+            </span>
+            <span className="text-base font-semibold tracking-[-0.01em] leading-none">
+              Listing<span className="text-accent">.</span>Elevate
+            </span>
+          </Link>
           <div className="hidden items-center gap-10 md:flex">
-            <a href="#process" className="label text-muted-foreground transition-colors hover:text-foreground">Process</a>
-            <a href="#showcase" className="label text-muted-foreground transition-colors hover:text-foreground">Showcase</a>
-            <a href="#pricing" className="label text-muted-foreground transition-colors hover:text-foreground">Pricing</a>
-            <a href="#faq" className="label text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+            <a href="#process" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Process</a>
+            <a href="#showcase" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Showcase</a>
+            <a href="#pricing" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Pricing</a>
+            <a href="#faq" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">FAQ</a>
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="inline-flex h-9 w-9 items-center justify-center border border-white/20 text-white/80 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-white/60 hover:bg-white/10"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
             {user ? (
-              <Button asChild variant="outline" size="sm">
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="border-white/30 bg-white/5 text-white hover:border-white hover:bg-white hover:text-black"
+              >
                 <Link to={accountHref}>{accountLabel}</Link>
               </Button>
             ) : (
@@ -171,11 +196,15 @@ const Index = () => {
                 <button
                   type="button"
                   onClick={() => openAuth("signin")}
-                  className="hidden text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground md:block"
+                  className="hidden text-[13px] font-medium text-white/70 transition-colors hover:text-white md:block"
                 >
                   Sign in
                 </button>
-                <Button size="sm" onClick={handleGetStarted}>
+                <Button
+                  size="sm"
+                  onClick={handleGetStarted}
+                  className="bg-white text-black hover:bg-white/90"
+                >
                   Get started
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
