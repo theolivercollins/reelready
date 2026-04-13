@@ -1,8 +1,17 @@
 # Walkthrough Roadmap — How We Reach the Primary Goal
 
-Last updated: **2026-04-13**
+Last updated: **2026-04-13** (post R1/R2/R3/R4/R5/R6/R11.1 ship)
 Status: Sequencing doc. Every item maps back to a specific
 acceptance-test box in `docs/WALKTHROUGH-SPEC.md §3`.
+
+**Current state**: R0-R6 + R11.1 are shipped on branch
+`claude/add-property-walkthrough-docs-yWa69`. Pipeline stages 3.6
+(allocator) and 3.7 (coverage + arc) are live. Deploy steps: apply
+migrations 002/003/004 to Supabase + set Higgsfield env vars in
+Vercel. Remaining code work: R7 + R8 (QC evaluators, gated on infra
+decision), R9 (autonomy closure, gated on R1+R2 being green on ≥20
+real runs), R10 (post-goal delivery + stitch), R11.2-4 (additional
+decay mitigations).
 
 This is the single ordered list of engineering work needed to hit
 the primary goal. It does not replace `docs/TODO.md` (general-purpose
@@ -52,9 +61,8 @@ marked **[live]** already shipped and are here for traceability.
 - **Shipped**: commits `71c4830`, `2392886`.
 - **What it moved**: anti-hallucination (adjacent-room accuracy),
   motion interpretation, camera-movement diversity.
-- **Still outstanding**: see R5 for next cut of style-guide content.
 
-### R1 — Dynamic scene allocator
+### R1 — Dynamic scene allocator [SHIPPED — commit `c907b7f`]
 - **Spec**: `docs/SCENE-ALLOCATION-PLAN.md` (complete).
 - **What it moves**: `10–16 clips, ≤60s`, `reached complete with no
   admin actions` (indirectly, by filtering weak photos before they
@@ -75,7 +83,7 @@ marked **[live]** already shipped and are here for traceability.
   pass rate on the reference San Massimo property.
 - **Depends on**: nothing. Can start immediately.
 
-### R2 — Coverage enforcer (Stage 3.7)
+### R2 — Coverage enforcer (Stage 3.7) [SHIPPED — commit `8eeda3a`]
 - **Spec**: `docs/COVERAGE-MODEL.md` §4.
 - **What it moves**: all three axis boxes in §3, `reached complete
   with no admin actions`.
@@ -91,7 +99,7 @@ marked **[live]** already shipped and are here for traceability.
 - **Depends on**: R1 (to reshape the scene list before coverage
   runs) and R3 (to deterministically identify unique features).
 
-### R3 — Canonical `unique_tags` vocabulary
+### R3 — Canonical `unique_tags` vocabulary [SHIPPED — commit `c907b7f`]
 - **Spec**: `docs/COVERAGE-MODEL.md §4.3`.
 - **What it moves**: `≥1 unique-feature clip`.
 - **Files**:
@@ -106,7 +114,7 @@ marked **[live]** already shipped and are here for traceability.
   an existing photo.
 - **Depends on**: nothing. Can run in parallel with R1.
 
-### R4 — Arc reorder pass
+### R4 — Arc reorder pass [SHIPPED — commit `8eeda3a`]
 - **Spec**: `docs/COVERAGE-MODEL.md §4.4`.
 - **What it moves**: arc ordering boxes in `WALKTHROUGH-SPEC.md §3`.
 - **Files**:
@@ -117,7 +125,7 @@ marked **[live]** already shipped and are here for traceability.
   → private interior → highlight → closer.
 - **Depends on**: R1 (so there's a stable scene list to reorder).
 
-### R5 — Style guide v2: adjacent-room constraint blocks
+### R5 — Style guide v2: adjacent-room constraint blocks [SHIPPED — commit `c907b7f`]
 - **Spec**: `docs/MULTI-IMAGE-CONTEXT-PLAN.md` Strategy 1 (partial,
   baseline already shipped).
 - **What it moves**: `zero hallucinated adjacent rooms`, `camera exit`
@@ -136,7 +144,7 @@ marked **[live]** already shipped and are here for traceability.
   guide.
 - **Depends on**: nothing directly. Complements R6.
 
-### R6 — Higgsfield first-last-frame provider
+### R6 — Higgsfield first-last-frame provider [SHIPPED — commit `3a67eb1`]
 - **Spec**: `docs/HIGGSFIELD-INTEGRATION.md` + `docs/PROJECT-STATE.md`
   §"Higgsfield integration status" + §"Immediate next actions" items
   1–5.
@@ -192,6 +200,10 @@ marked **[live]** already shipped and are here for traceability.
 - **Depends on**: primary goal green first.
 
 ### R11 — Last-2-3-seconds decay fix
+- **Mitigation 1 SHIPPED** — commit `3a67eb1` caps every clip at 5s
+  in the director prompt + defensive clamp in `lib/pipeline.ts`.
+- Mitigations 2-4 outstanding (Higgsfield keyframes on anchor shots,
+  tail trim at stitch, tail-weighted QC sampling).
 - **Spec**: new, stated here. Rationale in
   `docs/PROJECT-STATE.md` §"Video output quality" item 7.
 - **What it moves**: the "no clip degrades in the final 2-3 seconds"

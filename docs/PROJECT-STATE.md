@@ -1,6 +1,6 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-13** (end of docs-only session)
+Last updated: **2026-04-13** (end of long session: docs + R1/R2/R3/R4/R5/R6/R11.1 shipped)
 
 This is the authoritative state-of-the-project document. Read this first when
 entering the repo. If something here conflicts with code you see in the repo,
@@ -290,7 +290,87 @@ Don't touch unless he asks.
 
 ---
 
-## What shipped in this docs-only session (2026-04-13 late)
+## What shipped in this session (2026-04-13 late)
+
+Reverse chronological by commit. This session went from docs-only
+(morning) to a major code shipment (afternoon). Every roadmap item
+shipped moves one or more acceptance-test boxes in
+`docs/WALKTHROUGH-SPEC.md §3`.
+
+### R2 + R4 — Coverage enforcer + arc reorder (commit `8eeda3a`)
+- New `lib/coverage.ts`: `evaluateCoverage`, `reorderArc`,
+  `enforceCoverage` pure functions + `runCoverageEnforcement`
+  persistence wrapper.
+- New Pipeline Stage 3.7 (between allocator and generation).
+- Guarantees inside/outside/unique axes, rescues from trimmed pool,
+  routes to `needs_review` only if an axis genuinely can't be filled.
+- Reorders the final active scene set into the canonical tour arc:
+  opener exterior → interior primary flow → interior private flow →
+  highlight → closer exterior.
+
+### R1 + R3 + R5 — Allocator + unique_tags + adjacent-room blocks (commit `c907b7f`)
+- New `lib/allocator.ts` (~400 LOC): dynamic threshold formula,
+  per-room quotas, 60s cap trim, persistence wrapper. Pipeline
+  Stage 3.6. Pure core `allocateScenes()` unit-testable.
+- Migration `004_scene_allocation.sql`: scene bookkeeping columns,
+  `allocation_decisions` table, `properties.allocation_summary/warnings`.
+- Migration `003_unique_tags_and_openings.sql`: `photos.unique_tags`,
+  `visible_openings`, `opening_types`, `opening_prominence`.
+- `lib/prompts/photo-analysis.ts`: closed UniqueTag vocabulary + the
+  four opening-detection fields, inline enum in the system prompt.
+- `lib/prompts/style-guide.ts`: `notable_features` schema becomes
+  `{ description, tags, photo_ids }`; top-level `unique_tags` aggregate.
+- `lib/prompts/director.ts`: new ADJACENT-ROOM CONSTRAINT BLOCK
+  rule — when a photo has `visible_openings = true`, director
+  appends a 40-80 word constraint block derived from the style guide
+  so Kling/Runway/Higgsfield don't invent fake adjacent rooms.
+- `lib/db.ts`: `updatePhotoAnalysis` persists all new fields.
+- `lib/pipeline.ts`: wires the new fields through analysis + script
+  stages; Stage 3.6 integration; trimmed-scene filter in
+  `runGenerationWithQC` so trimmed scenes don't burn provider credits.
+- `src/pages/dashboard/PropertyDetail.tsx`: new Scene Allocation
+  card — health chip, per-room table, warnings list. Wired through
+  new `api/properties/[id].ts` payload.
+- Frontend types updated: `AllocationSummary`, `AllocationDecision`,
+  `Scene.provider`/`CostEvent.provider` unions include `higgsfield`.
+
+### Higgsfield provider + dashboard primary-provider switch + 5s cap (commit `3a67eb1`)
+- `lib/providers/higgsfield.ts`: supports both single-image and
+  first-last-frame keyframe mode via optional `GenerateClipParams.endImage`.
+  Parses credits from completion response, records cost via
+  `HIGGSFIELD_CENTS_PER_CREDIT`.
+- `lib/providers/router.ts`: Higgsfield registered in switch,
+  `getEnabledProviders()`, and `FALLBACK_ORDER`. New
+  primary-provider-override priority layer between scene-explicit
+  preference and per-room routing.
+- Migration `002_app_settings.sql`: admin-only `app_settings` key/value
+  table.
+- `lib/app-settings.ts`: read/write helpers with a 5s TTL cache so
+  `selectProvider` stays synchronous; `primeAppSettings()` called
+  at the top of `runPipeline`.
+- `api/admin/settings.ts`: GET all, POST upsert with validation.
+- `src/pages/dashboard/Settings.tsx`: new Primary Video Provider card
+  with TanStack Query wiring and live mutation. Higgsfield added to
+  API Keys and Fallback Chain lists.
+- `lib/prompts/director.ts`: duration constraint rewritten as "every
+  scene must be exactly 5 seconds" — R11 mitigation 1 (last-2-3-
+  seconds decay).
+- `lib/pipeline.ts insertScenes`: defensive clamp forces every scene
+  row to `duration_seconds = 5`.
+
+### Scripts + docs foundation (commits `eeef31b`, `26c3816`, `ec113b7`, `cdfde24`)
+- `docs/WALKTHROUGH-SPEC.md` — primary goal + 17-box acceptance test.
+- `docs/COVERAGE-MODEL.md` — inside/outside/unique rules.
+- `docs/AUTONOMY-CHECKLIST.md` — HITL audit.
+- `docs/WALKTHROUGH-ROADMAP.md` — R0–R11 ordered plan.
+- `docs/SHOT-VOCABULARY.md` — enum reference.
+- `scripts/recover-higgsfield-request.ts` — pull past request metadata.
+- `scripts/generate-higgsfield-clip.ts` — one-shot submitter with
+  pre-baked enhanced prompt.
+
+---
+
+## What shipped in the earlier docs-only session (2026-04-13 morning)
 
 Reverse chronological. This session produced no code changes — it
 crystallized the primary goal and the path to it across five new
@@ -622,8 +702,16 @@ rebrand:
 
 ## One-liner for the next session
 
-> Read `docs/WALKTHROUGH-SPEC.md` first (primary goal + acceptance test),
-> then `docs/WALKTHROUGH-ROADMAP.md` (ordered work). Unblocked items you
-> can pick up immediately: R1 (scene allocator) and R3 (unique_tags
-> vocabulary) — both run in parallel with no dependencies. R6
-> (Higgsfield) is still gated on showing Oliver the probe clip.
+> Read `docs/WALKTHROUGH-SPEC.md` first (primary goal + acceptance
+> test). R1/R2/R3/R4/R5/R6/R11.1 are all shipped on this branch. The
+> primary goal's COVERAGE and ARC boxes are now code-enforced. What
+> remains to code-enforce the QUALITY boxes: R7 (motion-verification
+> QC) and R8 (frame-extraction QC) — both gated on an infra decision
+> (Vercel Sandbox vs Railway vs external frame API, see
+> `docs/AUTONOMY-CHECKLIST.md P2` and `TODO.md` for details). Deploy
+> first: apply migrations 002/003/004 to Supabase, set
+> `HIGGSFIELD_API_KEY` + `HIGGSFIELD_API_SECRET` + optional
+> `HIGGSFIELD_CENTS_PER_CREDIT` in Vercel env, run a real property,
+> then check the Superview Allocation card + warnings to confirm
+> Stage 3.6 and Stage 3.7 ran. After that, R9 (autonomy closure)
+> and R11.2-4 are unlocked for end-to-end polish.
