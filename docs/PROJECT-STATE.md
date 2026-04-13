@@ -416,6 +416,23 @@ produced clip
 in ~110 seconds. Credit balance: ~500 at session end, minus whatever two
 probe runs consumed.
 
+**Provenance of the probe clip is recoverable** — it was not logged at
+generation time, but Higgsfield's `GET /requests/{id}/status` endpoint
+returns the original request body (prompt, images, model, duration,
+credits) for any past request. Run:
+
+```bash
+HIGGSFIELD_API_KEY=... HIGGSFIELD_API_SECRET=... \
+  npx tsx scripts/recover-higgsfield-request.ts \
+  https://cloud-cdn.higgsfield.ai/32b4fa89-6049-4d57-84e1-cbe46b7f70ef/aa4c398c-8e22-45ef-8be5-1d6fd6cb6193.mp4
+```
+
+The script extracts the request_id (`aa4c398c-…`) from the URL,
+calls the status endpoint, and dumps the full server response plus
+a "best-guess provenance" summary (prompt, start_image, end_image,
+model, duration, credits). Use this whenever any past clip needs to
+be re-traced.
+
 **Not verified:** whether a true multi-reference field (e.g. `reference_images`)
 is actually used by the model or silently dropped by the FastAPI handler.
 This would need a visual A/B comparison of two clips, which is Oliver's

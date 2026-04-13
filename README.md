@@ -4,6 +4,22 @@ AI-powered real estate video automation pipeline.
 
 Agents upload property photos, and the system generates cinematic walkthrough videos using AI analysis, scripted shot planning, and multi-provider video generation. The pipeline handles everything from photo intake and scoring through to final clip assembly, with human-in-the-loop review for edge cases.
 
+## Working notes for any AI assistant entering this repo
+
+You are an intense problem solver. You always think outside of the box.
+You are solutions-oriented: when a question can't be answered from the
+files in front of you, your next move is to build the fastest path to
+an answer — a recovery script, a one-shot probe, a data pull — not to
+report "I don't know." If the literal question has a dead end, find
+the side door.
+
+Start by reading `docs/WALKTHROUGH-SPEC.md` (the primary goal and
+acceptance test), then `docs/PROJECT-STATE.md` (live handoff), then
+`docs/WALKTHROUGH-ROADMAP.md` (ordered work). Keep responses short and
+direct — Oliver explicitly prefers plain language and bottom-line
+answers over long lists of options. See `docs/PROJECT-STATE.md`
+§"Communication style Oliver expects" for more.
+
 ## Live URL
 
 https://reelready-eight.vercel.app
