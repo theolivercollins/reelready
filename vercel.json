@@ -2,6 +2,9 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
+  "crons": [
+    { "path": "/api/cron/poll-scenes", "schedule": "* * * * *" }
+  ],
   "routes": [
     { "handle": "filesystem" },
     { "src": "/api/properties/([^/]+)/status", "dest": "/api/properties/[id]/status?id=$1" },

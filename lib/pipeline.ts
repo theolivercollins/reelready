@@ -340,8 +340,21 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
             aspectRatio: "16:9",
           });
 
+          // Persist the provider task ID IMMEDIATELY so the cron backstop can
+          // pick this scene up if the pipeline function is killed mid-poll.
+          // See api/cron/poll-scenes.ts.
+          await supabase
+            .from("scenes")
+            .update({
+              provider: provider.name,
+              provider_task_id: genJob.jobId,
+              submitted_at: new Date().toISOString(),
+              attempt_count: attempt + 1,
+            })
+            .eq("id", scene.id);
+
           await log(propertyId, "generation", "info",
-            `Scene ${scene.scene_number}: submitted to ${provider.name}`, undefined, scene.id);
+            `Scene ${scene.scene_number}: submitted to ${provider.name}`, { jobId: genJob.jobId }, scene.id);
 
           // Poll until done
           const result = await pollUntilComplete(provider, genJob.jobId);
