@@ -46,6 +46,7 @@ import { selectProvider } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
 import { primeAppSettings } from "./app-settings.js";
 import { runSceneAllocation } from "./allocator.js";
+import { runCoverageEnforcement } from "./coverage.js";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;
@@ -107,6 +108,23 @@ export async function runPipeline(propertyId: string): Promise<void> {
         "scripting",
         "error",
         `Allocator stage 3.6 threw: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    // Stage 3.7: Coverage enforcer + arc reorder — guarantees the three
+    // axes from the primary goal (inside / outside / unique features)
+    // are all represented, and reorders the final shot list into the
+    // canonical tour arc (opener → interior primary → interior private
+    // → highlight → closer). Routes the property to needs_review if an
+    // axis can't be filled. See docs/COVERAGE-MODEL.md + R2 + R4.
+    try {
+      await runCoverageEnforcement(propertyId);
+    } catch (err) {
+      await log(
+        propertyId,
+        "scripting",
+        "error",
+        `Coverage enforcer stage 3.7 threw: ${err instanceof Error ? err.message : String(err)}`
       );
     }
 
