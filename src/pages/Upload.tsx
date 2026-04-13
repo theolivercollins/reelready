@@ -178,9 +178,7 @@ const Upload = () => {
       <div className="min-h-screen bg-background flex flex-col">
         <nav className="border-b border-border px-8 md:px-16 py-5 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-1.5">
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">REEL</span>
-            <div className="h-5 w-px bg-foreground/30 mx-1" />
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">READY</span>
+            <span className="font-display text-xl font-semibold tracking-tight text-foreground">Listing Elevate</span>
           </Link>
         </nav>
         <div className="flex-1 flex items-center justify-center p-6">
@@ -220,9 +218,7 @@ const Upload = () => {
       <nav className="border-b border-border px-8 md:px-16 py-5 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-1.5">
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">REEL</span>
-            <div className="h-5 w-px bg-foreground/30 mx-1" />
-            <span className="font-display text-xl font-semibold tracking-wide text-foreground">READY</span>
+            <span className="font-display text-xl font-semibold tracking-tight text-foreground">Listing Elevate</span>
           </Link>
           <div className="h-4 w-px bg-border" />
           <span className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium">New Video</span>

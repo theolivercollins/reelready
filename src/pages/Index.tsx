@@ -130,7 +130,7 @@ const Index = () => {
     { question: "What is the turnaround time?", answer: "Standard delivery is within 72 hours of submission. Our AI-powered pipeline processes your photos through multiple stages — scene planning, video generation, quality control, and final assembly — to ensure a polished, cinematic result." },
     { question: "What video formats do I receive?", answer: "You can choose vertical (9:16 for Instagram Reels, TikTok), horizontal (16:9 for YouTube, MLS), or both formats. Each video includes professional transitions, music, and optional AI voiceover narration." },
     { question: "Can I request revisions?", answer: "Yes. If you're not satisfied with your video, we offer one round of revisions at no additional cost. Simply provide feedback through your status page and we'll make adjustments within 48 hours." },
-    { question: "How does pricing compare to traditional videography?", answer: "Traditional real estate videography typically costs $500–$2,000+ per property and takes 1–2 weeks. Key Frame starts at just $75 with 72-hour delivery, saving you up to 85% while delivering cinematic quality." },
+    { question: "How does pricing compare to traditional videography?", answer: "Traditional real estate videography typically costs $500–$2,000+ per property and takes 1–2 weeks. Listing Elevate starts at just $75 with 72-hour delivery, saving you up to 85% while delivering cinematic quality." },
   ];
 
   return (
@@ -138,9 +138,7 @@ const Index = () => {
       {/* Nav */}
       <nav className="absolute top-0 left-0 right-0 z-30 px-8 md:px-16 py-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-1.5">
-          <span className="font-display text-2xl font-semibold tracking-wide text-white">REEL</span>
-          <div className="h-6 w-px bg-white/40 mx-1" />
-          <span className="font-display text-2xl font-semibold tracking-wide text-white">READY</span>
+          <span className="font-display text-2xl font-semibold tracking-tight text-white">Listing Elevate</span>
         </Link>
         <div className="flex items-center gap-8">
           {user && (
@@ -395,7 +393,7 @@ const Index = () => {
               The Advantage
             </span>
             <h2 className="font-display text-3xl md:text-5xl font-semibold text-foreground mt-4">
-              Why Key Frame?
+              Why Listing Elevate?
             </h2>
           </motion.div>
 
@@ -405,7 +403,7 @@ const Index = () => {
                 icon: <DollarSign className="h-4 w-4 text-accent" />,
                 label: "Cost",
                 ours: "$75",
-                oursSub: "Key Frame",
+                oursSub: "Listing Elevate",
                 theirs: "$500+",
                 theirsSub: "Traditional",
               },
@@ -413,7 +411,7 @@ const Index = () => {
                 icon: <Clock className="h-4 w-4 text-accent" />,
                 label: "Turnaround",
                 ours: "72 hrs",
-                oursSub: "Key Frame",
+                oursSub: "Listing Elevate",
                 theirs: "1–2 wks",
                 theirsSub: "Traditional",
               },
@@ -488,7 +486,7 @@ const Index = () => {
             Ready to Elevate Your Listings?
           </h2>
           <p className="text-white/70 mt-4 max-w-md text-sm">
-            Join hundreds of agents using Key Frame to create cinematic listing videos in a fraction of the time and cost.
+            Join hundreds of agents using Listing Elevate to create cinematic listing videos in a fraction of the time and cost.
           </p>
           <Button size="lg" className="mt-8 px-12 tracking-[0.15em] uppercase text-[11px] rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
             Start Your First Video <ArrowRight className="ml-2 h-3.5 w-3.5" />
@@ -664,9 +662,7 @@ const Index = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
             <div className="md:col-span-2">
               <div className="flex items-center gap-1.5 mb-4">
-                <span className="font-display text-xl font-semibold tracking-wide text-foreground">KEY</span>
-                <div className="h-5 w-px bg-foreground/30 mx-1" />
-                <span className="font-display text-xl font-semibold tracking-wide text-foreground">FRAME</span>
+                <span className="font-display text-xl font-semibold tracking-tight text-foreground">Listing Elevate</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
                 Cinematic real estate videos powered by AI. Transform your property photos into stunning listing videos in 72 hours.
@@ -683,13 +679,12 @@ const Index = () => {
             <div>
               <h4 className="text-[11px] tracking-[0.25em] uppercase font-medium text-foreground mb-4">Support</h4>
               <div className="space-y-3">
-                <span className="block text-sm text-muted-foreground">help@keyframe.ai</span>
-                <span className="block text-sm text-muted-foreground">1-800-KEY-FRAME</span>
+                <span className="block text-sm text-muted-foreground">help@listingelevate.com</span>
               </div>
             </div>
           </div>
           <div className="border-t border-foreground/10 mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <span className="text-[11px] text-muted-foreground tracking-wide">© 2026 Key Frame. All rights reserved.</span>
+            <span className="text-[11px] text-muted-foreground tracking-wide">© 2026 Listing Elevate. All rights reserved.</span>
             <div className="flex gap-6">
               <span className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer tracking-wide">Privacy</span>
               <span className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer tracking-wide">Terms</span>

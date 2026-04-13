@@ -37,7 +37,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">Sign in to ReelReady</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Sign in to Listing Elevate</h1>
           <p className="text-sm text-muted-foreground">
             Enter your email and we'll send you a magic link
           </p>

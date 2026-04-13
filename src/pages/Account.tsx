@@ -24,8 +24,8 @@ export default function Account() {
       <header className="border-b border-border">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <NavLink to="/" className="font-bold text-lg tracking-tight">
-              ReelReady
+            <NavLink to="/" className="font-display font-semibold text-lg tracking-tight">
+              Listing Elevate
             </NavLink>
             <nav className="flex items-center gap-1">
               {navItems.map(({ to, label, icon: Icon }) => (
