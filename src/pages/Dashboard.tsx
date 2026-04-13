@@ -1,46 +1,51 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { Outlet, NavLink } from "react-router-dom";
+import { motion } from "framer-motion";
 
 const navItems = [
-  { label: "Overview", path: "/dashboard" },
-  { label: "Pipeline", path: "/dashboard/pipeline" },
-  { label: "Properties", path: "/dashboard/properties" },
-  { label: "Logs", path: "/dashboard/logs" },
-  { label: "Settings", path: "/dashboard/settings" },
+  { to: "/dashboard", label: "Overview", end: true },
+  { to: "/dashboard/pipeline", label: "Pipeline", end: false },
+  { to: "/dashboard/properties", label: "Properties", end: false },
+  { to: "/dashboard/logs", label: "Logs", end: false },
+  { to: "/dashboard/settings", label: "Settings", end: false },
 ];
 
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 const Dashboard = () => {
-  const location = useLocation();
-
-  const isActive = (path: string) => {
-    if (path === "/dashboard") return location.pathname === "/dashboard";
-    return location.pathname.startsWith(path);
-  };
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Section nav */}
-      <div className="border-b border-border px-6 h-12 flex items-center shrink-0">
-        <nav className="flex items-center gap-1 overflow-x-auto">
-          {navItems.map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm whitespace-nowrap transition-colors",
-                isActive(item.path)
-                  ? "bg-accent text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Editorial sub-nav — hairline, content-aligned */}
+      <div className="border-b border-border">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center px-8 md:px-12">
+          <nav className="flex items-center gap-10 overflow-x-auto">
+            {navItems.map(({ to, label, end }) => (
+              <NavLink key={to} to={to} end={end}>
+                {({ isActive }) => (
+                  <span
+                    className={`relative inline-block py-2 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                    {isActive && (
+                      <motion.span
+                        layoutId="dashboard-tab-underline"
+                        className="absolute inset-x-0 -bottom-[15px] h-[2px] bg-foreground"
+                        transition={{ duration: 0.5, ease: EASE }}
+                      />
+                    )}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
       </div>
 
-      {/* Content */}
-      <main className="flex-1 overflow-auto p-6">
+      {/* Page content — each sub-page leads with its own title */}
+      <main className="mx-auto max-w-[1440px] px-8 py-12 md:px-12">
         <Outlet />
       </main>
     </div>

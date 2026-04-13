@@ -1,7 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
+import { motion, type Variants } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { CreditCard, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 1.0, delay: i * 0.06, ease: EASE },
+  }),
+};
+
+const stagger: Variants = {
+  visible: { transition: { staggerChildren: 0.08 } },
+};
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -26,86 +42,136 @@ export default function AccountBilling() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center gap-4 py-32">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="label text-muted-foreground">Loading…</span>
       </div>
     );
   }
 
-  const totalCost = properties?.reduce((sum, p) => sum + (p.total_cost_cents || 0), 0) ?? 0;
-  const completedCount = properties?.filter((p) => p.status === "complete").length ?? 0;
+  const totalCost =
+    properties?.reduce((sum, p) => sum + (p.total_cost_cents || 0), 0) ?? 0;
+  const completedCount =
+    properties?.filter((p) => p.status === "complete").length ?? 0;
+  const avgCost =
+    completedCount > 0
+      ? formatCents(Math.round(totalCost / completedCount))
+      : "—";
+
+  const stats = [
+    {
+      label: "Total spent",
+      value: formatCents(totalCost),
+      helper: "Lifetime across all listings",
+    },
+    {
+      label: "Videos completed",
+      value: String(completedCount).padStart(2, "0"),
+      helper: "Delivered, downloaded, live",
+    },
+    {
+      label: "Avg / video",
+      value: avgCost,
+      helper: "Per completed listing",
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={stagger}
+      className="space-y-16"
+    >
+      {/* Title block */}
+      <motion.div variants={fadeUp}>
+        <span className="label text-muted-foreground">— Spend</span>
+        <h1 className="display-md font-display mt-5 text-foreground">Billing.</h1>
+      </motion.div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-lg border border-border p-4 space-y-1">
-          <p className="text-sm text-muted-foreground">Total Spent</p>
-          <p className="text-2xl font-bold">{formatCents(totalCost)}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4 space-y-1">
-          <p className="text-sm text-muted-foreground">Videos Completed</p>
-          <p className="text-2xl font-bold">{completedCount}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4 space-y-1">
-          <p className="text-sm text-muted-foreground">Avg Cost / Video</p>
-          <p className="text-2xl font-bold">
-            {completedCount > 0 ? formatCents(Math.round(totalCost / completedCount)) : "—"}
-          </p>
-        </div>
-      </div>
-
-      {/* Payment method placeholder */}
-      <div className="rounded-lg border border-dashed border-border p-6 text-center space-y-2">
-        <CreditCard className="h-8 w-8 text-muted-foreground mx-auto" />
-        <p className="font-medium">Payment method</p>
-        <p className="text-sm text-muted-foreground">
-          Stripe integration coming soon. You'll be able to add a card and manage automatic billing.
-        </p>
-      </div>
-
-      {/* Per-property breakdown */}
-      {properties && properties.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Cost Breakdown</h2>
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr className="text-left text-sm text-muted-foreground">
-                  <th className="px-4 py-3 font-medium">Property</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Date</th>
-                  <th className="px-4 py-3 font-medium text-right">Cost</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {properties.map((p) => (
-                  <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-sm">{p.address}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground capitalize">{p.status}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {new Date(p.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right font-mono">
-                      {p.total_cost_cents > 0 ? formatCents(p.total_cost_cents) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-muted/30">
-                <tr>
-                  <td colSpan={3} className="px-4 py-3 font-medium text-sm">Total</td>
-                  <td className="px-4 py-3 text-sm text-right font-mono font-bold">
-                    {formatCents(totalCost)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+      {/* Editorial stats grid */}
+      <motion.div
+        variants={fadeUp}
+        className="grid gap-px border border-border bg-border md:grid-cols-3"
+      >
+        {stats.map((stat) => (
+          <div key={stat.label} className="bg-background p-10">
+            <span className="label text-muted-foreground">{stat.label}</span>
+            <div className="mt-6 flex items-baseline gap-3">
+              <span className="display-md font-mono font-semibold tracking-[-0.025em] text-foreground">
+                {stat.value}
+              </span>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">{stat.helper}</p>
           </div>
-        </div>
+        ))}
+      </motion.div>
+
+      {/* Payment method placeholder — clean editorial card */}
+      <motion.div
+        variants={fadeUp}
+        className="border border-border bg-background p-12"
+      >
+        <span className="label text-muted-foreground">— Payment method</span>
+        <h2 className="font-display mt-5 text-2xl font-semibold tracking-[-0.02em] text-foreground md:text-3xl">
+          Stripe billing soon.
+        </h2>
+        <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
+          Add a card to enable automatic billing for completed projects.
+        </p>
+      </motion.div>
+
+      {/* Cost breakdown — editorial table */}
+      {properties && properties.length > 0 && (
+        <motion.div variants={fadeUp} className="space-y-8">
+          <div>
+            <span className="label text-muted-foreground">— Cost breakdown</span>
+            <h2 className="font-display mt-5 text-2xl font-semibold tracking-[-0.02em] text-foreground md:text-3xl">
+              Per project.
+            </h2>
+          </div>
+
+          <div className="border-y border-border">
+            {/* Header */}
+            <div className="hidden border-b border-border md:grid md:grid-cols-[2.4fr_1fr_1fr_1fr] md:gap-6 md:px-6 md:py-5">
+              <span className="label text-muted-foreground">Property</span>
+              <span className="label text-muted-foreground">Status</span>
+              <span className="label text-muted-foreground">Date</span>
+              <span className="label text-right text-muted-foreground">Cost</span>
+            </div>
+
+            {properties.map((p) => (
+              <div
+                key={p.id}
+                className="grid grid-cols-1 gap-2 border-b border-border px-6 py-5 transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-foreground/[0.02] md:grid-cols-[2.4fr_1fr_1fr_1fr] md:items-center md:gap-6"
+              >
+                <p className="font-display text-base font-semibold tracking-[-0.01em] text-foreground">
+                  {p.address}
+                </p>
+                <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground">
+                  {p.status}
+                </p>
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  {new Date(p.created_at).toLocaleDateString()}
+                </p>
+                <p className="font-mono text-sm text-foreground md:text-right">
+                  {p.total_cost_cents > 0 ? formatCents(p.total_cost_cents) : "—"}
+                </p>
+              </div>
+            ))}
+
+            {/* Total footer */}
+            <div className="grid grid-cols-1 gap-2 px-6 py-6 md:grid-cols-[2.4fr_1fr_1fr_1fr] md:items-center md:gap-6">
+              <span className="label text-muted-foreground">Total</span>
+              <span className="hidden md:block" />
+              <span className="hidden md:block" />
+              <span className="font-mono text-lg font-semibold text-foreground md:text-right">
+                {formatCents(totalCost)}
+              </span>
+            </div>
+          </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }
