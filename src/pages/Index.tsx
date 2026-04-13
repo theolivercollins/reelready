@@ -61,7 +61,9 @@ const FAQItem = ({ question, answer }: { question: string; answer: string }) => 
 };
 
 const Index = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const accountHref = profile?.role === "admin" ? "/dashboard" : "/account";
+  const accountLabel = profile?.role === "admin" ? "Dashboard" : "Account";
   const navigate = useNavigate();
   const heroRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
@@ -136,15 +138,15 @@ const Index = () => {
       {/* Nav */}
       <nav className="absolute top-0 left-0 right-0 z-30 px-8 md:px-16 py-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-1.5">
-          <span className="font-display text-2xl font-semibold tracking-wide text-white">KEY</span>
+          <span className="font-display text-2xl font-semibold tracking-wide text-white">REEL</span>
           <div className="h-6 w-px bg-white/40 mx-1" />
-          <span className="font-display text-2xl font-semibold tracking-wide text-white">FRAME</span>
+          <span className="font-display text-2xl font-semibold tracking-wide text-white">READY</span>
         </Link>
         <div className="flex items-center gap-8">
           {user && (
             <>
-              <Link to="/account" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
-                Account
+              <Link to={accountHref} className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
+                {accountLabel}
               </Link>
               <Link to="/upload" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
                 Upload
