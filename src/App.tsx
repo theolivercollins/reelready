@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/lib/auth";
 import { RequireAuth, RequireAdmin } from "@/components/ProtectedRoute";
+import { TopNav } from "@/components/TopNav";
 import Index from "./pages/Index";
 import Upload from "./pages/Upload";
 import Presets from "./pages/Presets";
@@ -35,6 +36,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <TopNav />
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<Index />} />

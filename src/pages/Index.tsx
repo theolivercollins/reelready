@@ -135,33 +135,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Nav */}
-      <nav className="absolute top-0 left-0 right-0 z-30 px-8 md:px-16 py-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-1.5">
-          <span className="font-display text-2xl font-semibold tracking-tight text-white">Listing Elevate</span>
-        </Link>
-        <div className="flex items-center gap-8">
-          {user && (
-            <>
-              <Link to={accountHref} className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
-                {accountLabel}
-              </Link>
-              <Link to="/upload" className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
-                Upload
-              </Link>
-            </>
-          )}
-          {!user && (
-            <button onClick={() => openAuth("signin")} className="hidden md:inline text-[11px] tracking-[0.25em] uppercase text-white/80 hover:text-white transition-colors font-medium">
-              Sign In
-            </button>
-          )}
-          <Button size="sm" className="tracking-[0.2em] uppercase text-[11px] px-7 rounded-none font-medium bg-white text-foreground hover:bg-white/90" onClick={handleGetStarted}>
-            Get Started
-          </Button>
-        </div>
-      </nav>
-
       {/* Hero — full-bleed cinematic video */}
       <section ref={heroRef} className="relative h-screen w-full flex items-center justify-center overflow-hidden">
         <motion.div style={{ scale: heroScale }} className="absolute inset-0">

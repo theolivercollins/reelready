@@ -176,11 +176,6 @@ const Upload = () => {
   if (submitted) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <nav className="border-b border-border px-8 md:px-16 py-5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-1.5">
-            <span className="font-display text-xl font-semibold tracking-tight text-foreground">Listing Elevate</span>
-          </Link>
-        </nav>
         <div className="flex-1 flex items-center justify-center p-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md w-full text-center space-y-8">
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 200 }}>
@@ -214,15 +209,9 @@ const Upload = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Clean nav */}
-      <nav className="border-b border-border px-8 md:px-16 py-5 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-1.5">
-            <span className="font-display text-xl font-semibold tracking-tight text-foreground">Listing Elevate</span>
-          </Link>
-          <div className="h-4 w-px bg-border" />
-          <span className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium">New Video</span>
-        </div>
+      {/* Page sub-header */}
+      <div className="border-b border-border px-8 md:px-16 py-4 flex items-center justify-between">
+        <span className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium">New Video</span>
         <div className="flex items-center gap-3">
           {hasPresets && (
             <Button variant="ghost" size="sm" onClick={handleUseLastPreset} className="text-muted-foreground hover:text-foreground tracking-[0.1em] uppercase text-[10px]">
@@ -233,7 +222,7 @@ const Upload = () => {
             <BookmarkCheck className="h-3.5 w-3.5" /> Presets
           </Link>
         </div>
-      </nav>
+      </div>
 
       <div className="flex-1 py-8 md:py-12 px-6">
         <form onSubmit={handleSubmit} className="max-w-xl mx-auto space-y-8">
