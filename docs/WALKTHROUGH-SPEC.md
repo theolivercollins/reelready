@@ -108,6 +108,12 @@ A run is "goal-passing" if and only if **every one of these** is true:
 - [ ] Zero clips contain a person, watermark, caption, or text.
 - [ ] Zero clips contain geometric warping (melting walls, bending
       counters, distorted windows).
+- [ ] **No clip degrades in the final 2-3 seconds.** The last 30% of
+      every clip must hold the same architectural coherence as the
+      first 70%. No late-stage warping, no late-stage hallucinated
+      rooms, no late-stage anchor drift. (Named failure mode; see
+      `docs/PROJECT-STATE.md` §"Video output quality" item 7 and
+      `docs/WALKTHROUGH-ROADMAP.md` R11.)
 - [ ] Every clip's on-screen motion matches the director's intended
       camera movement (push-in looks like push-in, parallax looks
       like parallax — see `docs/SHOT-VOCABULARY.md`).

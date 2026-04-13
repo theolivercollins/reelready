@@ -32,6 +32,7 @@ flag and should be filled in.
 | Zero hallucinated adjacent rooms | R5 Style-guide pass (live) + R6 Higgsfield + R8 QC evaluator v2 |
 | Zero people/text/watermark | R8 QC evaluator v2 |
 | Zero warped geometry | R8 QC evaluator v2 |
+| No last-2-3-seconds collapse | R11 tail-decay fix |
 | Motion matches intent | R7 Motion-verification QC |
 | 10–16 clips, ≤60s total | R1 Scene allocator (cap enforcement) |
 | Reached `complete` with zero admin actions | R1 + R2 + R9 Autonomy closure |
@@ -189,6 +190,41 @@ marked **[live]** already shipped and are here for traceability.
 - **What it moves**: product experience, not the primary goal
   acceptance test.
 - **Depends on**: primary goal green first.
+
+### R11 — Last-2-3-seconds decay fix
+- **Spec**: new, stated here. Rationale in
+  `docs/PROJECT-STATE.md` §"Video output quality" item 7.
+- **What it moves**: the "no clip degrades in the final 2-3 seconds"
+  box in `docs/WALKTHROUGH-SPEC.md §3`.
+- **Failure pattern**: Oliver has observed across the clip library
+  (Kling, Runway, Higgsfield probe) that the first ~60-70% of a clip
+  holds architectural coherence, then the final 2-3 seconds collapse —
+  geometry warps, anchors drift, invented rooms appear. Consistent
+  enough across providers to be treated as a model-attention decay
+  pattern, not a prompt bug.
+- **Work** — four stacked mitigations, each independently shippable:
+  1. **Cap duration at 5s.** Change the director's duration map so
+     every scene requests 5s from the provider. This sacrifices the
+     "4-second opener" convention but sidesteps the 10s decay tail
+     entirely. ~1 hour. File: `lib/prompts/director.ts:195-205`.
+  2. **First-last-frame on interior anchor shots.** When R6 lands,
+     route any interior scene whose camera_movement is in
+     `{parallax, dolly_*, slow_pan}` through Higgsfield with a second
+     anchor frame. Grounding both ends reduces late-stage drift.
+  3. **Tail trim at stitch time.** When R10 (FFmpeg assembly) lands,
+     trim the last 1.0s of every clip with a 300ms ease-out fade.
+     Produces a cleaner cut even if the source clip has a late
+     wobble. Not available until we have FFmpeg infra.
+  4. **QC sampling weighted to the tail.** When R8 (frame extraction)
+     lands, sample frames at `[0.2, 0.4, 0.6, 0.75, 0.85, 0.92, 0.98]`
+     of clip duration (tail-weighted) and run the QC evaluator. Fail
+     the clip if late frames score worse than early frames by >1
+     point. Triggers an automatic retry with a different provider.
+- **Depends on**: Mitigation 1 is standalone. Mitigation 2 needs R6.
+  Mitigation 3 needs R10. Mitigation 4 needs R8.
+- **Done when**: a 20-clip sample scored against the acceptance
+  box shows zero clips with worse late-frame scores than early-frame
+  scores.
 
 ---
 

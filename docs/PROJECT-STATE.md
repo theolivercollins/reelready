@@ -186,6 +186,26 @@ in priority order:
    varied-motion scenes, and potentially by Higgsfield first-last-frame
    handling dolly/pan scenes (next session).
 
+7. **Last-2-3-seconds collapse.** Oliver's repeated observation across
+   the clip library (Kling, Runway, and the Higgsfield probe clip):
+   the first ~60-70% of a 5-10s clip looks fine, then the final 2-3
+   seconds degrade — geometry warps, the camera drifts past an anchor
+   it was respecting, an invented room appears, or subjects melt.
+   This is a model-attention decay pattern, not a prompt bug.
+   MITIGATION: NONE YET. Candidates on the roadmap:
+     - Cap every clip at 5s (avoid the 10s decay tail entirely).
+     - For anchor-heavy shots, force first-last-frame mode so both
+       ends are grounded (Higgsfield R6).
+     - Trim the last 1s of every clip at the ffmpeg stage (R10) with
+       a tiny ease-out. Defers the problem until we have an ffmpeg
+       path.
+     - QC-evaluator sampling weighted toward the last 30% of frames
+       (R8), so rejected clips retry with a different provider before
+       we ship them.
+   This is captured as a named failure mode in
+   `docs/WALKTHROUGH-SPEC.md §3` and as roadmap item R11 in
+   `docs/WALKTHROUGH-ROADMAP.md`.
+
 ---
 
 ## Cost tracking

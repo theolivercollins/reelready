@@ -37,6 +37,9 @@ Details, dependencies, and file lists live in `docs/WALKTHROUGH-ROADMAP.md`.
       Spec: `docs/AUTONOMY-CHECKLIST.md §3`. Gated on R1 + R2 shipped
       and green on ≥20 real runs.
 - [ ] **R10** — Post-goal: agent email notifications + FFmpeg stitching.
+- [ ] **R11** — Last-2-3-seconds decay fix (4 stacked mitigations).
+      Quickest win: cap every clip at 5s in the director (mitigation 1,
+      ~1 hour). Subsequent mitigations gated on R6 / R8 / R10.
 
 ---
 
