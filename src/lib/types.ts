@@ -5,6 +5,37 @@ export type PipelineStage = "intake" | "analysis" | "scripting" | "generation" |
 export type RoomType = "kitchen" | "living_room" | "master_bedroom" | "bedroom" | "bathroom" | "exterior_front" | "exterior_back" | "pool" | "aerial" | "dining" | "hallway" | "garage" | "other";
 export type CameraMovement = "orbital_slow" | "dolly_left_to_right" | "dolly_right_to_left" | "slow_pan" | "parallax" | "push_in" | "pull_out";
 
+export interface AllocationSummary {
+  total_scenes_before: number;
+  total_scenes_after: number;
+  total_scenes_trimmed: number;
+  total_duration_seconds: number;
+  cap_trim_applied: boolean;
+  rooms_with_fallback: RoomType[];
+  rooms_under_quota: RoomType[];
+  rooms_over_quota: RoomType[];
+  health: "green" | "yellow" | "red";
+}
+
+export interface AllocationDecision {
+  id: string;
+  property_id: string;
+  room_type: RoomType;
+  photos_present: number;
+  photos_eligible: number;
+  range_min: number;
+  range_max: number;
+  clips_assigned_first_pass: number;
+  clips_added_by_redistribution: number;
+  clips_trimmed_by_cap: number;
+  final_clip_count: number;
+  fallback_used: boolean;
+  avg_photo_qa_score: number | null;
+  best_photo_qa_score: number | null;
+  threshold_applied: number | null;
+  notes: string | null;
+}
+
 export interface Property {
   id: string;
   created_at: string;
@@ -23,6 +54,8 @@ export interface Property {
   horizontal_video_url: string | null;
   vertical_video_url: string | null;
   thumbnail_url: string | null;
+  allocation_summary: AllocationSummary | null;
+  allocation_warnings: string[] | null;
 }
 
 export interface Photo {
@@ -48,7 +81,7 @@ export interface Scene {
   prompt: string;
   duration_seconds: number;
   status: SceneStatus;
-  provider: "runway" | "kling" | "luma";
+  provider: "runway" | "kling" | "luma" | "higgsfield";
   generation_cost_cents: number;
   generation_time_ms: number;
   clip_url: string | null;
@@ -73,7 +106,7 @@ export interface CostEvent {
   id: string;
   scene_id: string | null;
   stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
-  provider: "anthropic" | "runway" | "kling" | "luma";
+  provider: "anthropic" | "runway" | "kling" | "luma" | "higgsfield";
   units_consumed: number | null;
   unit_type: "tokens" | "credits" | "kling_units" | null;
   cost_cents: number;

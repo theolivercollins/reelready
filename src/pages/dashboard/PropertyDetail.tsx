@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Download, RotateCcw, Camera, Clock, DollarSign, Copy, Check, Loader2, AlertTriangle } from "lucide-react";
 import { getStatusColor, formatCents, formatDuration } from "@/lib/types";
-import type { Property, Photo, Scene, PipelineLog, CostEvent } from "@/lib/types";
+import type { Property, Photo, Scene, PipelineLog, CostEvent, AllocationDecision } from "@/lib/types";
 import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts } from "@/lib/api";
 
 const PropertyDetail = () => {
   const { id } = useParams();
-  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: Scene[]; costEvents: CostEvent[] }) | null>(null);
+  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: Scene[]; costEvents: CostEvent[]; allocationDecisions: AllocationDecision[] }) | null>(null);
   const [logs, setLogs] = useState<(PipelineLog & { properties?: { address: string } })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,9 +95,18 @@ const PropertyDetail = () => {
   const photos = property.photos || [];
   const scenes = property.scenes || [];
   const costEvents = property.costEvents || [];
+  const allocationDecisions = property.allocationDecisions || [];
+  const allocationSummary = property.allocation_summary ?? null;
+  const allocationWarnings = property.allocation_warnings ?? [];
   const photoById = new Map(photos.map(p => [p.id, p]));
   const deliverables = scenes.filter(s => s.clip_url);
   const costTotalCents = costEvents.reduce((s, e) => s + (e.cost_cents ?? 0), 0);
+
+  const healthStyles: Record<"green" | "yellow" | "red", string> = {
+    green: "bg-primary/15 text-primary border-primary/30",
+    yellow: "bg-warning/15 text-warning-foreground border-warning/40",
+    red: "bg-destructive/15 text-destructive border-destructive/30",
+  };
 
   return (
     <div className="space-y-6 max-w-[1200px] mx-auto">
@@ -176,6 +185,84 @@ const PropertyDetail = () => {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Allocation — dynamic scene allocator decisions (R1) */}
+      {(allocationSummary || allocationDecisions.length > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              Scene Allocation
+              {allocationSummary && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] h-4 border ${healthStyles[allocationSummary.health]}`}
+                >
+                  {allocationSummary.health}
+                </Badge>
+              )}
+              {allocationSummary && (
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  {allocationSummary.total_scenes_after} scenes · {allocationSummary.total_duration_seconds}s
+                  {allocationSummary.total_scenes_trimmed > 0 && (
+                    <> · {allocationSummary.total_scenes_trimmed} trimmed</>
+                  )}
+                </span>
+              )}
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground">
+              Dynamic allocator (Stage 3.6) applies per-room quotas, stability thresholds, and the 60-second duration cap. See docs/SCENE-ALLOCATION-PLAN.md.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {allocationDecisions.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-left text-[10px] tracking-wider uppercase text-muted-foreground">
+                      <th className="py-1.5 pr-3">Room</th>
+                      <th className="py-1.5 pr-3 text-right">Present</th>
+                      <th className="py-1.5 pr-3 text-right">Eligible</th>
+                      <th className="py-1.5 pr-3 text-right">Range</th>
+                      <th className="py-1.5 pr-3 text-right">Final</th>
+                      <th className="py-1.5 pr-3 text-right">Threshold</th>
+                      <th className="py-1.5 pl-3 text-right">Avg QA</th>
+                      <th className="py-1.5 pl-3">Flags</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allocationDecisions.map(d => (
+                      <tr key={d.id} className="border-b border-border/40">
+                        <td className="py-1.5 pr-3 font-mono text-[11px]">{d.room_type}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{d.photos_present}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{d.photos_eligible}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-muted-foreground">{d.range_min}–{d.range_max}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono font-semibold">{d.final_clip_count}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-muted-foreground">{d.threshold_applied?.toFixed(1) ?? "—"}</td>
+                        <td className="py-1.5 pl-3 text-right font-mono text-muted-foreground">{d.avg_photo_qa_score?.toFixed(1) ?? "—"}</td>
+                        <td className="py-1.5 pl-3 text-[10px] space-x-1">
+                          {d.fallback_used && <span className="text-warning-foreground">fallback</span>}
+                          {d.clips_trimmed_by_cap > 0 && <span className="text-destructive">cap-trim</span>}
+                          {d.clips_added_by_redistribution > 0 && <span className="text-primary">+bonus</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {allocationWarnings.length > 0 && (
+              <div className="space-y-1 border-t border-border pt-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Warnings</p>
+                {allocationWarnings.map((w, i) => (
+                  <p key={i} className="text-[11px] text-warning-foreground flex items-start gap-1">
+                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" /> {w}
+                  </p>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

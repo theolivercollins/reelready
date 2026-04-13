@@ -45,6 +45,7 @@ import {
 import { selectProvider } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
 import { primeAppSettings } from "./app-settings.js";
+import { runSceneAllocation } from "./allocator.js";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;
@@ -91,6 +92,23 @@ export async function runPipeline(propertyId: string): Promise<void> {
 
     // Stage 3.5: Pre-flight prompt QA (non-blocking revision pass)
     await runPreflightQA(propertyId);
+
+    // Stage 3.6: Dynamic scene allocator — scores each director-produced
+    // scene against a per-room stability threshold, enforces per-room
+    // quotas, and applies the 60-second total duration cap by marking
+    // low-value scenes as trimmed. See docs/SCENE-ALLOCATION-PLAN.md +
+    // docs/WALKTHROUGH-ROADMAP.md R1. Non-blocking: failures log and
+    // continue to generation.
+    try {
+      await runSceneAllocation(propertyId);
+    } catch (err) {
+      await log(
+        propertyId,
+        "scripting",
+        "error",
+        `Allocator stage 3.6 threw: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
 
     // Stage 4 + 5: Generate + QC (per clip, with retries)
     await runGenerationWithQC(propertyId);
@@ -202,6 +220,10 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
       aesthetic_score: analysis.aesthetic_score,
       depth_rating: analysis.depth_rating,
       key_features: analysis.key_features,
+      unique_tags: analysis.unique_tags ?? [],
+      visible_openings: analysis.visible_openings ?? false,
+      opening_types: analysis.opening_types ?? [],
+      opening_prominence: analysis.opening_prominence ?? 0,
       selected: isSelected,
       discard_reason: analysis.suggested_discard
         ? analysis.discard_reason
@@ -277,8 +299,12 @@ async function runPropertyStyleGuide(propertyId: string): Promise<void> {
     return;
   }
 
-  // Load all selected photos as image blocks for Claude vision.
+  // Load all selected photos as image blocks for Claude vision. Track the
+  // photos that successfully loaded so the user-prompt photo list stays in
+  // the same order as the image blocks and every ID in the list is one the
+  // model can see.
   const imageContents: Anthropic.ImageBlockParam[] = [];
+  const loadedPhotos: Array<{ id: string; file_name: string; room_type: string }> = [];
   for (const photo of photos) {
     try {
       const response = await fetch(photo.file_url);
@@ -292,6 +318,11 @@ async function runPropertyStyleGuide(propertyId: string): Promise<void> {
       imageContents.push({
         type: "image",
         source: { type: "base64", media_type: mediaType, data: buffer.toString("base64") },
+      });
+      loadedPhotos.push({
+        id: photo.id,
+        file_name: photo.file_name ?? "unknown.jpg",
+        room_type: photo.room_type ?? "other",
       });
     } catch (err) {
       await log(propertyId, "scripting", "warn", `Style guide failed to load ${photo.file_name}: ${err}`);
@@ -313,7 +344,7 @@ async function runPropertyStyleGuide(propertyId: string): Promise<void> {
           role: "user",
           content: [
             ...imageContents,
-            { type: "text", text: buildStyleGuideUserPrompt(imageContents.length) },
+            { type: "text", text: buildStyleGuideUserPrompt(loadedPhotos) },
           ],
         },
       ],
@@ -376,6 +407,8 @@ async function runScripting(propertyId: string): Promise<void> {
     aesthetic_score: p.aesthetic_score ?? 5,
     depth_rating: p.depth_rating ?? "medium",
     key_features: p.key_features ?? [],
+    visible_openings: p.visible_openings ?? false,
+    opening_types: p.opening_types ?? [],
   }));
 
   // Pull the style guide from the property row (built in Stage 2.5) and
@@ -569,7 +602,13 @@ async function runPreflightQA(propertyId: string): Promise<void> {
 
 async function runGenerationWithQC(propertyId: string): Promise<void> {
   await updatePropertyStatus(propertyId, "generating");
-  const scenes = await getScenesForProperty(propertyId);
+  const allScenes = await getScenesForProperty(propertyId);
+  // Skip scenes the Stage 3.6 allocator marked as trimmed (over quota,
+  // duration cap, orphan photo). They stay in the DB as tombstones so
+  // the Superview can explain why they were cut, but we don't burn
+  // provider credits on them.
+  const scenes = allScenes.filter((s) => !(s as { trimmed?: boolean }).trimmed);
+  const trimmedCount = allScenes.length - scenes.length;
   const maxRetries = parseInt(process.env.MAX_RETRIES_PER_CLIP ?? "2", 10);
   const supabase = getSupabase();
 
@@ -577,7 +616,14 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
   // (Kling returns 1303 "parallel task over resource pack limit" when too many
   // tasks fire at once). 4 is conservative and fits inside the default Kling plan.
   const GENERATION_CONCURRENCY = parseInt(process.env.GENERATION_CONCURRENCY ?? "4", 10);
-  await log(propertyId, "generation", "info", `Generating ${scenes.length} clips, up to ${GENERATION_CONCURRENCY} in parallel`);
+  await log(
+    propertyId,
+    "generation",
+    "info",
+    `Generating ${scenes.length} clips` +
+      (trimmedCount > 0 ? ` (${trimmedCount} trimmed by allocator)` : "") +
+      `, up to ${GENERATION_CONCURRENCY} in parallel`
+  );
 
   const runScene = async (scene: typeof scenes[number]) => {
       let lastError = "";

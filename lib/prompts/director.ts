@@ -1,4 +1,4 @@
-import type { CameraMovement, RoomType, VideoProvider } from "../types.js";
+import type { CameraMovement, OpeningType, RoomType, VideoProvider } from "../types.js";
 
 export interface DirectorSceneOutput {
   scene_number: number;
@@ -190,6 +190,29 @@ OTHER:
   Shape: "[motion sentence, focal = the most prominent element]. The shot preserves all visible materials, lighting, and geometry exactly. [stability anchor] [closing stabilizer]"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ADJACENT-ROOM CONSTRAINT BLOCK (visible openings only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Some photos contain visible openings — doorways, archways, sliders, pass-throughs, or windows into another room — that reveal a glimpse of an adjacent space. Single-image video models reliably hallucinate a plausible-but-wrong adjacent room through those openings (wrong cabinetry, invented hallway, fake dining set). You will be told in the user message which photos have \`visible_openings=true\` along with the list of \`opening_types\` for each. You will also be given the property's style guide.
+
+For EVERY scene whose source photo has \`visible_openings=true\`, you MUST append an ADJACENT-ROOM CONSTRAINT BLOCK to that scene's prompt, positioned between part (c) — the hard stability anchor — and part (d) — the closing stabilizer. The constraint block is a 40–80 word English sentence (or two) that describes EXACTLY what must be rendered behind / through the opening, pulled from the real materials in the property style guide.
+
+RULES FOR THE CONSTRAINT BLOCK:
+- 40–80 words. Not shorter, not longer. It must fit inside the 120-word total prompt cap — rewrite the rest of the prompt more tightly to make room for it if needed.
+- Write it in natural English, not JSON. It is a continuation of the motion directive, not a separate section.
+- Use specifics from the style guide: cabinet color, counter material, hardware finish, floor material, wall color, lighting fixtures, palette. Name one or two of them explicitly.
+- Match the opening type:
+  * kitchen visible through a pass_through / archway from the living room → describe the real kitchen's cabinetry, counters, hardware, pendants.
+  * patio / lanai / pool visible through a slider → describe the real outdoor palette, deck material, view type, sky.
+  * hallway / adjacent room visible through a doorway → describe the real interior palette (walls, floors, trim) and any natural light direction.
+  * pass_through between interior rooms → describe the adjacent room's focal feature and palette.
+- Always end the block with a hard "do not invent" clause: "Do not render any other cabinetry, appliance, fixture, furniture, or room beyond that opening." Or a variant in the same spirit.
+- If the style guide is missing the relevant section, fall back to the interior_palette and keep the opening dark / backlit: "Beyond the opening, render only the existing [wall color] wall tone and soft natural light fall-off — no cabinetry, no furniture, no new room."
+
+DO NOT write a constraint block for scenes whose photo has \`visible_openings=false\`. Those prompts follow the standard (a)(b)(c)(d) template with no extra block.
+
+The word count of the constraint block counts toward the 120-word total prompt cap. Rewrite (b) and (c) tighter if you need room.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE (beginning → middle → end)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Opening: Exterior establishing shot (orbital_slow) — 5 seconds
@@ -220,13 +243,20 @@ export function buildDirectorUserPrompt(
     aesthetic_score: number;
     depth_rating: string;
     key_features: string[];
+    // R5: visibility of adjacent-room openings, per photo. When
+    // visible_openings=true the director MUST append an adjacent-room
+    // constraint block to the scene's prompt (see DIRECTOR_SYSTEM).
+    visible_openings: boolean;
+    opening_types: OpeningType[];
   }>
 ): string {
   const photoList = photos
-    .map(
-      (p) =>
-        `- ID: ${p.id} | File: ${p.file_name} | Room: ${p.room_type} | Aesthetic: ${p.aesthetic_score} | Depth: ${p.depth_rating} | Features: ${p.key_features.join(", ")}`
-    )
+    .map((p) => {
+      const openingFlag = p.visible_openings
+        ? ` | OPENINGS=YES (${p.opening_types.join("/") || "unspecified"}) — APPEND CONSTRAINT BLOCK`
+        : ` | OPENINGS=no`;
+      return `- ID: ${p.id} | File: ${p.file_name} | Room: ${p.room_type} | Aesthetic: ${p.aesthetic_score} | Depth: ${p.depth_rating} | Features: ${p.key_features.join(", ")}${openingFlag}`;
+    })
     .join("\n");
 
   // Count available room types so the director can apply quotas directly.
@@ -238,17 +268,27 @@ export function buildDirectorUserPrompt(
     .map(([rt, n]) => `${rt}=${n}`)
     .join(", ");
 
+  // List photo IDs that need the adjacent-room constraint block so the
+  // director can't miss them even if it skims the per-photo list.
+  const openingIds = photos
+    .filter((p) => p.visible_openings)
+    .map((p) => p.id);
+  const openingsSection = openingIds.length > 0
+    ? `\n\nPhotos with visible openings (these scenes MUST include an adjacent-room constraint block — see DIRECTOR_SYSTEM "ADJACENT-ROOM CONSTRAINT BLOCK" for exact rules): ${openingIds.join(", ")}`
+    : `\n\nNo photos have visible openings — skip the constraint block step for every scene.`;
+
   return `Plan the shot list for this property. Apply the room-type quotas from the system prompt to the rooms that are actually present below. Target 10-16 scenes and 30-60 seconds total duration.
 
 Available room counts: ${roomSummary}
 
 Photos:
-${photoList}
+${photoList}${openingsSection}
 
 Reminders (the system prompt has full detail):
 - Each prompt MUST contain one of the plain-language motion sentences verbatim (with [focal subject] filled in). Do NOT write "parallax", "dolly", "pan", or other jargon inside the prompt string.
 - Consecutive scenes MUST use different camera_movement values.
 - Every prompt MUST include the hard stability anchor and the closing stabilizer sentences from the per-room templates.
+- For any scene whose photo is flagged OPENINGS=YES above, insert an adjacent-room constraint block (40–80 words) between the stability anchor and the closing stabilizer, referencing the real materials in the attached style guide.
 - Keep each prompt under 120 words.
 
 Return a JSON object with this exact shape:

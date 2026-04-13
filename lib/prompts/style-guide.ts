@@ -3,6 +3,62 @@
 // specific materials / colors / finishes visible elsewhere in the house
 // instead of letting the video model hallucinate adjacent rooms.
 
+import type { UniqueTag } from "../types.js";
+
+// Keep this list in sync with the UniqueTag union in lib/types.ts. It is
+// rendered inline in the style-guide system prompt so Claude can only pick
+// from the closed vocabulary (docs/COVERAGE-MODEL.md §4.3).
+const UNIQUE_TAG_ENUM: UniqueTag[] = [
+  "pool",
+  "spa",
+  "outdoor_kitchen",
+  "fire_pit",
+  "fire_feature",
+  "waterfront",
+  "water_view",
+  "city_view",
+  "golf_view",
+  "mountain_view",
+  "wine_cellar",
+  "wine_fridge",
+  "home_theater",
+  "gym",
+  "sauna",
+  "chandelier",
+  "statement_fixture",
+  "custom_staircase",
+  "fireplace_wall",
+  "floor_to_ceiling_window",
+  "vaulted_ceiling",
+  "coffered_ceiling",
+  "beamed_ceiling",
+  "gallery_wall",
+  "built_in_shelving",
+  "double_island",
+  "waterfall_counter",
+  "hero_kitchen_hood",
+  "soaking_tub",
+  "walk_in_shower",
+  "double_vanity_marble",
+  "walk_in_closet",
+  "finished_basement",
+  "three_car_garage",
+  "car_lift",
+  "boat_dock",
+  "tennis_court",
+  "pickleball_court",
+  "putting_green",
+  "detached_guest_house",
+  "rooftop_deck",
+  "balcony",
+];
+
+export interface NotableFeature {
+  description: string;
+  tags: UniqueTag[];
+  photo_ids: string[];
+}
+
 export interface PropertyStyleGuide {
   overall_mood: string;
   exterior: {
@@ -57,7 +113,12 @@ export interface PropertyStyleGuide {
     lanai_description: string | null;
     view_type: string;
   };
-  notable_features: string[];
+  notable_features: NotableFeature[];
+  // Property-wide aggregate of every canonical unique tag detected across all
+  // photos. Populated by the style-guide pass so the coverage enforcer can
+  // reason about the property without re-walking every photo row.
+  // See docs/COVERAGE-MODEL.md §4.3.
+  unique_tags: UniqueTag[];
 }
 
 export const STYLE_GUIDE_SYSTEM = `You are a real estate visual analyst. You receive a set of photos of a single property and produce a structured "style guide" — a JSON document describing the exact materials, colors, finishes, and design choices visible in this specific house.
@@ -72,6 +133,15 @@ RULES:
 - If a section doesn't apply (e.g. the house has no pool), set that field to null or has_pool=false.
 - Keep each string field under 25 words.
 - Return ONLY a JSON object matching the PropertyStyleGuide schema. No preamble, no commentary, no markdown code fences.
+
+UNIQUE TAGS (closed vocabulary — pick ONLY from this list):
+${UNIQUE_TAG_ENUM.join(", ")}
+
+Two places in the schema take these tags:
+- \`notable_features[]\`: each entry is an OBJECT \`{ description, tags, photo_ids }\`. \`description\` is a short prose description of one distinctive feature (e.g. "double waterfall island with hero hood over it"). \`tags\` is zero-or-more values drawn from the closed vocabulary above that match that specific feature. \`photo_ids\` is the list of photo IDs (provided to you in the user message) in which that feature is visible. Each photo ID in \`photo_ids\` MUST come from the supplied list — do not invent IDs.
+- \`unique_tags\` (top level): the property-wide aggregate — a de-duplicated array of every tag that appears in any \`notable_features[].tags\`. This is what the coverage enforcer matches on to guarantee a unique-feature clip, so include every canonical tag that is clearly visible somewhere in the property's photos.
+
+If a feature is clearly visible but has no matching canonical tag, keep the description in \`notable_features\` but leave its \`tags\` array empty. Never invent a new tag.
 
 Output schema (types only — fill with real values from the photos):
 {
@@ -97,11 +167,25 @@ Output schema (types only — fill with real values from the photos):
   "master_bedroom": { "bed_style": "...", "nightstand_material": "...", "window_treatments": "..." } or null,
   "bathrooms": { "vanity_style": "...", "counter_material": "...", "fixture_finish": "...", "shower_or_tub": "..." } or null,
   "outdoor_features": { "has_pool": false, "pool_description": null, "has_lanai": false, "lanai_description": null, "view_type": "..." },
-  "notable_features": ["string"]
+  "notable_features": [
+    { "description": "string", "tags": ["canonical_tag"], "photo_ids": ["uuid"] }
+  ],
+  "unique_tags": ["canonical_tag"]
 }`;
 
-export function buildStyleGuideUserPrompt(photoCount: number): string {
-  return `Here are ${photoCount} photos of a single property. Study them as a set and produce the PropertyStyleGuide JSON. Pay special attention to rooms that are partially visible through doorways in other shots — those are the rooms most likely to be hallucinated by the downstream video model, so precision matters. Return ONLY the JSON object.`;
+export function buildStyleGuideUserPrompt(
+  photos: Array<{ id: string; file_name: string; room_type: string }>
+): string {
+  const photoList = photos
+    .map((p) => `- ID: ${p.id} | File: ${p.file_name} | Room: ${p.room_type}`)
+    .join("\n");
+  return `Here are ${photos.length} photos of a single property. Study them as a set and produce the PropertyStyleGuide JSON. Pay special attention to rooms that are partially visible through doorways in other shots — those are the rooms most likely to be hallucinated by the downstream video model, so precision matters.
+
+When populating \`notable_features[].photo_ids\`, use ONLY the following photo IDs (each entry in the list is presented in the same order as the attached images, so you can match a feature to the photo it is visible in):
+
+${photoList}
+
+Return ONLY the JSON object.`;
 }
 
 // Render a compact text block that can be injected into a director/per-scene

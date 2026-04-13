@@ -10,6 +10,8 @@ import type {
   VideoProvider,
   LogStage,
   LogLevel,
+  UniqueTag,
+  OpeningType,
 } from "./types.js";
 
 export type {
@@ -23,6 +25,8 @@ export type {
   VideoProvider,
   LogStage,
   LogLevel,
+  UniqueTag,
+  OpeningType,
 };
 
 let client: SupabaseClient | null = null;
@@ -148,6 +152,13 @@ export async function updatePhotoAnalysis(
     aesthetic_score: number;
     depth_rating: DepthRating;
     key_features: string[];
+    // Canonical closed-set tags for the coverage enforcer (R3).
+    unique_tags: UniqueTag[];
+    // Adjacent-room opening fields (R5) — powers the director's constraint
+    // block injection and downstream hallucination QC.
+    visible_openings: boolean;
+    opening_types: OpeningType[];
+    opening_prominence: number;
     selected: boolean;
     discard_reason: string | null;
   }
