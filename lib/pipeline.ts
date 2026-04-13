@@ -44,6 +44,7 @@ import {
 } from "./prompts/prompt-qa.js";
 import { selectProvider } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
+import { primeAppSettings } from "./app-settings.js";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;
@@ -61,6 +62,11 @@ const REQUIRED_ROOM_TYPES: RoomType[] = [
 export async function runPipeline(propertyId: string): Promise<void> {
   try {
     await log(propertyId, "intake", "info", "Pipeline started");
+
+    // Prime the app-settings cache so `selectProvider` (which is
+    // synchronous and reads from cache) sees the current
+    // primary_video_provider override picked in the dashboard.
+    await primeAppSettings();
 
     // Stage 1: Intake (photos already uploaded by the API route)
     // Just verify photos exist
@@ -404,6 +410,11 @@ async function runScripting(propertyId: string): Promise<void> {
   const validPhotoIds = new Set(photos.map((p) => p.id));
   const validScenes = output.scenes.filter((s) => validPhotoIds.has(s.photo_id));
 
+  // Hard clamp every scene to 5 seconds. See docs/WALKTHROUGH-ROADMAP.md R11
+  // (last-2-3-seconds decay mitigation #1). The director prompt already
+  // requests exactly 5s per scene, but we re-enforce here so a hallucinated
+  // longer duration can never reach the provider.
+  const SCENE_DURATION_SECONDS = 5;
   await insertScenes(
     validScenes.map((s) => ({
       property_id: propertyId,
@@ -411,7 +422,7 @@ async function runScripting(propertyId: string): Promise<void> {
       scene_number: s.scene_number,
       camera_movement: s.camera_movement,
       prompt: s.prompt,
-      duration_seconds: s.duration_seconds,
+      duration_seconds: SCENE_DURATION_SECONDS,
       provider: s.provider_preference ?? undefined,
     }))
   );

@@ -3,6 +3,8 @@ import type { IVideoProvider } from "./provider.interface.js";
 import { RunwayProvider } from "./runway.js";
 import { KlingProvider } from "./kling.js";
 import { LumaProvider } from "./luma.js";
+import { HiggsfieldProvider } from "./higgsfield.js";
+import { getAppSettingSync } from "../app-settings.js";
 
 // Default routing: which provider handles which room types best
 const ROOM_TYPE_ROUTING: Record<RoomType, VideoProvider> = {
@@ -23,7 +25,7 @@ const ROOM_TYPE_ROUTING: Record<RoomType, VideoProvider> = {
 };
 
 // Priority order for fallback
-const FALLBACK_ORDER: VideoProvider[] = ["runway", "kling", "luma"];
+const FALLBACK_ORDER: VideoProvider[] = ["runway", "kling", "luma", "higgsfield"];
 
 const providerCache = new Map<VideoProvider, IVideoProvider>();
 
@@ -40,6 +42,9 @@ function getProviderInstance(name: VideoProvider): IVideoProvider {
       case "luma":
         instance = new LumaProvider();
         break;
+      case "higgsfield":
+        instance = new HiggsfieldProvider();
+        break;
     }
     providerCache.set(name, instance);
   }
@@ -51,6 +56,7 @@ export function getEnabledProviders(): VideoProvider[] {
   if (process.env.RUNWAY_API_KEY) enabled.push("runway");
   if (process.env.KLING_ACCESS_KEY && process.env.KLING_SECRET_KEY) enabled.push("kling");
   if (process.env.LUMA_API_KEY) enabled.push("luma");
+  if (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET) enabled.push("higgsfield");
   return enabled;
 }
 
@@ -68,18 +74,30 @@ export function selectProvider(
     );
   }
 
-  // 1. Use explicit preference if available
+  // 1. Use explicit scene-level preference if available (director set it)
   if (preference && available.includes(preference)) {
     return getProviderInstance(preference);
   }
 
-  // 2. Use room-type routing if that provider is available
+  // 2. Honor the dashboard's primary video provider setting.
+  //    When set to "auto", fall through to per-room routing.
+  //    When set to a concrete provider, use it for every scene UNLESS
+  //    it has been excluded by the retry loop — in which case we
+  //    continue to the per-room routing and fallback chain.
+  //    Reads from the short-TTL app-settings cache; primePipelineSettings()
+  //    should be called at the top of runPipeline so the cache is warm.
+  const primary = getAppSettingSync("primary_video_provider");
+  if (primary !== "auto" && available.includes(primary)) {
+    return getProviderInstance(primary);
+  }
+
+  // 3. Use room-type routing if that provider is available
   const routed = ROOM_TYPE_ROUTING[roomType];
   if (available.includes(routed)) {
     return getProviderInstance(routed);
   }
 
-  // 3. Fall back to priority order
+  // 4. Fall back to priority order
   for (const fallback of FALLBACK_ORDER) {
     if (available.includes(fallback)) {
       return getProviderInstance(fallback);

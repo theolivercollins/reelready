@@ -6,12 +6,13 @@ import type {
 } from "./provider.interface.js";
 
 /**
- * HiggsfieldProvider — scaffold for the Higgsfield "DoP" (Director of Photography /
- * Cinema Studio) video generation API at https://platform.higgsfield.ai.
+ * HiggsfieldProvider — Higgsfield "DoP" (Director of Photography / Cinema
+ * Studio) video generation API at https://platform.higgsfield.ai.
  *
- * NOTE: This provider is NOT yet wired into lib/providers/router.ts. It exists as
- * a stub so that once scripts/test-higgsfield.ts confirms the API shape (especially
- * multi-image reference support), we can drop it into the router without churn.
+ * Supports two modes:
+ *   - Single-image (default): POST /higgsfield-ai/dop/standard with image_url
+ *   - First-last-frame keyframe: POST /higgsfield-ai/dop/standard/first-last-frame
+ *     when GenerateClipParams.endImage is provided
  *
  * Auth uses the documented header form `Key {api_key}:{api_key_secret}` — a pair
  * of credentials, not a single bearer token.
@@ -22,6 +23,7 @@ export class HiggsfieldProvider implements IVideoProvider {
   private apiSecret: string;
   private baseUrl = "https://platform.higgsfield.ai";
   private modelPath = "/higgsfield-ai/dop/standard";
+  private firstLastFramePath = "/higgsfield-ai/dop/standard/first-last-frame";
 
   constructor() {
     const key = process.env.HIGGSFIELD_API_KEY;
@@ -36,26 +38,42 @@ export class HiggsfieldProvider implements IVideoProvider {
     return `Key ${this.apiKey}:${this.apiSecret}`;
   }
 
+  private toDataUrl(buffer: Buffer): string {
+    return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+  }
+
   async generateClip(params: GenerateClipParams): Promise<GenerationJob> {
     // Higgsfield public docs only show a single `image_url` field. We send a
     // data URL here — if Higgsfield rejects data URLs in practice, swap this
     // for an upload to Supabase Storage and pass the resulting public URL.
-    const imageBase64 = params.sourceImage.toString("base64");
-    const dataUrl = `data:image/jpeg;base64,${imageBase64}`;
-
+    const startImage = this.toDataUrl(params.sourceImage);
     const duration = params.durationSeconds <= 5 ? 5 : 10;
 
-    const response = await fetch(`${this.baseUrl}${this.modelPath}`, {
+    // Choose endpoint + body based on whether caller supplied an end frame.
+    const useKeyframeMode = params.endImage !== undefined;
+    const endpoint = useKeyframeMode
+      ? `${this.baseUrl}${this.firstLastFramePath}`
+      : `${this.baseUrl}${this.modelPath}`;
+    const body: Record<string, unknown> = useKeyframeMode
+      ? {
+          image_url: startImage,
+          end_image: this.toDataUrl(params.endImage as Buffer),
+          prompt: params.prompt,
+          duration,
+        }
+      : {
+          image_url: startImage,
+          prompt: params.prompt,
+          duration,
+        };
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: this.authHeader(),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        image_url: dataUrl,
-        prompt: params.prompt,
-        duration,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

@@ -97,7 +97,7 @@ export async function recordCostEvent(event: {
   propertyId: string;
   sceneId?: string | null;
   stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
-  provider: "anthropic" | "runway" | "kling" | "luma";
+  provider: "anthropic" | "runway" | "kling" | "luma" | "higgsfield";
   unitsConsumed?: number;
   unitType?: "tokens" | "credits" | "kling_units" | null;
   costCents: number;

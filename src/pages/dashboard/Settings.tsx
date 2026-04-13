@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,8 +8,42 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Eye, EyeOff, Save, Upload, Music, Palette, Bell } from "lucide-react";
+import { Eye, EyeOff, Save, Upload, Music, Bell, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+type PrimaryVideoProvider = "auto" | "runway" | "kling" | "luma" | "higgsfield";
+
+interface AppSettings {
+  primary_video_provider: PrimaryVideoProvider;
+}
+
+const PRIMARY_PROVIDER_OPTIONS: Array<{ value: PrimaryVideoProvider; label: string; desc: string }> = [
+  { value: "auto", label: "Auto (per-room routing)", desc: "Smart routing — use Runway for exteriors, Kling for interiors, Luma for pools. Recommended default." },
+  { value: "higgsfield", label: "Higgsfield DoP", desc: "Director-of-Photography engine with first-last-frame keyframe support. Best for anchor-heavy interior shots." },
+  { value: "kling", label: "Kling v2 Master", desc: "Highest interior fidelity. Cap parallel tasks via GENERATION_CONCURRENCY." },
+  { value: "runway", label: "Runway Gen-4 Turbo", desc: "Most stable exteriors. Interior motion tends to default to push-in." },
+  { value: "luma", label: "Luma Ray 2", desc: "Good for pools and outdoor movement. Keyframe bracketing supported." },
+];
+
+async function fetchAppSettings(): Promise<AppSettings> {
+  const res = await fetch("/api/admin/settings");
+  if (!res.ok) throw new Error(`GET /api/admin/settings → ${res.status}`);
+  return res.json();
+}
+
+async function updateAppSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const res = await fetch("/api/admin/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`POST /api/admin/settings → ${res.status} ${txt}`);
+  }
+  const payload = (await res.json()) as { current: AppSettings };
+  return payload.current;
+}
 
 const Settings = () => {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
@@ -18,14 +53,91 @@ const Settings = () => {
   const [clipDuration, setClipDuration] = useState([3.5]);
   const [transitionDuration, setTransitionDuration] = useState([0.3]);
 
+  const qc = useQueryClient();
+  const appSettings = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: fetchAppSettings,
+  });
+  const primaryProviderMutation = useMutation({
+    mutationFn: (value: PrimaryVideoProvider) =>
+      updateAppSettings({ primary_video_provider: value }),
+    onSuccess: (current, variable) => {
+      qc.setQueryData(["app-settings"], current);
+      const option = PRIMARY_PROVIDER_OPTIONS.find((o) => o.value === variable);
+      toast.success(`Primary provider set to ${option?.label ?? variable}`);
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update primary provider: ${err.message}`);
+    },
+  });
+
   const toggleKey = (key: string) => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
 
   const handleSave = (section: string) => {
     toast.success(`${section} saved successfully`);
   };
 
+  const currentPrimaryProvider = appSettings.data?.primary_video_provider ?? "auto";
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Primary Video Provider — live, wired to /api/admin/settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Primary Video Provider</CardTitle>
+          <CardDescription>
+            Overrides the router's per-room-type defaults. Takes effect on the next property run — no redeploy needed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {appSettings.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading current setting…
+            </div>
+          ) : appSettings.isError ? (
+            <div className="text-sm text-destructive">
+              Failed to load settings: {(appSettings.error as Error).message}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Active provider</Label>
+                <Select
+                  value={currentPrimaryProvider}
+                  onValueChange={(v) =>
+                    primaryProviderMutation.mutate(v as PrimaryVideoProvider)
+                  }
+                  disabled={primaryProviderMutation.isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIMARY_PROVIDER_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {
+                    PRIMARY_PROVIDER_OPTIONS.find(
+                      (o) => o.value === currentPrimaryProvider
+                    )?.desc
+                  }
+                </p>
+              </div>
+              {primaryProviderMutation.isPending && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* API Keys */}
       <Card>
         <CardHeader>
@@ -33,7 +145,7 @@ const Settings = () => {
           <CardDescription>Configure video generation provider credentials</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {["Runway", "Kling", "Luma"].map(provider => (
+          {["Runway", "Kling", "Luma", "Higgsfield"].map(provider => (
             <div key={provider} className="space-y-2">
               <Label>{provider} API Key</Label>
               <div className="flex gap-2">
@@ -62,20 +174,20 @@ const Settings = () => {
         </CardContent>
       </Card>
 
-      {/* Provider Routing */}
+      {/* Provider Routing (informational — real routing is the Primary Provider card above) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Provider Routing</CardTitle>
-          <CardDescription>Set active providers and priority order</CardDescription>
+          <CardTitle className="text-base">Provider Fallback Chain</CardTitle>
+          <CardDescription>Retry order when the primary provider fails on a scene</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {["Runway", "Kling", "Luma"].map((provider, i) => (
+          {["Runway", "Kling", "Luma", "Higgsfield"].map((provider, i) => (
             <div key={provider} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Badge variant="secondary" className="font-mono text-xs">{i + 1}</Badge>
                 <span className="text-sm font-medium">{provider}</span>
               </div>
-              <Switch defaultChecked={i < 2} />
+              <Switch defaultChecked={i < 3} />
             </div>
           ))}
         </CardContent>

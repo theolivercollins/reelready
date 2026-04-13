@@ -192,17 +192,23 @@ OTHER:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE (beginning → middle → end)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Opening: Exterior establishing shot (orbital_slow) — 4 seconds
+- Opening: Exterior establishing shot (orbital_slow) — 5 seconds
 - Main living spaces (living room → kitchen → dining)
 - Bedrooms and bathrooms
 - Highlight (pool, lanai, view, unique feature) if available
-- Closing: Exterior wide or aerial — 4 seconds
+- Closing: Exterior wide or aerial — 5 seconds
 
-DURATIONS:
-- Exterior establishing / closing / aerial: 4 seconds
-- Interior rooms: 3-3.5 seconds
-- Pool / lanai highlight: 3.5-4 seconds
-- Total across all scenes: 30-60 seconds
+DURATIONS (HARD CAP — READ CAREFULLY):
+- Every single scene's duration_seconds MUST be exactly 5.
+- No 3s, no 4s, no 6s, no 10s. Exactly 5 seconds per scene.
+- This is a hard engineering constraint: the video models produce
+  reliable results for the first ~70% of a clip and then begin to
+  hallucinate, warp architecture, and drift past anchor frames.
+  Capping every clip at 5 seconds keeps us inside the stable window
+  and sidesteps the last-2-3-seconds decay that has ruined prior
+  test runs. Do NOT ask for longer clips even for exteriors or hero
+  shots. A tighter 5s shot is strictly better than a wobbly 10s one.
+- Total across all scenes: 50-75 seconds (10-15 scenes × 5s each).
 
 Return ONLY a JSON object. Not every photo needs to be used.`;
 

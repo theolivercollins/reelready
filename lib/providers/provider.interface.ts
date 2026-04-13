@@ -5,6 +5,13 @@ export interface GenerateClipParams {
   prompt: string;
   durationSeconds: number;
   aspectRatio: "16:9" | "9:16";
+  /**
+   * Optional end-frame image. When provided, providers that support
+   * first-last-frame keyframe interpolation (e.g. Higgsfield DoP) will
+   * use it to constrain the final frame of the generated clip. Providers
+   * that do not support keyframe mode ignore this field.
+   */
+  endImage?: Buffer;
 }
 
 export interface GenerationJob {
