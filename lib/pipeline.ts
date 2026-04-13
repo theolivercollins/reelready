@@ -27,6 +27,11 @@ import {
   type DirectorOutput,
 } from "./prompts/director.js";
 import {
+  STYLE_GUIDE_SYSTEM,
+  buildStyleGuideUserPrompt,
+  type PropertyStyleGuide,
+} from "./prompts/style-guide.js";
+import {
   QC_SYSTEM,
   buildQCUserPrompt,
   buildPromptModification,
@@ -69,6 +74,11 @@ export async function runPipeline(propertyId: string): Promise<void> {
 
     // Stage 2: Analyze
     await runAnalysis(propertyId, photos);
+
+    // Stage 2.5: Build Property Style Guide — one vision pass that sees all
+    // selected photos at once so later scene prompts can describe adjacent
+    // rooms accurately instead of the video model hallucinating them.
+    await runPropertyStyleGuide(propertyId);
 
     // Stage 3: Script
     await runScripting(propertyId);
@@ -246,6 +256,99 @@ function selectPhotos(
   return selected;
 }
 
+// ─── STAGE 2.5: PROPERTY STYLE GUIDE ──────────────────────────
+// One vision pass over all selected photos produces a structured style
+// guide saved to properties.style_guide. The director injects it into
+// per-scene prompts so the downstream video model knows what adjacent
+// rooms look like instead of inventing them.
+
+async function runPropertyStyleGuide(propertyId: string): Promise<void> {
+  await log(propertyId, "scripting", "info", "Building property style guide");
+
+  const photos = await getSelectedPhotos(propertyId);
+  if (photos.length === 0) {
+    await log(propertyId, "scripting", "warn", "No selected photos for style guide — skipping");
+    return;
+  }
+
+  // Load all selected photos as image blocks for Claude vision.
+  const imageContents: Anthropic.ImageBlockParam[] = [];
+  for (const photo of photos) {
+    try {
+      const response = await fetch(photo.file_url);
+      const contentType = response.headers.get("content-type") ?? "";
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" =
+        contentType.includes("png") ? "image/png"
+        : contentType.includes("webp") ? "image/webp"
+        : contentType.includes("gif") ? "image/gif"
+        : "image/jpeg";
+      imageContents.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data: buffer.toString("base64") },
+      });
+    } catch (err) {
+      await log(propertyId, "scripting", "warn", `Style guide failed to load ${photo.file_name}: ${err}`);
+    }
+  }
+  if (imageContents.length === 0) {
+    await log(propertyId, "scripting", "warn", "Style guide: no images loaded");
+    return;
+  }
+
+  try {
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 3000,
+      system: STYLE_GUIDE_SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: [
+            ...imageContents,
+            { type: "text", text: buildStyleGuideUserPrompt(imageContents.length) },
+          ],
+        },
+      ],
+    });
+
+    // Record cost
+    const usage = computeClaudeCost(response.usage as never);
+    await recordCostEvent({
+      propertyId,
+      stage: "scripting",
+      provider: "anthropic",
+      unitsConsumed: usage.totalTokens,
+      unitType: "tokens",
+      costCents: usage.costCents,
+      metadata: {
+        model: "claude-sonnet-4-6",
+        stage_detail: "style_guide",
+        image_count: imageContents.length,
+        ...usage.breakdown,
+      },
+    });
+
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      await log(propertyId, "scripting", "warn", "Style guide: could not parse JSON");
+      return;
+    }
+    const styleGuide = JSON.parse(jsonMatch[0]) as PropertyStyleGuide;
+    await getSupabase()
+      .from("properties")
+      .update({ style_guide: styleGuide })
+      .eq("id", propertyId);
+    await log(propertyId, "scripting", "info",
+      `Style guide built: mood="${styleGuide.overall_mood}"`, { tokens: usage.totalTokens });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await log(propertyId, "scripting", "error", `Style guide failed: ${msg}`);
+  }
+}
+
 // ─── STAGE 3: SCRIPTING ────────────────────────────────────────
 
 async function runScripting(propertyId: string): Promise<void> {
@@ -269,11 +372,24 @@ async function runScripting(propertyId: string): Promise<void> {
     key_features: p.key_features ?? [],
   }));
 
+  // Pull the style guide from the property row (built in Stage 2.5) and
+  // bake it into the director's user message so every per-scene prompt
+  // the director produces already references real adjacent-room details.
+  const { data: propRow } = await getSupabase()
+    .from("properties")
+    .select("style_guide")
+    .eq("id", propertyId)
+    .single();
+  const styleGuide = (propRow?.style_guide ?? null) as PropertyStyleGuide | null;
+  const styleGuideBlock = styleGuide
+    ? `\n\nPROPERTY STYLE GUIDE (use this to describe adjacent rooms visible through any doorways or openings — do NOT let the downstream video model invent these details; every scene prompt that shows a doorway must include the matching real description):\n${JSON.stringify(styleGuide, null, 2)}`
+    : "";
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: DIRECTOR_SYSTEM,
-    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) }],
+    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) + styleGuideBlock }],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
