@@ -265,9 +265,9 @@ const PropertyDetail = () => {
                         SELECTED
                       </Badge>
                     )}
-                    {!photo.selected && photo.discard_reason && (
+                    {!photo.selected && (
                       <Badge className="absolute top-1.5 left-1.5 bg-destructive text-destructive-foreground text-[9px] h-4 px-1.5">
-                        {photo.discard_reason}
+                        DISCARDED
                       </Badge>
                     )}
                   </div>
@@ -291,6 +291,11 @@ const PropertyDetail = () => {
                     {photo.key_features && photo.key_features.length > 0 && (
                       <p className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
                         {photo.key_features.join(" · ")}
+                      </p>
+                    )}
+                    {!photo.selected && photo.discard_reason && (
+                      <p className="text-[11px] text-destructive leading-snug pt-1 border-t border-border/50">
+                        {photo.discard_reason}
                       </p>
                     )}
                   </div>
