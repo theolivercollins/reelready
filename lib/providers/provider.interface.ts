@@ -16,6 +16,8 @@ export interface GenerationResult {
   status: "processing" | "complete" | "failed";
   videoUrl?: string;
   costCents?: number;
+  providerUnits?: number;
+  providerUnitType?: "credits" | "kling_units" | "tokens";
   error?: string;
 }
 

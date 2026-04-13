@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Download, RotateCcw, Camera, Clock, DollarSign, Copy, Check, Loader2, AlertTriangle } from "lucide-react";
 import { getStatusColor, formatCents, formatDuration } from "@/lib/types";
-import type { Property, Photo, Scene, PipelineLog } from "@/lib/types";
+import type { Property, Photo, Scene, PipelineLog, CostEvent } from "@/lib/types";
 import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts } from "@/lib/api";
 
 const PropertyDetail = () => {
   const { id } = useParams();
-  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: Scene[] }) | null>(null);
+  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: Scene[]; costEvents: CostEvent[] }) | null>(null);
   const [logs, setLogs] = useState<(PipelineLog & { properties?: { address: string } })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,8 +94,10 @@ const PropertyDetail = () => {
 
   const photos = property.photos || [];
   const scenes = property.scenes || [];
+  const costEvents = property.costEvents || [];
   const photoById = new Map(photos.map(p => [p.id, p]));
   const deliverables = scenes.filter(s => s.clip_url);
+  const costTotalCents = costEvents.reduce((s, e) => s + (e.cost_cents ?? 0), 0);
 
   return (
     <div className="space-y-6 max-w-[1200px] mx-auto">
@@ -173,6 +175,57 @@ const PropertyDetail = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cost breakdown — real per-call numbers from providers */}
+      {costEvents.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              Cost Breakdown
+              <Badge variant="secondary" className="text-[10px] h-4 font-mono">{formatCents(costTotalCents)}</Badge>
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground">Real per-call costs: Claude token usage, Runway credits, Kling units.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border text-left text-[10px] tracking-wider uppercase text-muted-foreground">
+                    <th className="py-1.5 pr-3">Stage</th>
+                    <th className="py-1.5 pr-3">Provider</th>
+                    <th className="py-1.5 pr-3">Scene</th>
+                    <th className="py-1.5 pr-3 text-right">Units</th>
+                    <th className="py-1.5 pl-3 text-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costEvents.map(ev => {
+                    const sceneNum = ev.scene_id
+                      ? scenes.find(s => s.id === ev.scene_id)?.scene_number ?? "—"
+                      : "—";
+                    const unitsLabel = ev.units_consumed != null
+                      ? `${Math.round(ev.units_consumed).toLocaleString()} ${ev.unit_type ?? ""}`.trim()
+                      : "—";
+                    return (
+                      <tr key={ev.id} className="border-b border-border/40">
+                        <td className="py-1.5 pr-3 capitalize">{ev.stage}</td>
+                        <td className="py-1.5 pr-3 font-mono text-[11px]">{ev.provider}</td>
+                        <td className="py-1.5 pr-3 font-mono text-[11px] text-muted-foreground">{sceneNum}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-[11px]">{unitsLabel}</td>
+                        <td className="py-1.5 pl-3 text-right font-mono">{formatCents(ev.cost_cents)}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr>
+                    <td colSpan={4} className="py-2 pr-3 text-right font-semibold">Total</td>
+                    <td className="py-2 pl-3 text-right font-mono font-semibold">{formatCents(costTotalCents)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>

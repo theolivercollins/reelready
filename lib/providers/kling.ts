@@ -108,12 +108,22 @@ export class KlingProvider implements IVideoProvider {
         task_status: string;
         task_result?: { videos?: Array<{ url: string }> };
         task_status_msg?: string;
+        task_info?: { external_task_id?: string };
       };
     };
 
     const task = data.data;
     if (task.task_status === "succeed" && task.task_result?.videos?.[0]) {
-      return { status: "complete", videoUrl: task.task_result.videos[0].url };
+      // Kling v2-master: 10 units per 5s clip by default
+      const units = 10;
+      const centsPerUnit = parseFloat(process.env.KLING_CENTS_PER_UNIT ?? "0");
+      return {
+        status: "complete",
+        videoUrl: task.task_result.videos[0].url,
+        providerUnits: units,
+        providerUnitType: "kling_units",
+        costCents: Math.round(units * centsPerUnit),
+      };
     }
     if (task.task_status === "failed") {
       return {

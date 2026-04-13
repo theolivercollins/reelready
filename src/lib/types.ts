@@ -69,6 +69,18 @@ export interface PipelineLog {
   metadata: any;
 }
 
+export interface CostEvent {
+  id: string;
+  scene_id: string | null;
+  stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
+  provider: "anthropic" | "runway" | "kling" | "luma";
+  units_consumed: number | null;
+  unit_type: "tokens" | "credits" | "kling_units" | null;
+  cost_cents: number;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface DailyStat {
   id: string;
   date: string;

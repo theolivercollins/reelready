@@ -17,9 +17,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { getSupabase, updatePropertyStatus, addPropertyCost, log } = await import('../../lib/db.js');
+    const { getSupabase, updatePropertyStatus, recordCostEvent, log } = await import('../../lib/db.js');
     const { selectProvider } = await import('../../lib/providers/router.js');
-    const { estimateGenerationCost } = await import('../../lib/utils/cost-tracker.js');
 
     const supabase = getSupabase();
 
@@ -91,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (uploadErr) throw uploadErr;
 
         const { data: urlData } = supabase.storage.from('property-videos').getPublicUrl(clipPath);
-        const costCents = status.costCents ?? estimateGenerationCost(provider.name, scene.duration_seconds ?? 5);
+        const costCents = status.costCents ?? 0;
         const genTimeMs = scene.submitted_at ? Date.now() - new Date(scene.submitted_at).getTime() : null;
 
         await supabase.from('scenes').update({
@@ -103,9 +102,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           qc_confidence: 1.0,
         }).eq('id', scene.id);
 
-        await addPropertyCost(scene.property_id, costCents);
+        await recordCostEvent({
+          propertyId: scene.property_id,
+          sceneId: scene.id,
+          stage: 'generation',
+          provider: provider.name,
+          unitsConsumed: status.providerUnits,
+          unitType: status.providerUnitType ?? null,
+          costCents,
+          metadata: {
+            scene_number: scene.scene_number,
+            duration_seconds: scene.duration_seconds,
+            generation_time_ms: genTimeMs,
+            source: 'cron',
+          },
+        });
         await log(scene.property_id, 'generation', 'info',
-          `Scene ${scene.scene_number}: recovered by cron from ${scene.provider}`, { costCents }, scene.id);
+          `Scene ${scene.scene_number}: recovered by cron from ${scene.provider}`, { costCents, providerUnits: status.providerUnits }, scene.id);
 
         completedCount++;
       } catch (err) {

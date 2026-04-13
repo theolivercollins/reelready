@@ -11,8 +11,10 @@ import {
   getScenesForProperty,
   getProperty,
   addPropertyCost,
+  recordCostEvent,
   log,
 } from "./db.js";
+import { computeClaudeCost } from "./utils/claude-cost.js";
 import type { Photo, RoomType, DepthRating, VideoProvider } from "./types.js";
 import {
   PHOTO_ANALYSIS_SYSTEM,
@@ -32,12 +34,6 @@ import {
 } from "./prompts/qc-evaluator.js";
 import { selectProvider } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
-import {
-  estimateAnalysisCost,
-  estimateScriptingCost,
-  estimateGenerationCost,
-  estimateQCCost,
-} from "./utils/cost-tracker.js";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;
@@ -141,6 +137,23 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
         ],
       });
 
+      // Record actual token usage from Claude's response.
+      const usageCost = computeClaudeCost(response.usage as never);
+      await recordCostEvent({
+        propertyId,
+        stage: "analysis",
+        provider: "anthropic",
+        unitsConsumed: usageCost.totalTokens,
+        unitType: "tokens",
+        costCents: usageCost.costCents,
+        metadata: {
+          model: "claude-sonnet-4-6",
+          batch_index: i,
+          image_count: imageContents.length,
+          ...usageCost.breakdown,
+        },
+      });
+
       const text = response.content[0].type === "text" ? response.content[0].text : "";
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (!jsonMatch) continue;
@@ -177,8 +190,6 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
     .update({ selected_photo_count: selected.length })
     .eq("id", propertyId);
 
-  const cost = estimateAnalysisCost(photos.length);
-  await addPropertyCost(propertyId, cost);
   await log(propertyId, "analysis", "info", `Analysis done: ${selected.length} selected from ${allResults.length}`);
 }
 
@@ -281,8 +292,21 @@ async function runScripting(propertyId: string): Promise<void> {
     }))
   );
 
-  const cost = estimateScriptingCost();
-  await addPropertyCost(propertyId, cost);
+  const scriptUsage = computeClaudeCost(response.usage as never);
+  await recordCostEvent({
+    propertyId,
+    stage: "scripting",
+    provider: "anthropic",
+    unitsConsumed: scriptUsage.totalTokens,
+    unitType: "tokens",
+    costCents: scriptUsage.costCents,
+    metadata: {
+      model: "claude-sonnet-4-6",
+      scene_count: validScenes.length,
+      mood: output.mood,
+      ...scriptUsage.breakdown,
+    },
+  });
   await log(propertyId, "scripting", "info", `Shot plan: ${validScenes.length} scenes, mood: ${output.mood}`);
 }
 
@@ -370,7 +394,7 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
           });
 
           const { data: urlData } = supabase.storage.from("property-videos").getPublicUrl(clipPath);
-          const costCents = result.costCents ?? estimateGenerationCost(provider.name, scene.duration_seconds);
+          const costCents = result.costCents ?? 0;
           const genTimeMs = Date.now() - startTime;
 
           await updateSceneStatus(scene.id, "qc_pass", {
@@ -380,10 +404,24 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
             generation_time_ms: genTimeMs,
           });
 
-          await addPropertyCost(propertyId, costCents);
+          await recordCostEvent({
+            propertyId,
+            sceneId: scene.id,
+            stage: "generation",
+            provider: provider.name,
+            unitsConsumed: result.providerUnits,
+            unitType: result.providerUnitType ?? null,
+            costCents,
+            metadata: {
+              scene_number: scene.scene_number,
+              duration_seconds: scene.duration_seconds,
+              generation_time_ms: genTimeMs,
+              attempt: attempt + 1,
+            },
+          });
           await log(propertyId, "generation", "info",
             `Scene ${scene.scene_number}: done in ${(genTimeMs / 1000).toFixed(1)}s via ${provider.name}`,
-            { costCents }, scene.id);
+            { costCents, providerUnits: result.providerUnits }, scene.id);
 
           // Run QC
           const qcPassed = await runQCForScene(propertyId, scene.id, urlData.publicUrl, scene);

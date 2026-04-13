@@ -1,4 +1,4 @@
-import type { Property, Photo, Scene, PipelineLog, DailyStat } from './types';
+import type { Property, Photo, Scene, PipelineLog, DailyStat, CostEvent } from './types';
 import { supabase } from './supabase';
 
 const API_BASE = '';
@@ -34,7 +34,7 @@ export async function fetchProperties(params?: {
   return apiFetch(`/api/properties${qs ? `?${qs}` : ''}`);
 }
 
-export async function fetchProperty(id: string): Promise<Property & { photos: Photo[]; scenes: Scene[] }> {
+export async function fetchProperty(id: string): Promise<Property & { photos: Photo[]; scenes: Scene[]; costEvents: CostEvent[] }> {
   return apiFetch(`/api/properties/${id}`);
 }
 

@@ -90,6 +90,36 @@ export async function addPropertyCost(id: string, costCents: number): Promise<vo
   if (error) throw error;
 }
 
+// Detailed cost event captured from a real API response (tokens, credits,
+// provider units). Sum of cost_events.cost_cents for a property should
+// exactly match properties.total_cost_cents.
+export async function recordCostEvent(event: {
+  propertyId: string;
+  sceneId?: string | null;
+  stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
+  provider: "anthropic" | "runway" | "kling" | "luma";
+  unitsConsumed?: number;
+  unitType?: "tokens" | "credits" | "kling_units" | null;
+  costCents: number;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const supabase = getSupabase();
+  const { error: insertErr } = await supabase.from("cost_events").insert({
+    property_id: event.propertyId,
+    scene_id: event.sceneId ?? null,
+    stage: event.stage,
+    provider: event.provider,
+    units_consumed: event.unitsConsumed ?? null,
+    unit_type: event.unitType ?? null,
+    cost_cents: Math.round(event.costCents),
+    metadata: event.metadata ?? null,
+  });
+  if (insertErr) throw insertErr;
+  if (event.costCents > 0) {
+    await addPropertyCost(event.propertyId, Math.round(event.costCents));
+  }
+}
+
 // ── Photos ──
 
 export async function insertPhotos(

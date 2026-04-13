@@ -61,10 +61,20 @@ export class RunwayProvider implements IVideoProvider {
       status: string;
       output?: string[];
       failure?: string;
+      creditsUsed?: number;
+      usage?: { credits?: number };
     };
 
     if (data.status === "SUCCEEDED" && data.output?.[0]) {
-      return { status: "complete", videoUrl: data.output[0] };
+      const credits = data.creditsUsed ?? data.usage?.credits ?? undefined;
+      const centsPerCredit = parseFloat(process.env.RUNWAY_CENTS_PER_CREDIT ?? "1");
+      return {
+        status: "complete",
+        videoUrl: data.output[0],
+        providerUnits: credits,
+        providerUnitType: credits !== undefined ? "credits" : undefined,
+        costCents: credits !== undefined ? Math.round(credits * centsPerCredit) : undefined,
+      };
     }
     if (data.status === "FAILED") {
       return { status: "failed", error: data.failure ?? "Unknown error" };
