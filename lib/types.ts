@@ -47,7 +47,7 @@ export type SceneStatus =
   | "failed"
   | "needs_review";
 
-export type VideoProvider = "runway" | "kling" | "luma";
+export type VideoProvider = "runway" | "kling" | "luma" | "higgsfield";
 
 export type LogStage =
   | "intake"
