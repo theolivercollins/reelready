@@ -1,10 +1,14 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-13** (end of session)
+Last updated: **2026-04-13** (end of docs-only session)
 
 This is the authoritative state-of-the-project document. Read this first when
 entering the repo. If something here conflicts with code you see in the repo,
 trust the code and update this doc.
+
+**For the primary goal**, read `docs/WALKTHROUGH-SPEC.md`. For the sequenced
+work to reach it, read `docs/WALKTHROUGH-ROADMAP.md`. This file is the
+live session log + operational status.
 
 ---
 
@@ -16,6 +20,15 @@ system produces cinematic walkthrough video clips using AI analysis,
 shot planning, and multi-provider video generation. Individual clips are
 the deliverable for now — we cut FFmpeg stitching from scope until the
 per-clip output is reliably good.
+
+### Primary goal (verbatim from Oliver)
+
+> A "human-like" or equivalent cinematic property walkthrough, featuring
+> inside, outside, and unique features of the property with no human in
+> the loop.
+
+Full spec + acceptance test: `docs/WALKTHROUGH-SPEC.md`. Roadmap to
+satisfy the acceptance test: `docs/WALKTHROUGH-ROADMAP.md`.
 
 **Live URL:** https://reelready-eight.vercel.app (custom domain not yet
 pointed at Vercel; the Supabase project is named `reelready` and the
@@ -257,7 +270,49 @@ Don't touch unless he asks.
 
 ---
 
-## What shipped in this session (2026-04-13)
+## What shipped in this docs-only session (2026-04-13 late)
+
+Reverse chronological. This session produced no code changes — it
+crystallized the primary goal and the path to it across five new
+docs, so future sessions have a single answer to "what are we
+building and how do we know we're done."
+
+### New docs
+- `docs/WALKTHROUGH-SPEC.md` — the primary goal verbatim, plain-language
+  definitions of every phrase, and a 17-box acceptance test. Every
+  future change should move one or more boxes.
+- `docs/COVERAGE-MODEL.md` — operational definition of inside / outside /
+  unique-features. Detection, enforcement, fallback, gap-fill, arc
+  reorder, and a proposed closed `unique_tags` vocabulary. Five walked-
+  through test cases.
+- `docs/AUTONOMY-CHECKLIST.md` — every human-in-the-loop point in the
+  code today (file:line-level), with a target state and closure plan.
+  Identifies `/api/scenes/[id]/retry.ts` as half-finished and slated
+  for removal.
+- `docs/WALKTHROUGH-ROADMAP.md` — sequenced work plan (R0–R10) tying
+  every roadmap item to an acceptance-test box in the spec. Includes
+  parallelization lanes and a mapping from the handoff's
+  "Immediate next actions" to roadmap item IDs.
+- `docs/SHOT-VOCABULARY.md` — authoritative reference for RoomType,
+  CameraMovement, room→provider routing, duration rules, room
+  quotas, and the Kling negative prompt. Mirrors the code with
+  file:line citations.
+
+### Edits
+- This file, `PROJECT-STATE.md` — added the primary-goal block,
+  pointed readers at the new spec, and refreshed §Immediate next
+  actions to mirror the roadmap.
+- `docs/TODO.md` — refreshed: removed items that shipped in the
+  pre-docs sessions, added explicit pointers to the roadmap.
+
+### No code changes
+Nothing in `lib/`, `api/`, `src/`, `supabase/`, or `scripts/` was
+touched. The branch remains `claude/add-property-walkthrough-docs-yWa69`
+and its scope is documentation only.
+
+---
+
+## What shipped in previous (2026-04-13 earlier) session
 
 Reverse chronological, grouped by theme:
 
@@ -362,10 +417,28 @@ first-last-frame mode as the next major piece of work.
 
 ## Immediate next actions (start here next session)
 
+These mirror `docs/WALKTHROUGH-ROADMAP.md` items. Item IDs (R1, R6,
+etc.) point to the roadmap entry with full context.
+
+**Unblocked now (can start in parallel):**
+
+- **R1 — Scene allocator.** Spec in `docs/SCENE-ALLOCATION-PLAN.md`.
+  Start with the schema migration (`allocation_decisions` table +
+  new columns on `scenes` and `properties`), then `runSceneAllocation`
+  as pipeline Stage 3.6, then the Superview Allocation card.
+  Blocks: R2, R4, R9.
+
+- **R3 — Canonical `unique_tags` vocabulary.** Extend
+  `lib/prompts/photo-analysis.ts` and `lib/prompts/style-guide.ts`
+  with the closed tag set in `docs/COVERAGE-MODEL.md §4.3`. No new
+  pipeline stages; just schema + prompt edits. Blocks: R2.
+
+**Gated on Oliver's probe-video decision:**
+
 1. **Show Oliver the probe video.** Link:
    `https://cloud-cdn.higgsfield.ai/32b4fa89-6049-4d57-84e1-cbe46b7f70ef/aa4c398c-8e22-45ef-8be5-1d6fd6cb6193.mp4`
-   Ask whether the output quality is worth integrating. If yes, proceed
-   to step 2. If no, pivot to the scene-allocation plan (item 6).
+   Ask whether the output quality is worth integrating. If yes,
+   proceed to R6 below.
 
 2. **Extend `IVideoProvider` to support optional keyframe pair input.**
    Add `endImage?: Buffer` (or `endImageUrl?: string`) to `GenerateClipParams`
@@ -393,22 +466,26 @@ first-last-frame mode as the next major piece of work.
    The scene row needs a way to store the second photo — add an
    optional `end_photo_id` column to `scenes`.
 
-6. **Scene allocation ruleset** (`docs/SCENE-ALLOCATION-PLAN.md`). Dynamic
-   per-room quotas with QA-score eligibility and cross-room
-   redistribution. There is a full spec doc — implement it next. Affects
-   `lib/prompts/director.ts` and/or a new post-director allocator in
-   `lib/pipeline.ts`. Key requirements from Oliver:
-   - Pass threshold is dynamic per room based on the complexity of
-     that room's photos (rougher geometry → lower bar).
-   - Hard min: 1 clip per present room, fall back to `push_in` if the
-     photo isn't great.
-   - Redistribution priority is dynamic by QA score, not a fixed list.
-   - Total clip time ≤ 60 seconds.
-   - Same photo can be used twice with different camera movements.
+6. **(R1) Scene allocation ruleset** (`docs/SCENE-ALLOCATION-PLAN.md`).
+   Dynamic per-room quotas with QA-score eligibility and cross-room
+   redistribution. See roadmap R1 for full file list and sequencing.
+
+**Also unblocked (new this session, from roadmap):**
+
+- **R2 — Coverage enforcer (Stage 3.7).** Needs R1 done first.
+  Spec in `docs/COVERAGE-MODEL.md`.
+- **R4 — Arc reorder.** Pure in-memory sort of scene array; trivial
+  to add after R1.
+- **R5 — Style guide v2 adjacent-room blocks.** Extends
+  `photo-analysis.ts` and `director.ts`. No new pipeline stage.
+- **R9 — Autonomy closure.** Delete `api/scenes/[id]/retry.ts`, hide
+  the Approve button, rename `needs_review → blocked`. Gated on
+  R1+R2 being green on ≥20 real runs.
+
+**Operational:**
 
 7. **Kling concurrency cap tuning.** Currently `GENERATION_CONCURRENCY=4`.
-   Oliver has not confirmed his Kling plan's actual parallel cap. Ask
-   next time he wants to tune it up.
+   Oliver has not confirmed his Kling plan's actual parallel cap.
 
 8. **`KLING_CENTS_PER_UNIT` env.** Currently 0 (trial plan). Update in
    Vercel Production env when Oliver upgrades to a paid Kling plan.
@@ -493,15 +570,23 @@ rebrand:
 - `src/pages/dashboard/PropertyDetail.tsx` — the Superview.
 - `src/components/TopNav.tsx` — global sticky nav.
 - `docs/CREDENTIALS.md` — local only, gitignored.
-- `docs/PROJECT-STATE.md` — this file.
-- `docs/SCENE-ALLOCATION-PLAN.md` — next major implementation target.
-- `docs/HIGGSFIELD-INTEGRATION.md` — how to test and wire Higgsfield.
+- `docs/PROJECT-STATE.md` — this file (live session handoff).
+- `docs/WALKTHROUGH-SPEC.md` — primary goal + acceptance test. Read first.
+- `docs/WALKTHROUGH-ROADMAP.md` — ordered work plan to hit the spec (R0–R10).
+- `docs/COVERAGE-MODEL.md` — inside / outside / unique-features rules.
+- `docs/AUTONOMY-CHECKLIST.md` — every human-in-the-loop point and closure plan.
+- `docs/SHOT-VOCABULARY.md` — RoomType / CameraMovement / quota reference.
+- `docs/SCENE-ALLOCATION-PLAN.md` — allocator spec (roadmap R1).
+- `docs/MULTI-IMAGE-CONTEXT-PLAN.md` — anti-hallucination (roadmap R5).
+- `docs/HIGGSFIELD-INTEGRATION.md` — Higgsfield wiring (roadmap R6).
 - `scripts/test-higgsfield.ts` — probe harness.
 
 ---
 
 ## One-liner for the next session
 
-> Read `docs/PROJECT-STATE.md` first. Next task is Higgsfield first-last-frame
-> integration (see docs/HIGGSFIELD-INTEGRATION.md + docs/CREDENTIALS.md).
-> Start by asking Oliver what he thought of the probe clip.
+> Read `docs/WALKTHROUGH-SPEC.md` first (primary goal + acceptance test),
+> then `docs/WALKTHROUGH-ROADMAP.md` (ordered work). Unblocked items you
+> can pick up immediately: R1 (scene allocator) and R3 (unique_tags
+> vocabulary) — both run in parallel with no dependencies. R6
+> (Higgsfield) is still gated on showing Oliver the probe clip.
