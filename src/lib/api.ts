@@ -213,3 +213,7 @@ export async function retryScene(id: string, prompt: string): Promise<void> {
 export async function skipScene(id: string): Promise<void> {
   return apiFetch(`/api/scenes/${id}/skip`, { method: 'POST' });
 }
+
+export async function fetchSystemPrompts(): Promise<{ analysis: string; director: string; qc: string }> {
+  return apiFetch('/api/admin/prompts');
+}

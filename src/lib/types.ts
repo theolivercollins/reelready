@@ -34,6 +34,7 @@ export interface Photo {
   quality_score: number;
   aesthetic_score: number;
   depth_rating: "high" | "medium" | "low";
+  key_features: string[] | null;
   selected: boolean;
   discard_reason: string | null;
 }
