@@ -309,6 +309,10 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
   const results = await Promise.allSettled(
     scenes.map(async (scene) => {
       let lastError = "";
+      // Providers that have already failed for this scene — excluded on subsequent attempts
+      // so a broken provider (out of credit, outage) fails over instead of burning all retries.
+      const excludeProviders: VideoProvider[] = [];
+      let currentProvider: VideoProvider | null = null;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -326,13 +330,12 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
           const photoResponse = await fetch(photo.file_url);
           const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
 
-          // Select provider (exclude previous provider on hard reject)
-          const excludeProviders: VideoProvider[] = [];
           const provider = selectProvider(
             (photo.room_type as RoomType) ?? "other",
             scene.provider as VideoProvider | null,
             excludeProviders
           );
+          currentProvider = provider.name;
 
           const startTime = Date.now();
 
@@ -385,7 +388,11 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
         } catch (err) {
           lastError = err instanceof Error ? err.message : String(err);
           await log(propertyId, "generation", "warn",
-            `Scene ${scene.scene_number} attempt ${attempt + 1} failed: ${lastError}`, undefined, scene.id);
+            `Scene ${scene.scene_number} attempt ${attempt + 1} failed${currentProvider ? ` (${currentProvider})` : ""}: ${lastError}`, undefined, scene.id);
+          if (currentProvider && !excludeProviders.includes(currentProvider)) {
+            excludeProviders.push(currentProvider);
+          }
+          currentProvider = null;
         }
       }
 

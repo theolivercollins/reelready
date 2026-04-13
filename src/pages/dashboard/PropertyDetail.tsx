@@ -115,23 +115,57 @@ const PropertyDetail = () => {
         ))}
       </div>
 
-      {property.status === "complete" && (
-        <div className="flex gap-2">
-          {property.horizontal_video_url && (
-            <Button variant="outline" className="gap-2" asChild>
-              <a href={property.horizontal_video_url} download><Download className="h-4 w-4" /> Download 16:9</a>
-            </Button>
-          )}
-          {property.vertical_video_url && (
-            <Button variant="outline" className="gap-2" asChild>
-              <a href={property.vertical_video_url} download><Download className="h-4 w-4" /> Download 9:16</a>
-            </Button>
-          )}
-          <Button variant="outline" className="gap-2" onClick={handleRerun} disabled={rerunning}>
-            <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun Pipeline
-          </Button>
-        </div>
-      )}
+      <div className="flex gap-2">
+        <Button variant="outline" className="gap-2" onClick={handleRerun} disabled={rerunning}>
+          <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun Pipeline
+        </Button>
+      </div>
+
+      {/* Deliverables — individual clips produced by the pipeline */}
+      {(() => {
+        const deliverables = scenes.filter(s => s.clip_url);
+        if (deliverables.length === 0) return null;
+        return (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                Deliverables
+                <Badge variant="secondary" className="text-[10px] h-4">{deliverables.length} clip{deliverables.length === 1 ? "" : "s"}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {deliverables.map(scene => (
+                  <div key={scene.id} className="border border-border rounded-md overflow-hidden bg-card">
+                    <video
+                      src={scene.clip_url!}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full aspect-video bg-black"
+                    />
+                    <div className="p-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium truncate">
+                          Scene {scene.scene_number} · {scene.camera_movement.replace(/_/g, " ")}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          {scene.provider ?? "—"} · {scene.duration_seconds}s
+                        </p>
+                      </div>
+                      <Button size="sm" variant="outline" className="gap-1 shrink-0" asChild>
+                        <a href={scene.clip_url!} download={`scene_${scene.scene_number}.mp4`}>
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Tabs defaultValue="photos">
         <TabsList>
