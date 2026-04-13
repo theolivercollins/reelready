@@ -294,11 +294,13 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
   const maxRetries = parseInt(process.env.MAX_RETRIES_PER_CLIP ?? "2", 10);
   const supabase = getSupabase();
 
-  await log(propertyId, "generation", "info", `Generating ${scenes.length} clips in parallel`);
+  // Bound concurrent generation to respect provider parallel-task limits
+  // (Kling returns 1303 "parallel task over resource pack limit" when too many
+  // tasks fire at once). 4 is conservative and fits inside the default Kling plan.
+  const GENERATION_CONCURRENCY = parseInt(process.env.GENERATION_CONCURRENCY ?? "4", 10);
+  await log(propertyId, "generation", "info", `Generating ${scenes.length} clips, up to ${GENERATION_CONCURRENCY} in parallel`);
 
-  // Process all scenes in parallel
-  const results = await Promise.allSettled(
-    scenes.map(async (scene) => {
+  const runScene = async (scene: typeof scenes[number]) => {
       let lastError = "";
       // Providers that have already failed for this scene — excluded on subsequent attempts
       // so a broken provider (out of credit, outage) fails over instead of burning all retries.
@@ -391,7 +393,19 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
       await updateSceneStatus(scene.id, "needs_review");
       await log(propertyId, "generation", "error",
         `Scene ${scene.scene_number} failed after ${maxRetries + 1} attempts: ${lastError}`, undefined, scene.id);
-    })
+  };
+
+  // Pull-based worker pool: spawn N workers, each drains scenes from a shared queue.
+  const queue = [...scenes];
+  const worker = async () => {
+    while (queue.length > 0) {
+      const next = queue.shift();
+      if (!next) return;
+      try { await runScene(next); } catch (_) { /* runScene already logs */ }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(GENERATION_CONCURRENCY, scenes.length) }, () => worker()),
   );
 
   // Check results
