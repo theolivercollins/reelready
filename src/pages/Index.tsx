@@ -284,9 +284,9 @@ const Index = () => {
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.span
                     key={heroVerb}
-                    initial={{ y: "100%", opacity: 0, filter: "blur(8px)" }}
+                    initial={{ y: "-100%", opacity: 0, filter: "blur(8px)" }}
                     animate={{ y: "0%", opacity: 1, filter: "blur(0px)" }}
-                    exit={{ y: "-100%", opacity: 0, filter: "blur(8px)" }}
+                    exit={{ y: "100%", opacity: 0, filter: "blur(8px)" }}
                     transition={{ duration: 1.2, ease: EASE }}
                     className="block leading-none"
                   >
