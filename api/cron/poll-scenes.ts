@@ -90,7 +90,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (uploadErr) throw uploadErr;
 
         const { data: urlData } = supabase.storage.from('property-videos').getPublicUrl(clipPath);
-        const costCents = status.costCents ?? 0;
+
+        // Fallback cost estimate when the provider doesn't return credit
+        // usage in its task response. Runway gen4_turbo is ~5 credits/sec;
+        // Kling v2-master is 10 units/clip (5s) regardless of duration.
+        const durationSeconds = scene.duration_seconds ?? 5;
+        let fallbackUnits: number | undefined;
+        let fallbackUnitType: 'credits' | 'kling_units' | undefined;
+        let fallbackCents = 0;
+        if (provider.name === 'runway') {
+          fallbackUnits = Math.round(5 * durationSeconds);
+          fallbackUnitType = 'credits';
+          fallbackCents = Math.round(fallbackUnits * parseFloat(process.env.RUNWAY_CENTS_PER_CREDIT ?? '1'));
+        } else if (provider.name === 'kling') {
+          fallbackUnits = 10;
+          fallbackUnitType = 'kling_units';
+          fallbackCents = Math.round(fallbackUnits * parseFloat(process.env.KLING_CENTS_PER_UNIT ?? '0'));
+        }
+
+        const costCents = status.costCents ?? fallbackCents;
+        const providerUnits = status.providerUnits ?? fallbackUnits;
+        const providerUnitType = status.providerUnitType ?? fallbackUnitType ?? null;
         const genTimeMs = scene.submitted_at ? Date.now() - new Date(scene.submitted_at).getTime() : null;
 
         await supabase.from('scenes').update({
@@ -107,8 +127,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sceneId: scene.id,
           stage: 'generation',
           provider: provider.name,
-          unitsConsumed: status.providerUnits,
-          unitType: status.providerUnitType ?? null,
+          unitsConsumed: providerUnits,
+          unitType: providerUnitType,
           costCents,
           metadata: {
             scene_number: scene.scene_number,
