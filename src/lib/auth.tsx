@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { supabase } from "./supabase";
+import { supabase, AUTH_CALLBACK_URL } from "./supabase";
 import { migrateLocalPresets } from "./presets";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: AUTH_CALLBACK_URL,
       },
     });
     if (error) throw error;

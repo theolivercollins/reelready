@@ -8,7 +8,7 @@ import { motion, useScroll, useTransform, type Variants } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
-import { supabase } from "@/lib/supabase";
+import { supabase, AUTH_CALLBACK_URL } from "@/lib/supabase";
 import { Wordmark } from "@/components/brand/Wordmark";
 import heroVideo from "@/assets/hero-video-loop.mp4.asset.json";
 import heroBg from "@/assets/hero-bg.jpg";
@@ -157,7 +157,7 @@ const Index = () => {
       const { error } = await supabase.auth.signInWithOtp({
         email: authEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: AUTH_CALLBACK_URL,
           data: metadata,
         },
       });

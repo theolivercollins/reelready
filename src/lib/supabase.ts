@@ -7,25 +7,43 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaG1hZXl3cXNvaGx6dG9vdXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDIxOTIsImV4cCI6MjA5MTQxODE5Mn0.GaiexH5L24zAoLgvjOUiixbHdnQW8kUMXXbyjnM8cM4";
 
 /**
- * Supabase auth persistence
+ * Supabase auth — implicit flow with persistent localStorage sessions.
  *
- * - `persistSession: true` writes the session to `localStorage` after every
- *   sign-in and reads it back on `createClient()`. This is browser-persistent
- *   across tabs and restarts (it's not a session-scoped store).
- * - `autoRefreshToken: true` silently rolls the access token over before it
- *   expires, so the user stays signed in until the refresh token's lifetime
- *   runs out (controlled in the Supabase dashboard, default is 1 week, can be
- *   bumped to up to 1 year).
- * - `detectSessionInUrl: true` is required for the magic-link callback flow.
+ * `flowType: "implicit"` is critical. The default in supabase-js v2.40+ is
+ * PKCE, which stores a `code_verifier` at the origin that *initiates* the
+ * sign-in. If Supabase then redirects the magic link to a different origin
+ * (because the dashboard's "Site URL" doesn't match), the verifier is
+ * unreachable and the code exchange fails — the user gets bounced back to
+ * the sign-in screen even though the link was valid. Implicit flow returns
+ * the access token in the URL fragment instead, so any origin Supabase JS
+ * lands on can extract it. Slightly less secure than PKCE in theory but
+ * fine for this product and immune to cross-origin redirect mismatches.
  *
- * We deliberately use Supabase's default `localStorage` storage rather than a
- * custom cookie adapter — cookies have a 4KB-per-cookie limit that the PKCE
- * + JWT session can exceed, and the default storage is more reliable.
+ * `persistSession` + `autoRefreshToken` keep the user signed in across
+ * refreshes and silently roll the access token over before it expires.
+ * `detectSessionInUrl` lets Supabase pick up the token fragment on any page.
  */
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    flowType: "implicit",
   },
 });
+
+/**
+ * Canonical magic-link callback URL.
+ *
+ * Hardcoded to the production domain in production so Supabase can never
+ * redirect to a stale preview origin (which would break the session
+ * regardless of flow type). Local dev still uses the current origin so
+ * vite dev server sign-in keeps working.
+ */
+export const AUTH_CALLBACK_URL =
+  typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")
+    ? "https://listingelevate.com/auth/callback"
+    : typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? `${window.location.origin}/auth/callback`
+      : "https://listingelevate.com/auth/callback";
+
