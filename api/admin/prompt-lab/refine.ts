@@ -3,6 +3,7 @@ import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase } from "../../../lib/client.js";
 import {
   refineDirectorPrompt,
+  retrieveSimilarIterations,
   getNextIterationNumber,
   DIRECTOR_PROMPT_HASH,
 } from "../../../lib/prompt-lab.js";
@@ -53,6 +54,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     .eq("id", iteration_id);
 
+  // Parent embedding carries forward — retrieve similar winners if present.
+  let exemplars: Awaited<ReturnType<typeof retrieveSimilarIterations>> = [];
+  if (Array.isArray(prev.embedding) && prev.embedding.length) {
+    exemplars = await retrieveSimilarIterations(prev.embedding as number[], { minRating: 4, limit: 5 });
+  } else if (typeof prev.embedding === "string" && prev.embedding.startsWith("[")) {
+    try {
+      const vec = JSON.parse(prev.embedding) as number[];
+      exemplars = await retrieveSimilarIterations(vec, { minRating: 4, limit: 5 });
+    } catch { /* no-op */ }
+  }
+
   try {
     const { scene, rationale, costCents } = await refineDirectorPrompt({
       analysis: prev.analysis_json,
@@ -61,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       tags: Array.isArray(tags) ? tags : null,
       comment: typeof comment === "string" ? comment : null,
       chatInstruction: chat_instruction,
+      exemplars,
     });
 
     const iterationNumber = await getNextIterationNumber(prev.session_id);
@@ -75,12 +88,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         director_prompt_hash: DIRECTOR_PROMPT_HASH,
         cost_cents: Math.round(costCents),
         user_comment: rationale ? `[refiner rationale] ${rationale}` : null,
+        embedding: prev.embedding ?? null,
+        embedding_model: prev.embedding_model ?? null,
+        retrieval_metadata: {
+          exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
+        },
       })
       .select()
       .single();
     if (nErr) return res.status(500).json({ error: nErr.message });
 
-    return res.status(201).json(newIteration);
+    return res.status(201).json({
+      iteration: newIteration,
+      retrieval: {
+        exemplar_count: exemplars.length,
+        exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance })),
+      },
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ error: "refine failed", detail: msg });

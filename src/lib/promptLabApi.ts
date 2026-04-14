@@ -34,6 +34,22 @@ export interface LabIteration {
   user_comment: string | null;
   refinement_instruction: string | null;
   created_at: string;
+  retrieval_metadata: {
+    exemplars?: Array<{
+      id: string;
+      prompt: string;
+      rating: number;
+      distance: number;
+      room_type?: string;
+      camera_movement?: string;
+    }>;
+    recipe?: {
+      id: string;
+      archetype: string;
+      prompt_template: string;
+      distance: number;
+    } | null;
+  } | null;
 }
 
 async function fetchJSON<T>(path: string, options?: RequestInit): Promise<T> {
@@ -86,7 +102,7 @@ export function deleteSession(sessionId: string): Promise<void> {
   return fetchJSON(`/api/admin/prompt-lab/${sessionId}`, { method: "DELETE" });
 }
 
-export function analyzeSession(sessionId: string): Promise<LabIteration> {
+export function analyzeSession(sessionId: string): Promise<{ iteration: LabIteration; retrieval: unknown }> {
   return fetchJSON("/api/admin/prompt-lab/analyze", { method: "POST", body: JSON.stringify({ session_id: sessionId }) });
 }
 
@@ -96,7 +112,7 @@ export function refineIteration(body: {
   tags?: string[] | null;
   comment?: string | null;
   chat_instruction: string;
-}): Promise<LabIteration> {
+}): Promise<{ iteration: LabIteration; retrieval: unknown }> {
   return fetchJSON("/api/admin/prompt-lab/refine", { method: "POST", body: JSON.stringify(body) });
 }
 

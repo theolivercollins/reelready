@@ -19,6 +19,7 @@ import { selectProvider } from "./providers/router.js";
 import { pollUntilComplete, type IVideoProvider } from "./providers/provider.interface.js";
 import { KlingProvider } from "./providers/kling.js";
 import { RunwayProvider } from "./providers/runway.js";
+import { embedTextSafe, buildAnalysisText, toPgVector } from "./embeddings.js";
 import type { RoomType, CameraMovement } from "./types.js";
 
 // ---- Types ----
@@ -117,14 +118,117 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
   return { analysis: results[0], costCents: Math.round(usageCost.costCents) };
 }
 
+// ---- Retrieval: similar past iterations + matching recipes ----
+
+export interface RetrievedExemplar {
+  id: string;
+  room_type: string;
+  camera_movement: string;
+  prompt: string;
+  rating: number;
+  tags: string[] | null;
+  comment: string | null;
+  refinement: string | null;
+  provider: string | null;
+  distance: number;
+}
+
+export interface RetrievedRecipe {
+  id: string;
+  archetype: string;
+  room_type: string;
+  camera_movement: string;
+  provider: string | null;
+  prompt_template: string;
+  composition_signature: Record<string, unknown> | null;
+  times_applied: number;
+  distance: number;
+}
+
+export async function retrieveSimilarIterations(
+  embedding: number[],
+  opts: { minRating?: number; limit?: number } = {}
+): Promise<RetrievedExemplar[]> {
+  const { getSupabase } = await import("./client.js");
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc("match_lab_iterations", {
+    query_embedding: toPgVector(embedding),
+    min_rating: opts.minRating ?? 4,
+    match_count: opts.limit ?? 5,
+  });
+  if (error || !data) return [];
+  return (data as Array<{
+    id: string;
+    analysis_json: { room_type?: string } | null;
+    director_output_json: { camera_movement?: string; prompt?: string } | null;
+    rating: number;
+    tags: string[] | null;
+    user_comment: string | null;
+    refinement_instruction: string | null;
+    provider: string | null;
+    distance: number;
+  }>).map((r) => ({
+    id: r.id,
+    room_type: r.analysis_json?.room_type ?? "other",
+    camera_movement: r.director_output_json?.camera_movement ?? "unknown",
+    prompt: r.director_output_json?.prompt ?? "",
+    rating: r.rating,
+    tags: r.tags,
+    comment: r.user_comment,
+    refinement: r.refinement_instruction,
+    provider: r.provider,
+    distance: r.distance,
+  }));
+}
+
+export async function retrieveMatchingRecipes(
+  embedding: number[],
+  roomType: string | null,
+  opts: { distanceThreshold?: number; limit?: number } = {}
+): Promise<RetrievedRecipe[]> {
+  const { getSupabase } = await import("./client.js");
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc("match_lab_recipes", {
+    query_embedding: toPgVector(embedding),
+    room_type_filter: roomType,
+    distance_threshold: opts.distanceThreshold ?? 0.35,
+    match_count: opts.limit ?? 3,
+  });
+  if (error || !data) return [];
+  return data as RetrievedRecipe[];
+}
+
+function renderExemplarBlock(exemplars: RetrievedExemplar[]): string {
+  if (exemplars.length === 0) return "";
+  const lines = exemplars.map((e, idx) => {
+    const parts = [
+      `  ${idx + 1}. [${e.rating}★ · ${e.room_type} · ${e.camera_movement} · ${e.provider ?? "?"}]`,
+      `     prompt: "${e.prompt}"`,
+    ];
+    if (e.tags?.length) parts.push(`     tags: ${e.tags.join(", ")}`);
+    if (e.comment) parts.push(`     note: ${e.comment}`);
+    if (e.refinement) parts.push(`     what worked: ${e.refinement}`);
+    return parts.join("\n");
+  });
+  return `\n\n━━━ PAST WINNERS ON STRUCTURALLY SIMILAR PHOTOS ━━━\nThese are ${exemplars.length} prior Lab iterations on photos whose analysis embedded close to this one, rated 4+ by the admin. They are evidence of what has worked on similar compositions. Bias toward their patterns unless the current photo's specifics argue otherwise.\n\n${lines.join("\n\n")}\n━━━ END PAST WINNERS ━━━`;
+}
+
+function renderRecipeBlock(recipes: RetrievedRecipe[]): string {
+  if (recipes.length === 0) return "";
+  const top = recipes[0];
+  return `\n\n━━━ VALIDATED RECIPE MATCH ━━━\nArchetype "${top.archetype}" (room=${top.room_type}, movement=${top.camera_movement}, provider=${top.provider ?? "auto"}, applied ${top.times_applied}× before, distance ${top.distance.toFixed(3)}).\n\nRecipe template:\n  ${top.prompt_template}\n\nIf this photo fits the archetype, adapt the template by substituting the actual named feature from this photo's key_features. Keep the verb and structure. Deviate only if a specific key_feature makes the template awkward.\n━━━ END RECIPE MATCH ━━━`;
+}
+
 // ---- Run director on a single-photo input ----
 
 export async function directSinglePhoto(
   analysis: PhotoAnalysisResult,
-  photoId: string = "lab-photo"
+  photoId: string = "lab-photo",
+  exemplars: RetrievedExemplar[] = [],
+  recipes: RetrievedRecipe[] = []
 ): Promise<{ scene: DirectorSceneOutput; costCents: number }> {
   const client = new Anthropic();
-  const userPrompt = buildDirectorUserPrompt([
+  const basePrompt = buildDirectorUserPrompt([
     {
       id: photoId,
       file_name: "lab-image",
@@ -137,6 +241,7 @@ export async function directSinglePhoto(
       motion_rationale: analysis.motion_rationale,
     },
   ]);
+  const userPrompt = basePrompt + renderExemplarBlock(exemplars) + renderRecipeBlock(recipes);
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 2048,
@@ -182,6 +287,7 @@ export async function refineDirectorPrompt(params: {
   tags: string[] | null;
   comment: string | null;
   chatInstruction: string;
+  exemplars?: RetrievedExemplar[];
 }): Promise<{ scene: DirectorSceneOutput; rationale: string; costCents: number }> {
   const client = new Anthropic();
   const userMessage = `PHOTO ANALYSIS:
@@ -198,6 +304,7 @@ ${params.comment ? `comment: ${params.comment}` : ""}
 
 REFINEMENT INSTRUCTION:
 ${params.chatInstruction}
+${renderExemplarBlock(params.exemplars ?? [])}
 
 Remember: the revised output must comply with the full DIRECTOR_SYSTEM rules (below for reference).
 

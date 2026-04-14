@@ -381,6 +381,35 @@ function EditableLabel({
   );
 }
 
+// ─── Retrieval chips (few-shot + recipe indicators) ───
+
+function RetrievalChips({ metadata }: { metadata: LabIteration["retrieval_metadata"] }) {
+  if (!metadata) return null;
+  const exemplars = metadata.exemplars ?? [];
+  const recipe = metadata.recipe;
+  if (exemplars.length === 0 && !recipe) return null;
+  return (
+    <>
+      {exemplars.length > 0 && (
+        <span
+          className="rounded bg-foreground/10 px-2 py-0.5 text-[10px] uppercase tracking-wider"
+          title={exemplars.map((e) => `${e.rating}★ · ${e.camera_movement} · d=${e.distance.toFixed(3)}\n   ${e.prompt}`).join("\n\n")}
+        >
+          Based on {exemplars.length} similar {exemplars.length === 1 ? "win" : "wins"}
+        </span>
+      )}
+      {recipe && (
+        <span
+          className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400"
+          title={`${recipe.prompt_template}\n\ndistance ${recipe.distance.toFixed(3)}`}
+        >
+          Recipe · {recipe.archetype}
+        </span>
+      )}
+    </>
+  );
+}
+
 // ─── One iteration card ───
 
 function IterationCard({
@@ -416,11 +445,12 @@ function IterationCard({
   return (
     <div className="border border-border bg-background p-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="label text-muted-foreground">Iteration {iteration.iteration_number}</span>
           {iteration.provider && (
             <span className="rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">{iteration.provider}</span>
           )}
+          <RetrievalChips metadata={iteration.retrieval_metadata} />
         </div>
         <span className="text-xs text-muted-foreground">
           {new Date(iteration.created_at).toLocaleString()}
