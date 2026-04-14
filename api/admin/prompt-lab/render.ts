@@ -48,6 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       scene: iteration.director_output_json,
       roomType: iteration.analysis_json?.room_type ?? "other",
       providerOverride: providerOverride === "kling" || providerOverride === "runway" ? providerOverride : null,
+      sessionId: iteration.session_id,
+      iterationId: iteration_id,
     });
 
     const { data: updated, error: uErr } = await supabase

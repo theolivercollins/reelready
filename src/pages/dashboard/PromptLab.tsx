@@ -585,7 +585,24 @@ function IterationCard({
 
       {/* Clip player */}
       {iteration.clip_url && (
-        <video src={iteration.clip_url} controls className="mt-5 w-full max-w-md border border-border" />
+        <div className="mt-5 space-y-2">
+          <video
+            key={iteration.clip_url}
+            src={iteration.clip_url}
+            controls
+            playsInline
+            preload="metadata"
+            className="w-full max-w-md border border-border"
+          />
+          <a
+            href={iteration.clip_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            Open clip in new tab ↗
+          </a>
+        </div>
       )}
 
       {/* Promote to recipe (on 5★ iterations) */}

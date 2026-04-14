@@ -367,6 +367,8 @@ export async function renderLabClip(params: {
   scene: DirectorSceneOutput;
   roomType: RoomType;
   providerOverride?: "kling" | "runway" | null;
+  sessionId?: string;
+  iterationId?: string;
 }): Promise<{
   clipUrl: string | null;
   provider: string;
@@ -396,8 +398,26 @@ export async function renderLabClip(params: {
       error: result.error ?? "render failed",
     };
   }
+
+  // Download and re-upload to Supabase Storage so the URL is permanent and
+  // CORS-friendly. Provider CDN URLs (Kling especially) expire in ~30 min.
+  let persistedUrl = result.videoUrl;
+  try {
+    const buffer = await provider.downloadClip(result.videoUrl);
+    const { getSupabase } = await import("./client.js");
+    const supabase = getSupabase();
+    const path = `prompt-lab/${params.sessionId ?? "unknown"}/${params.iterationId ?? Date.now()}.mp4`;
+    const { error: upErr } = await supabase.storage
+      .from("property-videos")
+      .upload(path, buffer, { contentType: "video/mp4", upsert: true });
+    if (!upErr) {
+      const { data: pub } = supabase.storage.from("property-videos").getPublicUrl(path);
+      persistedUrl = pub.publicUrl;
+    }
+  } catch { /* fall back to provider URL */ }
+
   return {
-    clipUrl: result.videoUrl,
+    clipUrl: persistedUrl,
     provider: provider.name,
     costCents: Math.round(result.costCents ?? 0),
     error: null,
