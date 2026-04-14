@@ -70,8 +70,6 @@ EVALUATION CRITERIA
    parallax           — lateral move with strong foreground object (outdoor with foliage, lanai with columns, pool with landscaping)
    dolly_left_to_right — constant-distance slide sideways across a long subject (counter, bookshelf wall)
    dolly_right_to_left — same, opposite direction
-   tilt_down          — vertical pivot downward from ceiling/view to a floor feature (hardwood, tile, fireplace hearth)
-   crane_down         — vertical descent from high vantage into the room
    reveal             — camera starts with a FOREGROUND ELEMENT occluding a hero feature, then moves past the foreground to expose the feature. The photo must have an identifiable foreground element (wall edge, column, doorframe, potted plant, counter corner, archway) that the camera can physically pass in front of. If no such foreground element exists in the photo, DO NOT pick reveal — pick push_in or dolly instead.
    drone_push_in      — aerial approach toward the property from a distance (aerial photos only)
    drone_pull_back    — aerial retreat from the facade outward to reveal lot and neighborhood (aerial photos only)
@@ -81,16 +79,18 @@ EVALUATION CRITERIA
 
    DO NOT emit "slow_pan" (dead verb, 0% success rate).
    DO NOT emit "orbital_slow" (renamed to "orbit").
-   DO NOT emit "tilt_up" or "crane_up" — both deleted. Awkward in practice;
-   tilting the camera up to a ceiling doesn't make sense as a real-estate
-   shot. Use push_in, pull_out, or dolly instead.
+   DO NOT emit "tilt_up", "tilt_down", "crane_up", or "crane_down" — all
+   four deleted. Vertical motions don't map to real-estate shot types:
+   floors and ceilings aren't hero subjects, and the source photo has
+   no overhead starting frame for a crane_down to descend from. Use
+   push_in, pull_out, dolly, reveal, or low_angle_glide instead.
 
    Motion-fit rules (strong defaults, use judgment):
    - Kitchen with visible island + ceiling → dolly_left_to_right across the island or pull_out from the island
    - Kitchen tunnel view down the counter → push_in
    - Kitchen side angle showing the full counter length → dolly_left_to_right or dolly_right_to_left
    - Kitchen with an occluding wall/column/corner in the foreground AND a clear hero feature behind → reveal (name the foreground element in motion_rationale)
-   - Living room with coffered/vaulted ceiling → low_angle_glide or pull_out (NOT tilt_up — that verb is deleted)
+   - Living room with coffered/vaulted ceiling → low_angle_glide or pull_out
    - Living room with picture window → low_angle_glide or pull_out
    - Master bedroom with bed as focal → push_in toward the bed, OR pull_out revealing the suite
    - Bathroom with freestanding tub in tight frame → feature_closeup (shallow DOF) OR push_in toward the tub
@@ -262,8 +262,8 @@ export function buildAnalysisUserPrompt(photoCount: number): string {
     "suggested_discard": false,
     "discard_reason": null,
     "video_viable": true,
-    "suggested_motion": "crane_up",
-    "motion_rationale": "crane up over the espresso island revealing the coffered ceiling and pendant lights"
+    "suggested_motion": "dolly_left_to_right",
+    "motion_rationale": "slide across the full counter from the bar stools toward the range and appliance wall"
   }
 ]
 

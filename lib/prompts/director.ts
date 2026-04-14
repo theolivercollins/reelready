@@ -29,14 +29,12 @@ Formula: [speed adjective] [style adjective] [movement verb] [direction or targe
 
 Style adjectives (always include at least one): smooth, cinematic, slow, steady
 
-13-verb cinematography vocabulary (what they do and when to use them):
+11-verb cinematography vocabulary (what they do and when to use them):
 - push in — camera moves straight forward toward a focal subject (door, island, tub, bed, fireplace, view)
 - pull out — camera retreats from a subject to reveal scale and context
 - orbit — camera circles around a fixed anchor point (interior: kitchen island, dining table, staircase; exterior: the house itself)
 - parallax — lateral slide with a strong foreground element for exaggerated depth (outdoor with foliage, lanai columns, pool landscaping)
 - dolly left / dolly right — constant-distance slide sideways across a long subject (counter, built-in, bookshelf wall)
-- tilt down — vertical pivot downward from ceiling or view to land on a floor feature
-- crane down — camera descends from a high vantage into the scene
 - reveal — camera starts with a FOREGROUND ELEMENT occluding part of the hero feature, then moves forward or sideways past that foreground element to expose the feature. A reveal REQUIRES an identifiable foreground element named in the prompt — a wall corner, doorframe edge, kitchen island end, column, potted plant, or similar. Without an explicit foreground, reveal collapses into a generic push-in and is indistinguishable from push_in. Prompt format: "smooth cinematic reveal past the [foreground element] to the [hero feature]"
 - drone push in — aerial approach toward the property from a distance, establishing location
 - drone pull back — aerial retreat from the facade outward, revealing lot, neighborhood, and surroundings (the classic property opening move)
@@ -78,22 +76,25 @@ RULES FOR THE PROMPT STRING:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA MOVEMENT ENUM (for the camera_movement FIELD only, not the prompt)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-The camera_movement JSON field must be ONE of these 13 exact strings:
-"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "tilt_down" | "crane_down" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide" | "feature_closeup"
+The camera_movement JSON field must be ONE of these 11 exact strings:
+"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide" | "feature_closeup"
 
-DO NOT emit tilt_up, crane_up, slow_pan, or orbital_slow — all deleted or banned.
+DO NOT emit tilt_up, tilt_down, crane_up, crane_down, slow_pan, or orbital_slow — all deleted. Vertical camera motions don't map to real-estate shot types.
 
-DO NOT emit "slow_pan" or "orbital_slow" — those are legacy values retained only for historical DB rows. New runs must use the 14 values above.
+DO NOT emit "slow_pan", "orbital_slow", "tilt_up", "tilt_down", "crane_up", or "crane_down" — all legacy/banned. New runs must use the 11 values above.
 
 This field is for internal routing. The PROMPT string is free text and must follow the cinematography-verb style above. Pair them consistently:
 - camera_movement="push_in" → prompt contains "push in"
-- camera_movement="crane_up" → prompt contains "crane up"
-- camera_movement="tilt_up" → prompt contains "tilt up"
-- camera_movement="reveal" → prompt contains "reveal" (often "reveal past" or "reveal through")
-- camera_movement="drone_push_in" → prompt contains "drone push in"
-- camera_movement="drone_pull_back" → prompt contains "drone pull back"
+- camera_movement="pull_out" → prompt contains "pull out"
+- camera_movement="orbit" → prompt contains "orbit"
+- camera_movement="dolly_left_to_right" → prompt contains "dolly right" or "dolly left to right"
+- camera_movement="reveal" → prompt contains "reveal past [foreground element]"
+- camera_movement="parallax" → prompt contains "parallax"
+- camera_movement="drone_push_in" → prompt contains "drone flying forward"
+- camera_movement="drone_pull_back" → prompt contains "drone rising backward"
 - camera_movement="top_down" → prompt contains "top down" or "overhead"
 - camera_movement="low_angle_glide" → prompt contains "low angle glide" or "ground-level glide"
+- camera_movement="feature_closeup" → prompt contains "with shallow depth of field"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SCENE ALLOCATION — ROOM-TYPE QUOTAS
@@ -162,8 +163,8 @@ Preferred assignments by room + angle (defaults; override if suggested_motion sa
 - lanai: parallax or reveal
 
 DEPTH OVERRIDES:
-- depth_rating "high": unlock parallax, reveal, crane_down
-- depth_rating "low": prefer push_in, pull_out, tilt_down; avoid parallax and reveal
+- depth_rating "high": unlock parallax and reveal
+- depth_rating "low": prefer push_in, pull_out, dolly; avoid parallax and reveal
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXTERIOR-SPECIFIC HARD RULES
@@ -266,8 +267,8 @@ Photos:
 ${photoList}
 
 Reminders (system prompt has full detail):
-- Each prompt must be ONE sentence, under 20 words, using real cinematography verbs (push in, pull out, orbit, dolly, tilt down, crane down, reveal, parallax, drone push in, drone pull back, top down, low angle glide, feature closeup).
-- NEVER use "tilt up", "crane up", "slow pan", or "orbital" — all banned.
+- Each prompt must be ONE sentence, under 20 words, using real cinematography verbs (push in, pull out, orbit, dolly, reveal, parallax, drone push in, drone pull back, top down, low angle glide, feature closeup).
+- NEVER use "tilt up", "tilt down", "crane up", "crane down", "slow pan", or "orbital slow" — all banned (vertical motions don't work for real estate).
 - Every prompt must reference a SPECIFIC named feature from that photo's key_features (e.g. "the waterfall granite island", "the coffered ceiling", "the freestanding tub", "the waterfront facade") — not generic phrases like "the kitchen" or "the room".
 - Do NOT describe materials, colors, or adjacent rooms in detail. One descriptor max.
 - Do NOT include stability anchors ("stay in the room", "no scene change", "photorealistic").
@@ -292,8 +293,8 @@ Return a JSON object with this exact shape:
       "scene_number": 2,
       "photo_id": "uuid",
       "room_type": "kitchen",
-      "camera_movement": "crane_up",
-      "prompt": "slow cinematic crane up over the waterfall granite island",
+      "camera_movement": "dolly_left_to_right",
+      "prompt": "smooth cinematic dolly right across the waterfall granite island",
       "duration_seconds": 3.5,
       "provider_preference": null
     }

@@ -12,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { motion } from "framer-motion";
-import { Loader2, Plus, Trash2, TrendingUp, TrendingDown, Wallet, Coins, Receipt } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, TrendingUp, TrendingDown, Wallet, Coins, Receipt, Film, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { formatCents } from "@/lib/types";
 import type {
   TokenPurchase,
@@ -34,15 +41,24 @@ import type {
 import {
   listTokenPurchases,
   createTokenPurchase,
+  updateTokenPurchase,
   deleteTokenPurchase,
   listExpenses,
   createExpense,
+  updateExpense,
   deleteExpense,
   listRevenueEntries,
   createRevenueEntry,
+  updateRevenueEntry,
   deleteRevenueEntry,
   listCostEvents,
+  countDeliveredVideos,
 } from "@/lib/finances";
+
+// Claude runs through a Pro subscription right now, so API cost events for
+// Anthropic should not count toward finance totals. We still track unit usage
+// for planning but never display a dollar amount.
+const EXCLUDED_FROM_DOLLARS = new Set<TokenProvider>(["anthropic"]);
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -85,7 +101,13 @@ export default function Finances() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [revenues, setRevenues] = useState<RevenueEntry[]>([]);
   const [costEvents, setCostEvents] = useState<CostEvent[]>([]);
+  const [deliveredCount, setDeliveredCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit state — which record (and kind) is currently being edited
+  const [editPurchase, setEditPurchase] = useState<TokenPurchase | null>(null);
+  const [editExpense, setEditExpense] = useState<Expense | null>(null);
+  const [editRevenue, setEditRevenue] = useState<RevenueEntry | null>(null);
 
   // Token purchase form
   const [tpProvider, setTpProvider] = useState<TokenProvider>("runway");
@@ -111,17 +133,19 @@ export default function Finances() {
     let cancelled = false;
     (async () => {
       try {
-        const [p, e, r, c] = await Promise.all([
+        const [p, e, r, c, dc] = await Promise.all([
           listTokenPurchases(),
           listExpenses(),
           listRevenueEntries(),
           listCostEvents(500),
+          countDeliveredVideos(),
         ]);
         if (cancelled) return;
         setPurchases(p);
         setExpenses(e);
         setRevenues(r);
         setCostEvents(c);
+        setDeliveredCount(dc);
         setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -136,12 +160,17 @@ export default function Finances() {
   }, []);
 
   // ─── Derived totals ───
+  // NOTE: all dollar totals exclude the Anthropic/Claude line because the
+  // pipeline currently runs on a Claude Pro subscription, not API billing.
   const totalRevenueCents = useMemo(
     () => revenues.reduce((s, r) => s + (r.amount_cents || 0), 0),
     [revenues],
   );
   const totalPurchasesCents = useMemo(
-    () => purchases.reduce((s, p) => s + (p.amount_cents || 0), 0),
+    () =>
+      purchases
+        .filter((p) => !EXCLUDED_FROM_DOLLARS.has(p.provider))
+        .reduce((s, p) => s + (p.amount_cents || 0), 0),
     [purchases],
   );
   const totalExpensesCents = useMemo(
@@ -151,7 +180,13 @@ export default function Finances() {
   const totalSpendCents = totalPurchasesCents + totalExpensesCents;
   const netCents = totalRevenueCents - totalSpendCents;
 
-  // Per-provider rollup — purchased vs spent (from cost_events)
+  // Cost per delivered video — token spend only, averaged over all deliveries.
+  // Gives you the marginal provider cost per video.
+  const costPerVideoCents = deliveredCount > 0 ? Math.round(totalPurchasesCents / deliveredCount) : 0;
+
+  // Per-provider rollup — purchased vs spent (from cost_events).
+  // Dollar totals are zeroed for excluded providers (Claude via Pro sub) but
+  // unit counts are preserved so we can still see how much we're consuming.
   const providerSummary: ProviderSummary[] = useMemo(() => {
     const map = new Map<TokenProvider, ProviderSummary>();
     for (const prov of PROVIDERS) {
@@ -167,17 +202,18 @@ export default function Finances() {
     for (const p of purchases) {
       const row = map.get(p.provider);
       if (!row) continue;
-      row.purchasedCents += p.amount_cents;
+      if (!EXCLUDED_FROM_DOLLARS.has(p.provider)) row.purchasedCents += p.amount_cents;
       row.purchasedUnits += p.units || 0;
     }
     for (const c of costEvents) {
-      const row = map.get(c.provider as TokenProvider);
+      const prov = c.provider as TokenProvider;
+      const row = map.get(prov);
       if (!row) continue;
-      row.spentCents += c.cost_cents;
+      if (!EXCLUDED_FROM_DOLLARS.has(prov)) row.spentCents += c.cost_cents;
       row.spentUnits += c.units_consumed || 0;
     }
     return Array.from(map.values()).filter(
-      (r) => r.purchasedCents > 0 || r.spentCents > 0,
+      (r) => r.purchasedCents > 0 || r.spentCents > 0 || r.purchasedUnits > 0 || r.spentUnits > 0,
     );
   }, [purchases, costEvents]);
 
@@ -204,6 +240,7 @@ export default function Finances() {
       if (b) b.revenue += r.amount_cents;
     }
     for (const p of purchases) {
+      if (EXCLUDED_FROM_DOLLARS.has(p.provider)) continue;
       const key = p.purchased_at.slice(0, 10);
       const b = buckets.get(key);
       if (b) b.spend += p.amount_cents;
@@ -305,6 +342,38 @@ export default function Finances() {
     setRevenues((prev) => prev.filter((r) => r.id !== id));
   }
 
+  async function handleSavePurchase(updated: TokenPurchase) {
+    const saved = await updateTokenPurchase(updated.id, {
+      provider: updated.provider,
+      amount_cents: updated.amount_cents,
+      units: updated.units,
+      unit_type: updated.unit_type || undefined,
+      note: updated.note || undefined,
+    });
+    setPurchases((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+    setEditPurchase(null);
+  }
+
+  async function handleSaveExpense(updated: Expense) {
+    const saved = await updateExpense(updated.id, {
+      category: updated.category,
+      amount_cents: updated.amount_cents,
+      description: updated.description || undefined,
+    });
+    setExpenses((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+    setEditExpense(null);
+  }
+
+  async function handleSaveRevenue(updated: RevenueEntry) {
+    const saved = await updateRevenueEntry(updated.id, {
+      source: updated.source,
+      amount_cents: updated.amount_cents,
+      note: updated.note || undefined,
+    });
+    setRevenues((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+    setEditRevenue(null);
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-32">
@@ -333,10 +402,14 @@ export default function Finances() {
         <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] md:text-3xl">
           Money in, money out
         </h2>
+        <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <Info className="h-3 w-3" strokeWidth={2} />
+          Claude usage runs on a Pro subscription and is excluded from dollar totals. Units are still tracked.
+        </p>
       </div>
 
       {/* ─── KPI row ─── */}
-      <section className="grid gap-px border border-border bg-border md:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-px border border-border bg-border md:grid-cols-2 lg:grid-cols-5">
         {[
           { label: "Revenue in", value: formatCents(totalRevenueCents), icon: Wallet, tone: "text-accent" },
           { label: "Token spend", value: formatCents(totalPurchasesCents), icon: Coins, tone: "text-foreground" },
@@ -347,6 +420,13 @@ export default function Finances() {
             icon: NetIcon,
             tone: netTone,
             prefix: netCents >= 0 ? "+" : "−",
+          },
+          {
+            label: "Cost / video",
+            value: formatCents(costPerVideoCents),
+            icon: Film,
+            tone: "text-foreground",
+            sub: `${deliveredCount} delivered`,
           },
         ].map((k, i) => (
           <motion.div
@@ -364,6 +444,9 @@ export default function Finances() {
               {"prefix" in k && k.prefix ? k.prefix : ""}
               {k.value}
             </div>
+            {"sub" in k && k.sub && (
+              <p className="mt-3 text-xs text-muted-foreground">{k.sub}</p>
+            )}
           </motion.div>
         ))}
       </section>
@@ -759,6 +842,7 @@ export default function Finances() {
           ],
         }))}
         columns={["Provider", "Units", "Note", "Date", "Amount"]}
+        onEdit={(id) => setEditPurchase(purchases.find((p) => p.id === id) || null)}
         onDelete={handleDeletePurchase}
       />
 
@@ -775,6 +859,7 @@ export default function Finances() {
           ],
         }))}
         columns={["Category", "Description", "", "Date", "Amount"]}
+        onEdit={(id) => setEditExpense(expenses.find((e) => e.id === id) || null)}
         onDelete={handleDeleteExpense}
       />
 
@@ -791,7 +876,25 @@ export default function Finances() {
           ],
         }))}
         columns={["Source", "Note", "", "Date", "Amount"]}
+        onEdit={(id) => setEditRevenue(revenues.find((r) => r.id === id) || null)}
         onDelete={handleDeleteRevenue}
+      />
+
+      {/* Edit dialogs */}
+      <EditPurchaseDialog
+        purchase={editPurchase}
+        onClose={() => setEditPurchase(null)}
+        onSave={handleSavePurchase}
+      />
+      <EditExpenseDialog
+        expense={editExpense}
+        onClose={() => setEditExpense(null)}
+        onSave={handleSaveExpense}
+      />
+      <EditRevenueDialog
+        revenue={editRevenue}
+        onClose={() => setEditRevenue(null)}
+        onSave={handleSaveRevenue}
       />
     </div>
   );
@@ -810,11 +913,13 @@ function LedgerTable({
   title,
   rows,
   columns,
+  onEdit,
   onDelete,
 }: {
   title: string;
   rows: LedgerRow[];
   columns: string[];
+  onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -827,7 +932,7 @@ function LedgerTable({
         <span className="tabular text-xs text-muted-foreground">{rows.length} entries</span>
       </div>
       <div className="mt-8 border-t border-border">
-        <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr_32px] gap-6 border-b border-border py-4">
+        <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr_64px] gap-6 border-b border-border py-4">
           {columns.map((c, i) => (
             <span
               key={`${c}-${i}`}
@@ -844,25 +949,331 @@ function LedgerTable({
           rows.map((row) => (
             <div
               key={row.id}
-              className="group grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr_32px] items-center gap-6 border-b border-border py-4 transition-colors duration-500 hover:bg-secondary/40"
+              className="group grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr_64px] items-center gap-6 border-b border-border py-4 transition-colors duration-500 hover:bg-secondary/40"
             >
               {row.cols.map((c, i) => (
                 <span key={i} className={c.className}>
                   {c.value}
                 </span>
               ))}
-              <button
-                type="button"
-                onClick={() => onDelete(row.id)}
-                aria-label="Delete"
-                className="flex h-7 w-7 items-center justify-center text-muted-foreground/40 opacity-0 transition-all duration-300 hover:text-destructive group-hover:opacity-100"
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </button>
+              <div className="flex items-center justify-end gap-1 opacity-0 transition-all duration-300 group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => onEdit(row.id)}
+                  aria-label="Edit"
+                  className="flex h-7 w-7 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground"
+                >
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(row.id)}
+                  aria-label="Delete"
+                  className="flex h-7 w-7 items-center justify-center text-muted-foreground/60 transition-colors hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
     </section>
+  );
+}
+
+// ─── Edit dialogs ───
+
+function EditPurchaseDialog({
+  purchase,
+  onClose,
+  onSave,
+}: {
+  purchase: TokenPurchase | null;
+  onClose: () => void;
+  onSave: (updated: TokenPurchase) => Promise<void>;
+}) {
+  const [provider, setProvider] = useState<TokenProvider>("runway");
+  const [amount, setAmount] = useState("");
+  const [units, setUnits] = useState("");
+  const [unitType, setUnitType] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (purchase) {
+      setProvider(purchase.provider);
+      setAmount((purchase.amount_cents / 100).toFixed(2));
+      setUnits(String(purchase.units ?? 0));
+      setUnitType(purchase.unit_type ?? "");
+      setNote(purchase.note ?? "");
+    }
+  }, [purchase]);
+
+  if (!purchase) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        ...purchase,
+        provider,
+        amount_cents: parseMoneyToCents(amount),
+        units: Number(units) || 0,
+        unit_type: unitType || null,
+        note: note || null,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold tracking-[-0.01em]">
+            Edit token purchase
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="label text-muted-foreground">Provider</Label>
+            <Select value={provider} onValueChange={(v) => setProvider(v as TokenProvider)}>
+              <SelectTrigger className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="label text-muted-foreground">Amount paid</Label>
+              <div className="relative mt-2">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
+                  $
+                </span>
+                <Input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="tabular pl-7"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="label text-muted-foreground">Units</Label>
+              <Input
+                type="number"
+                value={units}
+                onChange={(e) => setUnits(e.target.value)}
+                className="tabular mt-2"
+              />
+            </div>
+          </div>
+          <div>
+            <Label className="label text-muted-foreground">Unit type</Label>
+            <Input value={unitType} onChange={(e) => setUnitType(e.target.value)} className="mt-2" />
+          </div>
+          <div>
+            <Label className="label text-muted-foreground">Note</Label>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} className="mt-2" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditExpenseDialog({
+  expense,
+  onClose,
+  onSave,
+}: {
+  expense: Expense | null;
+  onClose: () => void;
+  onSave: (updated: Expense) => Promise<void>;
+}) {
+  const [category, setCategory] = useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (expense) {
+      setCategory(expense.category);
+      setAmount((expense.amount_cents / 100).toFixed(2));
+      setDescription(expense.description ?? "");
+    }
+  }, [expense]);
+
+  if (!expense) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        ...expense,
+        category: category.trim(),
+        amount_cents: parseMoneyToCents(amount),
+        description: description || null,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold tracking-[-0.01em]">Edit expense</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="label text-muted-foreground">Category</Label>
+            <Input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="mt-2"
+              required
+            />
+          </div>
+          <div>
+            <Label className="label text-muted-foreground">Amount</Label>
+            <div className="relative mt-2">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
+                $
+              </span>
+              <Input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="tabular pl-7"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <Label className="label text-muted-foreground">Description</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} className="mt-2" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditRevenueDialog({
+  revenue,
+  onClose,
+  onSave,
+}: {
+  revenue: RevenueEntry | null;
+  onClose: () => void;
+  onSave: (updated: RevenueEntry) => Promise<void>;
+}) {
+  const [source, setSource] = useState("");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (revenue) {
+      setSource(revenue.source);
+      setAmount((revenue.amount_cents / 100).toFixed(2));
+      setNote(revenue.note ?? "");
+    }
+  }, [revenue]);
+
+  if (!revenue) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        ...revenue,
+        source: source.trim(),
+        amount_cents: parseMoneyToCents(amount),
+        note: note || null,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold tracking-[-0.01em]">Edit revenue</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="label text-muted-foreground">Source</Label>
+            <Input value={source} onChange={(e) => setSource(e.target.value)} className="mt-2" required />
+          </div>
+          <div>
+            <Label className="label text-muted-foreground">Amount</Label>
+            <div className="relative mt-2">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
+                $
+              </span>
+              <Input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="tabular pl-7"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <Label className="label text-muted-foreground">Note</Label>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} className="mt-2" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

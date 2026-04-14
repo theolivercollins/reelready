@@ -202,7 +202,7 @@ const Index = () => {
               </svg>
             </span>
             <span className="text-base font-semibold tracking-[-0.01em] leading-none">
-              Listing<span className="text-accent">.</span>Elevate
+              Listing Elevate
             </span>
           </Link>
           <div className="hidden items-center gap-10 md:flex">

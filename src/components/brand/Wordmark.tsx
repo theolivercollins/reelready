@@ -16,7 +16,7 @@ const sizeMap = {
 /**
  * Listing Elevate wordmark.
  * Mark: a stacked geometric stair ("elevate") inside a square.
- * Wordmark: two semibold words divided by an accent period.
+ * Wordmark: two semibold words, single space, consistent sizing everywhere.
  */
 export function Wordmark({ to = "/", className = "", size = "md", variant = "full" }: WordmarkProps) {
   const s = sizeMap[size];
@@ -32,7 +32,7 @@ export function Wordmark({ to = "/", className = "", size = "md", variant = "ful
       </span>
       {variant === "full" && (
         <span className={`font-semibold tracking-[-0.01em] ${s.text} leading-none`}>
-          Listing<span className="text-accent">.</span>Elevate
+          Listing Elevate
         </span>
       )}
     </span>

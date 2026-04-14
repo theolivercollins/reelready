@@ -6,11 +6,10 @@ export type RoomType = "kitchen" | "living_room" | "master_bedroom" | "bedroom" 
 export type CameraMovement =
   | "push_in" | "pull_out" | "orbit" | "parallax"
   | "dolly_left_to_right" | "dolly_right_to_left"
-  | "tilt_down" | "crane_down"
   | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide"
   | "feature_closeup"
   // Legacy compat only — not emitted by new runs
-  | "orbital_slow" | "slow_pan" | "tilt_up" | "crane_up";
+  | "orbital_slow" | "slow_pan" | "tilt_up" | "crane_up" | "tilt_down" | "crane_down";
 
 export interface Property {
   id: string;

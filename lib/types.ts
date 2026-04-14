@@ -38,8 +38,6 @@ export type CameraMovement =
   | "dolly_left_to_right"
   | "dolly_right_to_left"
   // Added for room-appropriate motion
-  | "tilt_down"             // ground from ceiling to focal feature
-  | "crane_down"            // descend into the space
   | "reveal"                // pass foreground element to expose background
   | "drone_push_in"         // aerial approach
   | "drone_pull_back"       // aerial retreat — the classic opening move
@@ -50,8 +48,10 @@ export type CameraMovement =
   // The photo analyzer and director MUST NOT emit these for new runs.
   | "orbital_slow"
   | "slow_pan"
-  | "tilt_up"               // deleted — looked awkward, "why tilt up to a ceiling"
-  | "crane_up";             // deleted — same reason
+  | "tilt_up"               // deleted — awkward
+  | "crane_up"              // deleted — awkward
+  | "tilt_down"             // deleted — same problem as tilt_up
+  | "crane_down";           // deleted — source photo has no overhead start frame
 
 export type SceneStatus =
   | "pending"
