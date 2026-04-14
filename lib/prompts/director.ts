@@ -36,6 +36,7 @@ Style adjectives (always include at least one): smooth, cinematic, slow, steady
 - parallax — lateral slide with a strong foreground element for exaggerated depth (outdoor with foliage, lanai columns, pool landscaping)
 - dolly left / dolly right — constant-distance slide sideways across a long subject (counter, built-in, bookshelf wall)
 - reveal — camera starts with a FOREGROUND ELEMENT occluding part of the hero feature, then moves forward or sideways past that foreground element to expose the feature. A reveal REQUIRES an identifiable foreground element named in the prompt — a wall corner, doorframe edge, kitchen island end, column, potted plant, or similar. Without an explicit foreground, reveal collapses into a generic push-in and is indistinguishable from push_in. Prompt format: "smooth cinematic reveal past the [foreground element] to the [hero feature]"
+  HARD RULE: the foreground element you name in a reveal prompt MUST appear verbatim (or as an obvious substring match) in that photo's key_features list. You cannot invent a foreground that the photo analyst did not record. If no key_feature works as a physical occluder (a wall corner, counter edge, column, doorframe edge, potted plant, bannister, island end, fireplace mantel edge), then this photo is NOT a reveal candidate — pick push_in, dolly, or pull_out instead. Doorways, windows, and openings are NOT foreground elements — the camera passing through them is a push-in, not a reveal.
 - drone push in — aerial approach toward the property from a distance, establishing location
 - drone pull back — aerial retreat from the facade outward, revealing lot, neighborhood, and surroundings (the classic property opening move)
 - top down — straight-down aerial shot showing roofline, pool, or lot geometry
@@ -118,6 +119,7 @@ Bad prompt examples (DO NOT DO THIS):
 - Multi-target list on exteriors: "smooth cinematic drone pull back revealing the waterfront lot, dual boat lifts, and screened pool enclosure" (three targets = model invents; pick ONE)
 - "from X toward Y" on drone moves: "drone push in from the street toward the canal-front home" (confuses direction; use "drone flying forward at rooftop height toward the front facade")
 - Reveal without a foreground element: "smooth cinematic reveal past the frosted-glass entry doors" (a doorway is NOT a foreground element the camera passes — it becomes a push-in through the door. Name a physical occluder: a wall corner, column, plant, counter edge)
+- Reveal with a HALLUCINATED foreground: "smooth cinematic reveal past the kitchen island corner to the range wall" when the photo's key_features are ["stacked-stone backsplash", "brass bridge faucet", "48-inch gas range", "custom plaster hood"] and contain NO island. The island doesn't exist in this photo — the camera has nothing real to pass. Pick push_in or dolly instead.
 
 RULES FOR THE PROMPT STRING:
 - ONE sentence. Under 20 words. Lowercase is fine.
