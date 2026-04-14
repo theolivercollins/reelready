@@ -125,53 +125,16 @@ function SessionList() {
         </p>
       </div>
 
-      <div className="border border-border bg-background p-6">
-        <div className="label text-muted-foreground">New session(s)</div>
-        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
-          <div className="flex-1">
-            <label className="text-xs text-muted-foreground">Batch label (groups these uploads together)</label>
-            <Input
-              value={batchLabel}
-              onChange={(e) => setBatchLabel(e.target.value)}
-              placeholder="e.g. Smith property · Kitchen study #2"
-              className="mt-1"
-            />
-          </div>
-          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <input type="checkbox" checked={autoAnalyze} onChange={(e) => setAutoAnalyze(e.target.checked)} disabled={uploading} />
-            Auto-analyze on upload
-          </label>
-          <label className="inline-flex cursor-pointer items-center gap-2 border border-border bg-background px-4 py-2 text-sm hover:bg-accent">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            <span>
-              {uploading
-                ? uploadProgress
-                  ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
-                  : "Uploading…"
-                : "Upload images"}
-            </span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) handleUpload(e.target.files);
-              }}
-              disabled={uploading}
-            />
-          </label>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Drop multiple files to create one session per image. With auto-analyze, the director runs on all of them in parallel — you can start rating as soon as they finish.
-        </p>
-        {error && (
-          <div className="mt-3 flex items-start gap-2 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-      </div>
+      <FileDropZone
+        uploading={uploading}
+        uploadProgress={uploadProgress}
+        batchLabel={batchLabel}
+        setBatchLabel={setBatchLabel}
+        autoAnalyze={autoAnalyze}
+        setAutoAnalyze={setAutoAnalyze}
+        onFiles={handleUpload}
+        error={error}
+      />
 
       {sessions === null ? (
         <div className="py-20 text-center">
@@ -182,68 +145,303 @@ function SessionList() {
           No sessions yet. Upload an image above to start.
         </div>
       ) : (
-        (() => {
-          // Group by batch_label (null/empty → "Unbatched"); newest batch first.
-          const groups = new Map<string, LabSession[]>();
-          for (const s of sessions) {
-            const key = s.batch_label?.trim() || "Unbatched";
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key)!.push(s);
-          }
-          // Sort batch entries by newest session's created_at
-          const ordered = Array.from(groups.entries()).sort((a, b) => {
-            const aNewest = Math.max(...a[1].map((s) => new Date(s.created_at).getTime()));
-            const bNewest = Math.max(...b[1].map((s) => new Date(s.created_at).getTime()));
-            return bNewest - aNewest;
-          });
-          return (
-            <div className="space-y-10">
-              {ordered.map(([batch, items]) => {
-                const avgRating =
-                  items.filter((i) => typeof i.best_rating === "number").reduce((s, i) => s + (i.best_rating ?? 0), 0) /
-                    Math.max(1, items.filter((i) => typeof i.best_rating === "number").length) || null;
-                return (
-                  <div key={batch}>
-                    <div className="mb-3 flex items-baseline justify-between">
-                      <h3 className="text-lg font-semibold tracking-tight">{batch}</h3>
-                      <span className="text-xs text-muted-foreground">
-                        {items.length} session{items.length === 1 ? "" : "s"}
-                        {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
-                      </span>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {items.map((s) => (
-                        <Link
-                          key={s.id}
-                          to={`/dashboard/development/prompt-lab/${s.id}`}
-                          className="border border-border bg-background transition hover:border-foreground"
-                        >
-                          <div className="aspect-video w-full overflow-hidden bg-muted">
-                            <img src={s.image_url} alt={s.label ?? "session"} className="h-full w-full object-cover" />
-                          </div>
-                          <div className="p-3">
-                            <div className="text-xs font-medium truncate">{s.label || s.archetype || "Untitled"}</div>
-                            <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span>{s.iteration_count ?? 0} iter{s.iteration_count === 1 ? "" : "s"}</span>
-                              {typeof s.best_rating === "number" && (
-                                <span className="inline-flex items-center gap-1">
-                                  <Star className="h-3 w-3 fill-foreground text-foreground" />
-                                  {s.best_rating}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()
+        <BatchGroups sessions={sessions} onReload={reload} />
       )}
     </div>
+  );
+}
+
+// ─── File dropzone with batch + auto-analyze controls ───
+
+function FileDropZone({
+  uploading,
+  uploadProgress,
+  batchLabel,
+  setBatchLabel,
+  autoAnalyze,
+  setAutoAnalyze,
+  onFiles,
+  error,
+}: {
+  uploading: boolean;
+  uploadProgress: { done: number; total: number } | null;
+  batchLabel: string;
+  setBatchLabel: (s: string) => void;
+  autoAnalyze: boolean;
+  setAutoAnalyze: (b: boolean) => void;
+  onFiles: (files: FileList) => void;
+  error: string | null;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  return (
+    <div
+      className={`border bg-background p-6 transition ${dragOver ? "border-foreground bg-accent/40" : "border-border"}`}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        if (e.dataTransfer.files?.length) {
+          e.preventDefault();
+          setDragOver(false);
+          onFiles(e.dataTransfer.files);
+        }
+      }}
+    >
+      <div className="label text-muted-foreground">New session(s)</div>
+      <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
+        <div className="flex-1">
+          <label className="text-xs text-muted-foreground">Batch label (groups these uploads together)</label>
+          <Input
+            value={batchLabel}
+            onChange={(e) => setBatchLabel(e.target.value)}
+            placeholder="e.g. Smith property · Kitchen study #2"
+            className="mt-1"
+          />
+        </div>
+        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" checked={autoAnalyze} onChange={(e) => setAutoAnalyze(e.target.checked)} disabled={uploading} />
+          Auto-analyze on upload
+        </label>
+        <label className="inline-flex cursor-pointer items-center gap-2 border border-border bg-background px-4 py-2 text-sm hover:bg-accent">
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          <span>
+            {uploading
+              ? uploadProgress
+                ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
+                : "Uploading…"
+              : "Upload images"}
+          </span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) onFiles(e.target.files);
+            }}
+            disabled={uploading}
+          />
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Drag files from your desktop onto this panel, or click &quot;Upload images&quot;. One session per image. With auto-analyze, the director runs on each in parallel. You can drag session cards between batches after they&apos;re created.
+      </p>
+      {error && (
+        <div className="mt-3 flex items-start gap-2 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Batch groups with drag-drop + rename ───
+
+function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload: () => void }) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  const groups = new Map<string, LabSession[]>();
+  for (const s of sessions) {
+    const key = s.batch_label?.trim() || "Unbatched";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(s);
+  }
+  const ordered = Array.from(groups.entries()).sort((a, b) => {
+    if (a[0] === "Unbatched") return -1;
+    if (b[0] === "Unbatched") return 1;
+    const aNewest = Math.max(...a[1].map((s) => new Date(s.created_at).getTime()));
+    const bNewest = Math.max(...b[1].map((s) => new Date(s.created_at).getTime()));
+    return bNewest - aNewest;
+  });
+
+  async function moveSession(sessionId: string, newLabel: string | null) {
+    try {
+      await updateSession(sessionId, { batch_label: newLabel });
+      onReload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function renameBatch(oldLabel: string, newLabel: string) {
+    const target = newLabel.trim() || null;
+    if (oldLabel === "Unbatched" && !target) return;
+    try {
+      const affected = sessions.filter((s) => (s.batch_label?.trim() || "Unbatched") === oldLabel);
+      await Promise.all(affected.map((s) => updateSession(s.id, { batch_label: target })));
+      onReload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function createBatchFromDrop(sessionId: string) {
+    const name = prompt("Name this new batch");
+    if (!name?.trim()) return;
+    await moveSession(sessionId, name.trim());
+  }
+
+  return (
+    <div className="space-y-10">
+      {ordered.map(([batch, items]) => {
+        const rated = items.filter((i) => typeof i.best_rating === "number");
+        const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.best_rating ?? 0), 0) / rated.length : null;
+        const isTarget = dropTarget === batch;
+        return (
+          <div
+            key={batch}
+            className={`rounded-sm border-2 border-dashed p-3 transition ${isTarget ? "border-foreground bg-accent/30" : "border-transparent"}`}
+            onDragOver={(e) => {
+              if (draggingId) {
+                e.preventDefault();
+                setDropTarget(batch);
+              }
+            }}
+            onDragLeave={() => setDropTarget((prev) => (prev === batch ? null : prev))}
+            onDrop={(e) => {
+              if (draggingId) {
+                e.preventDefault();
+                const newLabel = batch === "Unbatched" ? null : batch;
+                moveSession(draggingId, newLabel);
+                setDraggingId(null);
+                setDropTarget(null);
+              }
+            }}
+          >
+            <div className="mb-3 flex items-baseline justify-between">
+              <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
+              <span className="text-xs text-muted-foreground">
+                {items.length} session{items.length === 1 ? "" : "s"}
+                {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
+              </span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {items.map((s) => (
+                <SessionCard
+                  key={s.id}
+                  session={s}
+                  isDragging={draggingId === s.id}
+                  onDragStart={() => setDraggingId(s.id)}
+                  onDragEnd={() => {
+                    setDraggingId(null);
+                    setDropTarget(null);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Drop-here-to-create-new-batch zone */}
+      <div
+        className={`rounded-sm border-2 border-dashed p-6 text-center text-xs transition ${
+          draggingId ? "border-foreground text-foreground bg-accent/20" : "border-border text-muted-foreground"
+        }`}
+        onDragOver={(e) => {
+          if (draggingId) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (draggingId) {
+            e.preventDefault();
+            const id = draggingId;
+            setDraggingId(null);
+            createBatchFromDrop(id);
+          }
+        }}
+      >
+        Drop a session here to create a new batch
+      </div>
+    </div>
+  );
+}
+
+function BatchTitle({ label, onRename }: { label: string; onRename: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label === "Unbatched" ? "" : label);
+
+  useEffect(() => {
+    setDraft(label === "Unbatched" ? "" : label);
+  }, [label]);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          if (draft.trim() !== (label === "Unbatched" ? "" : label)) onRename(draft);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") {
+            setDraft(label === "Unbatched" ? "" : label);
+            setEditing(false);
+          }
+        }}
+        placeholder={label === "Unbatched" ? "Name this batch…" : ""}
+        className="bg-transparent text-lg font-semibold tracking-tight outline-none border-b border-border focus:border-foreground min-w-0"
+      />
+    );
+  }
+  return (
+    <h3
+      onClick={() => setEditing(true)}
+      className="text-lg font-semibold tracking-tight cursor-text hover:opacity-70"
+      title="Click to rename (renames all sessions in this batch)"
+    >
+      {label}
+    </h3>
+  );
+}
+
+function SessionCard({
+  session,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+}: {
+  session: LabSession;
+  isDragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <Link
+      to={`/dashboard/development/prompt-lab/${session.id}`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/session-id", session.id);
+        e.dataTransfer.effectAllowed = "move";
+        onDragStart();
+      }}
+      onDragEnd={onDragEnd}
+      className={`border border-border bg-background transition hover:border-foreground ${isDragging ? "opacity-40" : ""}`}
+    >
+      <div className="aspect-video w-full overflow-hidden bg-muted">
+        <img src={session.image_url} alt={session.label ?? "session"} className="h-full w-full object-cover pointer-events-none" />
+      </div>
+      <div className="p-3">
+        <div className="text-xs font-medium truncate">{session.label || session.archetype || "Untitled"}</div>
+        <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>{session.iteration_count ?? 0} iter{session.iteration_count === 1 ? "" : "s"}</span>
+          {typeof session.best_rating === "number" && (
+            <span className="inline-flex items-center gap-1">
+              <Star className="h-3 w-3 fill-foreground text-foreground" />
+              {session.best_rating}
+            </span>
+          )}
+        </div>
+      </div>
+    </Link>
   );
 }
 
