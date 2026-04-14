@@ -46,6 +46,61 @@ Good prompt examples (these are the QUALITY BAR — match this style, reference 
 - "steady cinematic drone pull back rising backward and upward from the front facade"
 - "smooth cinematic reveal past the kitchen island corner to the fireplace alcove"
 - "smooth cinematic dolly right across the waterfall granite island"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CINEMATOGRAPHER SHOT STYLES (sub-variants within the 11 verbs)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These are real-estate cinematographer shot names you may pick from when
+writing per-scene prompts. Each maps to one of the 11 enum values. Use
+the shot style when a photo specifically fits it — don't force it.
+
+IMPORTANT — VERTICAL MOTION RULE:
+Pure vertical motion (tilt_up, crane_up, camera ending on a ceiling or
+floor) is banned. But vertical motion as ONE COMPONENT of a richer 3D
+move (push with rise, orbit that lifts, top-down pulling back with an
+upward tilt) is allowed and encouraged — it adds dimensionality. The
+distinction is the TERMINAL FRAMING: a shot that ends staring at the
+ceiling is bad; a shot that rises slightly as it orbits is fine.
+
+PUSH_IN sub-variants:
+- Straight Push → "slow cinematic straight push centered on [subject]"
+  Simple smooth perfectly centered forward motion. Use grid-line framing.
+- Straight Push Curve → "slow cinematic straight push with gentle curve toward [subject]"
+  A straight push that uses a gentle lateral curve (as if a camera operator's wrist
+  gently swept). Adds a touch of dimensionality without breaking the forward line.
+- Straight Push with Rise → "slow cinematic straight push rising upward toward [subject]"
+  Forward push combined with a subtle upward vertical rise. The rise is
+  secondary — the forward motion dominates. Do not end on a ceiling.
+
+ORBIT sub-variants:
+- Orbiting Detail Rise and Drop → "slow cinematic orbit rising and dropping around the [subject]"
+  Detail-focused orbit with gentle vertical elevation changes throughout.
+- Cowboy Lift → "tight 50mm cinematic orbit lifting around [subject] with foreground depth"
+  Tight framing (50mm style), orbit that lifts slightly, uses a foreground
+  element for depth. Best when a subject has a foreground object to anchor the parallax.
+- PTF Orbit → "advanced 50mm cinematic orbit wrapping around [subject] rising upward"
+  Wraps around the subject while rising. More dramatic than a flat orbit.
+
+DOLLY (left/right) sub-variant:
+- Detail Slider → "cinematic detail slider tracking across the [subject], perfectly level horizontals"
+  Horizontal tracking with strict level framing — verticals stay vertical,
+  horizontals stay horizontal. Quality target, not a new motion.
+
+TOP_DOWN sub-variant:
+- Top Down Detail → "cinematic top down detail pulling back from the [subject] with foreground framing"
+  50mm style overhead shot pulling back while pointing slightly upward,
+  with a foreground element framing the end of the move. More cinematic than a
+  pure straight-down top_down.
+
+NOTE ON 50mm: Runway and Kling don't expose lens focal length as a parameter.
+Including "50mm" in the prompt is a style hint the model may or may not respect.
+It biases toward tighter framing and shallower depth of field, which is all we
+can do at the prompt level.
+
+NOTE ON TRIPOD: A true static tripod shot is not possible from image-to-video
+models — they always produce some motion. Tripod is not implemented. If a photo
+truly needs to read as static (artwork, texture closeup), use feature_closeup
+with shallow depth of field instead.
 - "slow cinematic push in toward the freestanding soaking tub"
 - "cinematic slow push in with shallow depth of field on the freestanding tub, background softly blurred"
 - "smooth cinematic orbit around the dining table and chandelier"
