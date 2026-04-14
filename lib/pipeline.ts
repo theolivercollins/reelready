@@ -392,24 +392,19 @@ async function runScripting(propertyId: string): Promise<void> {
     motion_rationale: p.motion_rationale ?? null,
   }));
 
-  // Pull the style guide from the property row (built in Stage 2.5) and
-  // bake it into the director's user message so every per-scene prompt
-  // the director produces already references real adjacent-room details.
-  const { data: propRow } = await getSupabase()
-    .from("properties")
-    .select("style_guide")
-    .eq("id", propertyId)
-    .single();
-  const styleGuide = (propRow?.style_guide ?? null) as PropertyStyleGuide | null;
-  const styleGuideBlock = styleGuide
-    ? `\n\nPROPERTY STYLE GUIDE (use this to describe adjacent rooms visible through any doorways or openings — do NOT let the downstream video model invent these details; every scene prompt that shows a doorway must include the matching real description):\n${JSON.stringify(styleGuide, null, 2)}`
-    : "";
-
+  // The property style guide is intentionally NOT injected into the
+  // director's user message anymore. The short-prompt director rule forbids
+  // material/color descriptions and adjacent-room narration in the per-scene
+  // prompt — leaking the style guide in here contradicted that rule and
+  // silently regressed Kling output. The guide is still written to
+  // properties.style_guide for potential future use (e.g. keyframe
+  // providers that accept multi-image context) but is no longer a
+  // per-scene input.
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: DIRECTOR_SYSTEM,
-    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) + styleGuideBlock }],
+    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) }],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
