@@ -4,7 +4,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, ArrowUpRight, Mail, Loader2, CheckCircle, Plus, Minus, Sun, Moon } from "lucide-react";
-import { motion, AnimatePresence, useScroll, useTransform, type Variants } from "framer-motion";
+import { motion, useScroll, useTransform, type Variants } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
@@ -77,16 +77,43 @@ const Index = () => {
   const { theme, toggle: toggleTheme } = useTheme();
   const heroRef = useRef<HTMLElement>(null);
 
-  // Hero verb cycle — Take → Retain → Sell
+  // Hero verb typewriter — types Take, holds, deletes, then Retain, then Sell, looping.
   const heroVerbs = ["Take", "Retain", "Sell"] as const;
   const [heroVerbIndex, setHeroVerbIndex] = useState(0);
-  const heroVerb = heroVerbs[heroVerbIndex];
+  const [heroText, setHeroText] = useState("");
+  const [heroPhase, setHeroPhase] = useState<"type" | "hold" | "erase" | "rest">("type");
+
   useEffect(() => {
-    const id = setInterval(() => {
-      setHeroVerbIndex((i) => (i + 1) % heroVerbs.length);
-    }, 2600);
-    return () => clearInterval(id);
-  }, []);
+    const verb = heroVerbs[heroVerbIndex];
+    let timeout: ReturnType<typeof setTimeout>;
+    const TYPE_MS = 95;
+    const ERASE_MS = 55;
+    const HOLD_MS = 1600;
+    const REST_MS = 380;
+
+    if (heroPhase === "type") {
+      if (heroText.length < verb.length) {
+        timeout = setTimeout(() => setHeroText(verb.slice(0, heroText.length + 1)), TYPE_MS);
+      } else {
+        timeout = setTimeout(() => setHeroPhase("hold"), 0);
+      }
+    } else if (heroPhase === "hold") {
+      timeout = setTimeout(() => setHeroPhase("erase"), HOLD_MS);
+    } else if (heroPhase === "erase") {
+      if (heroText.length > 0) {
+        timeout = setTimeout(() => setHeroText(heroText.slice(0, -1)), ERASE_MS);
+      } else {
+        timeout = setTimeout(() => setHeroPhase("rest"), 0);
+      }
+    } else if (heroPhase === "rest") {
+      timeout = setTimeout(() => {
+        setHeroVerbIndex((i) => (i + 1) % heroVerbs.length);
+        setHeroPhase("type");
+      }, REST_MS);
+    }
+
+    return () => clearTimeout(timeout);
+  }, [heroText, heroVerbIndex, heroPhase]);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0]);
@@ -267,36 +294,16 @@ const Index = () => {
             </motion.span>
             <motion.h1
               variants={fadeUp}
-              className="mt-8 flex flex-wrap items-baseline gap-x-[0.3em] whitespace-nowrap font-semibold tracking-[-0.035em] text-white"
+              className="mt-8 whitespace-nowrap font-semibold tracking-[-0.035em] text-white"
               style={{ fontSize: "clamp(2.25rem, 6vw, 5.5rem)", lineHeight: 1 }}
             >
-              {/* Verb container — layout-animated so 'more listings.' glides
-                  into place when the verb width changes. AnimatePresence
-                  popLayout handles the y-axis swap of the verb itself. */}
-              <motion.span
-                layout
-                transition={{
-                  layout: { duration: 1.2, ease: EASE },
-                }}
-                className="relative inline-flex overflow-hidden"
-                style={{ height: "1em" }}
-              >
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.span
-                    key={heroVerb}
-                    initial={{ y: "-100%", opacity: 0, filter: "blur(8px)" }}
-                    animate={{ y: "0%", opacity: 1, filter: "blur(0px)" }}
-                    exit={{ y: "100%", opacity: 0, filter: "blur(8px)" }}
-                    transition={{ duration: 1.2, ease: EASE }}
-                    className="block leading-none"
-                  >
-                    {heroVerb}
-                  </motion.span>
-                </AnimatePresence>
-              </motion.span>
-              <motion.span layout transition={{ layout: { duration: 1.2, ease: EASE } }}>
-                more listings.
-              </motion.span>
+              <span aria-live="polite">{heroText}</span>
+              <span
+                aria-hidden
+                className="ml-[0.05em] inline-block w-[0.06em] animate-hero-caret bg-white align-baseline"
+                style={{ height: "0.85em", verticalAlign: "-0.05em" }}
+              />
+              {" "}more listings.
             </motion.h1>
             <motion.p
               variants={fadeUp}
