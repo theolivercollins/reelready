@@ -82,7 +82,20 @@ const Development = () => {
             <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            Upload a test image, see the proposed director prompt, rate + chat feedback, refine until it&apos;s perfect. Optional real Kling/Runway render per iteration.
+            Upload a test image, see the proposed director prompt, rate + chat feedback, refine until it&apos;s perfect. Optional real Kling/Runway render per iteration. Now with similarity retrieval — each new iteration is conditioned on past wins on structurally similar photos.
+          </p>
+        </Link>
+        <Link
+          to="/dashboard/development/prompt-lab/recipes"
+          className="group border border-border bg-background p-6 transition hover:border-foreground md:col-span-2"
+        >
+          <div className="flex items-center gap-3">
+            <FlaskConical className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+            <div className="label text-muted-foreground group-hover:text-foreground">Recipe library</div>
+            <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Validated director prompts keyed by archetype. Promoted from 5★ Lab iterations. When a new photo matches a recipe within distance threshold, the director is told to use the recipe verbatim.
           </p>
         </Link>
       </div>

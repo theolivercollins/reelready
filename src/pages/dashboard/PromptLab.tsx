@@ -27,6 +27,7 @@ import {
   type LabSession,
   type LabIteration,
 } from "@/lib/promptLabApi";
+import { promoteRecipe } from "@/lib/recipesApi";
 
 const RATING_TAGS = [
   "clean motion",
@@ -381,6 +382,85 @@ function EditableLabel({
   );
 }
 
+// ─── Promote iteration to recipe ───
+
+function PromoteRecipeControl({
+  iteration,
+  director,
+}: {
+  iteration: LabIteration;
+  director: NonNullable<LabIteration["director_output_json"]>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [archetype, setArchetype] = useState("");
+  const [tmpl, setTmpl] = useState(director.prompt);
+  const [busy, setBusy] = useState(false);
+  const [promoted, setPromoted] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (promoted) {
+    return (
+      <div className="mt-4 inline-flex items-center gap-2 rounded bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+        ✓ Promoted to recipe library
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" className="mt-4" onClick={() => setOpen(true)}>
+        <Sparkles className="mr-2 h-3 w-3" /> Promote to recipe
+      </Button>
+    );
+  }
+
+  async function submit() {
+    if (!archetype.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await promoteRecipe({ iteration_id: iteration.id, archetype: archetype.trim(), prompt_template: tmpl.trim() });
+      setPromoted(true);
+      setOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border border-border bg-muted/30 p-4 space-y-3">
+      <div className="label text-muted-foreground">Promote to recipe library</div>
+      <div>
+        <label className="text-xs text-muted-foreground">Archetype name</label>
+        <Input
+          value={archetype}
+          onChange={(e) => setArchetype(e.target.value)}
+          placeholder="e.g. kitchen_island_centered"
+          className="mt-1 font-mono text-xs"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground">Prompt template (use this verbatim on similar photos)</label>
+        <Textarea
+          value={tmpl}
+          onChange={(e) => setTmpl(e.target.value)}
+          className="mt-1 min-h-[60px] font-mono text-xs"
+        />
+      </div>
+      {err && <div className="text-xs text-destructive">{err}</div>}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+        <Button size="sm" onClick={submit} disabled={!archetype.trim() || busy}>
+          {busy ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Promote
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Retrieval chips (few-shot + recipe indicators) ───
 
 function RetrievalChips({ metadata }: { metadata: LabIteration["retrieval_metadata"] }) {
@@ -506,6 +586,11 @@ function IterationCard({
       {/* Clip player */}
       {iteration.clip_url && (
         <video src={iteration.clip_url} controls className="mt-5 w-full max-w-md border border-border" />
+      )}
+
+      {/* Promote to recipe (on 5★ iterations) */}
+      {iteration.rating === 5 && director && (
+        <PromoteRecipeControl iteration={iteration} director={director} />
       )}
 
       {/* Render controls (latest only) */}
