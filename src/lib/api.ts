@@ -1,4 +1,4 @@
-import type { Property, Photo, Scene, PipelineLog, DailyStat, CostEvent } from './types';
+import type { Property, Photo, Scene, PipelineLog, DailyStat, CostEvent, SceneRating, LearningData, PromptRevision } from './types';
 import { supabase } from './supabase';
 
 const API_BASE = '';
@@ -34,8 +34,29 @@ export async function fetchProperties(params?: {
   return apiFetch(`/api/properties${qs ? `?${qs}` : ''}`);
 }
 
-export async function fetchProperty(id: string): Promise<Property & { photos: Photo[]; scenes: Scene[]; costEvents: CostEvent[] }> {
+export async function fetchProperty(id: string): Promise<Property & { photos: Photo[]; scenes: (Scene & { rating: SceneRating | null })[]; costEvents: CostEvent[] }> {
   return apiFetch(`/api/properties/${id}`);
+}
+
+export async function rateScene(
+  sceneId: string,
+  rating: number,
+  comment: string | null,
+  tags: string[] | null,
+): Promise<SceneRating> {
+  return apiFetch(`/api/scenes/${sceneId}/rate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating, comment, tags }),
+  });
+}
+
+export async function fetchLearningData(): Promise<LearningData> {
+  return apiFetch(`/api/admin/learning`);
+}
+
+export async function fetchPromptRevisions(): Promise<{ prompts: Array<{ prompt_name: string; revisions: PromptRevision[] }> }> {
+  return apiFetch(`/api/admin/prompt-revisions`);
 }
 
 export async function fetchPropertyStatus(id: string): Promise<{

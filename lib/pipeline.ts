@@ -12,6 +12,8 @@ import {
   getProperty,
   addPropertyCost,
   recordCostEvent,
+  recordPromptRevisionIfChanged,
+  fetchRatedExamples,
   log,
 } from "./db.js";
 import { computeClaudeCost } from "./utils/claude-cost.js";
@@ -58,9 +60,28 @@ const REQUIRED_ROOM_TYPES: RoomType[] = [
 
 // ─── MAIN PIPELINE ─────────────────────────────────────────────
 
+// Snapshot every system prompt to prompt_revisions on each pipeline run so
+// the Learning dashboard can show a changelog. No-ops if the body is
+// unchanged from the last recorded version.
+async function snapshotPromptRevisions(): Promise<void> {
+  try {
+    await Promise.all([
+      recordPromptRevisionIfChanged("photo-analysis", PHOTO_ANALYSIS_SYSTEM),
+      recordPromptRevisionIfChanged("director", DIRECTOR_SYSTEM),
+      recordPromptRevisionIfChanged("preflight-qa", PROMPT_QA_SYSTEM),
+      recordPromptRevisionIfChanged("style-guide", STYLE_GUIDE_SYSTEM),
+      recordPromptRevisionIfChanged("qc-evaluator", QC_SYSTEM),
+    ]);
+  } catch {
+    // Best-effort; never block a pipeline run on changelog recording.
+  }
+}
+
 export async function runPipeline(propertyId: string): Promise<void> {
   try {
     await log(propertyId, "intake", "info", "Pipeline started");
+    // Best-effort prompt changelog snapshot (no-op if unchanged).
+    snapshotPromptRevisions();
 
     // Stage 1: Intake (photos already uploaded by the API route)
     // Just verify photos exist
@@ -392,19 +413,44 @@ async function runScripting(propertyId: string): Promise<void> {
     motion_rationale: p.motion_rationale ?? null,
   }));
 
+  // Pull recent rated examples from past runs and inject them into the
+  // director's user message as in-context learning signal. Winners (4-5
+  // stars) teach the pattern Claude should match; losers (1-2 stars with
+  // a comment) teach failure modes to avoid. Empty pools are fine — the
+  // block is simply omitted on the first N runs before you've rated
+  // anything.
+  let learningBlock = "";
+  try {
+    const [winners, losers] = await Promise.all([
+      fetchRatedExamples({ minRating: 4, limit: 5 }),
+      fetchRatedExamples({ maxRating: 2, limit: 5 }),
+    ]);
+    if (winners.length > 0 || losers.length > 0) {
+      const fmt = (r: Awaited<ReturnType<typeof fetchRatedExamples>>[number]) =>
+        `- Room: ${r.scene.room_type} | Movement: ${r.scene.camera_movement} | Provider: ${r.scene.provider ?? "—"} | Prompt: "${r.scene.prompt}"`
+        + (r.comment ? `\n  Admin note: ${r.comment}` : "")
+        + (r.tags && r.tags.length > 0 ? `\n  Tags: ${r.tags.join(", ")}` : "");
+      const winnersBlock = winners.length > 0
+        ? `\n✅ Worked well (rated 4-5):\n${winners.map(fmt).join("\n")}`
+        : "";
+      const losersBlock = losers.length > 0
+        ? `\n❌ Failed (rated 1-2):\n${losers.map(fmt).join("\n")}`
+        : "";
+      learningBlock = `\n\nPAST GENERATIONS — examples from prior runs, rated by the admin. Match the style of the ✅ examples and avoid the specific failure modes in the ❌ examples.${winnersBlock}${losersBlock}`;
+    }
+  } catch (err) {
+    await log(propertyId, "scripting", "warn",
+      `Learning injection failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // The property style guide is intentionally NOT injected into the
-  // director's user message anymore. The short-prompt director rule forbids
-  // material/color descriptions and adjacent-room narration in the per-scene
-  // prompt — leaking the style guide in here contradicted that rule and
-  // silently regressed Kling output. The guide is still written to
-  // properties.style_guide for potential future use (e.g. keyframe
-  // providers that accept multi-image context) but is no longer a
-  // per-scene input.
+  // director's user message. The short-prompt director rule forbids
+  // material/color descriptions in per-scene prompts.
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: DIRECTOR_SYSTEM,
-    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) }],
+    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) + learningBlock }],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";

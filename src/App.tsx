@@ -24,6 +24,7 @@ import DashboardProperties from "./pages/dashboard/Properties";
 import PropertyDetail from "./pages/dashboard/PropertyDetail";
 import DashboardLogs from "./pages/dashboard/Logs";
 import DashboardSettings from "./pages/dashboard/Settings";
+import DashboardLearning from "./pages/dashboard/Learning";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,6 +65,7 @@ const App = () => (
                   <Route path="properties" element={<DashboardProperties />} />
                   <Route path="properties/:id" element={<PropertyDetail />} />
                   <Route path="logs" element={<DashboardLogs />} />
+                  <Route path="learning" element={<DashboardLearning />} />
                   <Route path="settings" element={<DashboardSettings />} />
                 </Route>
               </Route>

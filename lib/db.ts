@@ -90,6 +90,145 @@ export async function addPropertyCost(id: string, costCents: number): Promise<vo
   if (error) throw error;
 }
 
+// ── Scene ratings (feedback loop) ──
+
+export interface SceneRating {
+  id: string;
+  scene_id: string;
+  property_id: string;
+  rating: number;
+  comment: string | null;
+  tags: string[] | null;
+  rated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function upsertSceneRating(input: {
+  scene_id: string;
+  property_id: string;
+  rating: number;
+  comment?: string | null;
+  tags?: string[] | null;
+  rated_by?: string | null;
+}): Promise<SceneRating> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("scene_ratings")
+    .upsert(
+      {
+        scene_id: input.scene_id,
+        property_id: input.property_id,
+        rating: input.rating,
+        comment: input.comment ?? null,
+        tags: input.tags ?? null,
+        rated_by: input.rated_by ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "scene_id" },
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SceneRating;
+}
+
+export async function getRatingsForProperty(propertyId: string): Promise<SceneRating[]> {
+  const { data, error } = await getSupabase()
+    .from("scene_ratings")
+    .select()
+    .eq("property_id", propertyId);
+  if (error) throw error;
+  return (data ?? []) as SceneRating[];
+}
+
+// Pull recent good + bad scene ratings across all properties for
+// in-context director learning. Each returned row includes the joined
+// scene fields the director needs to render an example line.
+export interface RatedSceneExample {
+  rating: number;
+  comment: string | null;
+  tags: string[] | null;
+  scene: {
+    room_type: string;
+    camera_movement: string;
+    prompt: string;
+    provider: string | null;
+  };
+}
+
+export async function fetchRatedExamples(params: {
+  minRating?: number;
+  maxRating?: number;
+  limit?: number;
+  sinceDays?: number;
+}): Promise<RatedSceneExample[]> {
+  const sinceDays = params.sinceDays ?? 30;
+  const sinceIso = new Date(Date.now() - sinceDays * 86400000).toISOString();
+  const supabase = getSupabase();
+  let query = supabase
+    .from("scene_ratings")
+    .select("rating, comment, tags, scenes!inner(room_type, camera_movement, prompt, provider)")
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(params.limit ?? 20);
+  if (params.minRating !== undefined) query = query.gte("rating", params.minRating);
+  if (params.maxRating !== undefined) query = query.lte("rating", params.maxRating);
+  const { data, error } = await query;
+  if (error) throw error;
+  return ((data ?? []) as unknown as Array<{
+    rating: number;
+    comment: string | null;
+    tags: string[] | null;
+    scenes: { room_type: string; camera_movement: string; prompt: string; provider: string | null };
+  }>).map(r => ({
+    rating: r.rating,
+    comment: r.comment,
+    tags: r.tags,
+    scene: r.scenes,
+  }));
+}
+
+// ── Prompt revisions (changelog) ──
+
+export async function recordPromptRevisionIfChanged(
+  promptName: string,
+  body: string,
+  note: string | null = null,
+): Promise<void> {
+  const bodyHash = hashString(body);
+  const supabase = getSupabase();
+  const { data: latest } = await supabase
+    .from("prompt_revisions")
+    .select("version, body_hash")
+    .eq("prompt_name", promptName)
+    .order("version", { ascending: false })
+    .limit(1);
+  const latestRow = latest?.[0] as { version: number; body_hash: string } | undefined;
+  if (latestRow && latestRow.body_hash === bodyHash) return;
+  const nextVersion = (latestRow?.version ?? 0) + 1;
+  const { error } = await supabase.from("prompt_revisions").insert({
+    prompt_name: promptName,
+    version: nextVersion,
+    body,
+    note,
+    body_hash: bodyHash,
+  });
+  if (error && !error.message?.includes("duplicate key")) throw error;
+}
+
+function hashString(s: string): string {
+  // Simple FNV-1a 64-bit hash — good enough to detect prompt body changes.
+  // Not cryptographic; we just need "did the text change since last run."
+  let h = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  for (let i = 0; i < s.length; i++) {
+    h ^= BigInt(s.charCodeAt(i));
+    h = (h * prime) & 0xffffffffffffffffn;
+  }
+  return h.toString(16);
+}
+
 // Detailed cost event captured from a real API response (tokens, credits,
 // provider units). Sum of cost_events.cost_cents for a property should
 // exactly match properties.total_cost_cents.

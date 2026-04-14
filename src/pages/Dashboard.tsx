@@ -1,11 +1,12 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { LayoutGrid, GitBranch, Building2, FileText, Settings as SettingsIcon } from "lucide-react";
+import { LayoutGrid, GitBranch, Building2, FileText, Settings as SettingsIcon, Sparkles } from "lucide-react";
 
 const navItems = [
   { to: "/dashboard", label: "Overview", icon: LayoutGrid, end: true },
   { to: "/dashboard/pipeline", label: "Pipeline", icon: GitBranch },
   { to: "/dashboard/properties", label: "Listings", icon: Building2 },
   { to: "/dashboard/logs", label: "Logs", icon: FileText },
+  { to: "/dashboard/learning", label: "Learning", icon: Sparkles },
   { to: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
 

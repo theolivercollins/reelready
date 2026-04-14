@@ -72,6 +72,53 @@ export interface PipelineLog {
   metadata: any;
 }
 
+export interface SceneRating {
+  id: string;
+  scene_id: string;
+  property_id: string;
+  rating: number;
+  comment: string | null;
+  tags: string[] | null;
+  rated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptRevision {
+  id: string;
+  prompt_name: string;
+  version: number;
+  body: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface LearningData {
+  totalRatings: number;
+  avgAll: number | null;
+  winners: Array<{
+    id: string;
+    rating: number;
+    comment: string | null;
+    tags: string[] | null;
+    created_at: string;
+    scene_id: string;
+    scene_number: number;
+    room_type: string;
+    camera_movement: string;
+    prompt: string;
+    provider: string | null;
+    clip_url: string | null;
+    duration_seconds: number | null;
+    property_id: string | null;
+    property_address: string | null;
+  }>;
+  losers: LearningData["winners"];
+  combos: Array<{ room_type: string; camera_movement: string; avg_rating: number; count: number }>;
+  providers: Array<{ provider: string; avg_rating: number; count: number }>;
+  trend: Array<{ day: string; avg_rating: number; count: number }>;
+}
+
 export interface CostEvent {
   id: string;
   scene_id: string | null;

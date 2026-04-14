@@ -2,10 +2,163 @@ import { useParams, Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, RotateCcw, Copy, Check, Loader2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Download, RotateCcw, Copy, Check, Loader2, AlertTriangle, Star } from "lucide-react";
 import { formatCents, formatDuration } from "@/lib/types";
-import type { Property, Photo, Scene, PipelineLog, CostEvent } from "@/lib/types";
-import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts } from "@/lib/api";
+import type { Property, Photo, Scene, PipelineLog, CostEvent, SceneRating } from "@/lib/types";
+import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts, rateScene } from "@/lib/api";
+
+const FAILURE_TAGS = [
+  "hallucinated architecture",
+  "wrong motion direction",
+  "camera exited room",
+  "warped geometry",
+  "added people/objects",
+  "too static / boring",
+  "too fast",
+  "low quality",
+];
+const SUCCESS_TAGS = [
+  "clean motion",
+  "cinematic",
+  "perfect",
+  "stayed in the room",
+];
+
+type RatedScene = Scene & { rating: SceneRating | null };
+
+function RatingWidget({
+  scene,
+  onRated,
+}: {
+  scene: RatedScene;
+  onRated: (rating: SceneRating) => void;
+}) {
+  const [hoverValue, setHoverValue] = useState<number | null>(null);
+  const [rating, setRating] = useState<number>(scene.rating?.rating ?? 0);
+  const [comment, setComment] = useState<string>(scene.rating?.comment ?? "");
+  const [tags, setTags] = useState<string[]>(scene.rating?.tags ?? []);
+  const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState<boolean>(!!scene.rating);
+  const [justSaved, setJustSaved] = useState(false);
+
+  async function save(nextRating: number, nextComment: string, nextTags: string[]) {
+    setSaving(true);
+    try {
+      const row = await rateScene(
+        scene.id,
+        nextRating,
+        nextComment.trim() ? nextComment.trim() : null,
+        nextTags.length > 0 ? nextTags : null,
+      );
+      onRated(row);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 1500);
+    } catch (err) {
+      alert(`Rating save failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function clickStar(value: number) {
+    setRating(value);
+    setExpanded(true);
+    save(value, comment, tags);
+  }
+
+  function toggleTag(tag: string) {
+    const next = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
+    setTags(next);
+    if (rating > 0) save(rating, comment, next);
+  }
+
+  function commentBlur() {
+    if (rating > 0) save(rating, comment, tags);
+  }
+
+  const availableTags = rating >= 4 ? SUCCESS_TAGS : rating > 0 && rating <= 2 ? FAILURE_TAGS : [...SUCCESS_TAGS, ...FAILURE_TAGS];
+
+  return (
+    <div className="border-t border-border/60 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-0.5">
+          {[1, 2, 3, 4, 5].map((n) => {
+            const filled = (hoverValue ?? rating) >= n;
+            return (
+              <button
+                key={n}
+                type="button"
+                onMouseEnter={() => setHoverValue(n)}
+                onMouseLeave={() => setHoverValue(null)}
+                onClick={() => clickStar(n)}
+                className="p-0.5 transition-transform hover:scale-110"
+                aria-label={`${n} star`}
+              >
+                <Star
+                  className={`h-4 w-4 ${filled ? "fill-foreground text-foreground" : "text-muted-foreground/40"}`}
+                  strokeWidth={1.5}
+                />
+              </button>
+            );
+          })}
+          {rating > 0 && (
+            <span className="tabular ml-2 text-[10px] text-muted-foreground">{rating}/5</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {justSaved && <Check className="h-3 w-3 text-accent" />}
+          {rating > 0 && !expanded && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="label text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Add note
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onBlur={commentBlur}
+            placeholder={rating <= 2 ? "What went wrong? (required for low ratings)" : "What worked? (optional)"}
+            rows={2}
+            className="w-full resize-y border border-border bg-background p-2 text-xs leading-snug placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-foreground"
+          />
+          {rating > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {availableTags.map((tag) => {
+                const selected = tags.includes(tag);
+                const isFail = FAILURE_TAGS.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className={`label px-2 py-1 transition-colors ${
+                      selected
+                        ? isFail
+                          ? "bg-destructive text-destructive-foreground"
+                          : "bg-foreground text-background"
+                        : "border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const statusTone: Record<string, string> = {
   complete: "text-accent",
@@ -15,7 +168,7 @@ const statusTone: Record<string, string> = {
 
 const PropertyDetail = () => {
   const { id } = useParams();
-  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: Scene[]; costEvents: CostEvent[] }) | null>(null);
+  const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: RatedScene[]; costEvents: CostEvent[] }) | null>(null);
   const [logs, setLogs] = useState<(PipelineLog & { properties?: { address: string } })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +332,21 @@ const PropertyDetail = () => {
                     </a>
                   </Button>
                 </div>
+                <RatingWidget
+                  scene={scene}
+                  onRated={(row) => {
+                    setProperty((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            scenes: prev.scenes.map((s) =>
+                              s.id === scene.id ? { ...s, rating: row } : s,
+                            ),
+                          }
+                        : prev,
+                    );
+                  }}
+                />
               </div>
             ))}
           </div>
