@@ -267,26 +267,31 @@ const Index = () => {
             </motion.span>
             <motion.h1
               variants={fadeUp}
-              className="mt-8 font-semibold tracking-[-0.035em] text-white"
-              style={{ fontSize: "clamp(3rem, 8vw, 7rem)", lineHeight: 0.95 }}
+              className="mt-8 whitespace-nowrap font-semibold tracking-[-0.035em] text-white"
+              style={{ fontSize: "clamp(2.25rem, 6vw, 5.5rem)", lineHeight: 1 }}
             >
-              <span className="relative inline-block align-baseline overflow-hidden" style={{ minWidth: "1ch" }}>
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.span
-                    key={heroVerb}
-                    initial={{ y: "100%", opacity: 0 }}
-                    animate={{ y: "0%", opacity: 1 }}
-                    exit={{ y: "-100%", opacity: 0 }}
-                    transition={{ duration: 0.9, ease: EASE }}
-                    className="inline-block"
-                  >
-                    {heroVerb}
-                  </motion.span>
-                </AnimatePresence>
+              {/* Reserved-width verb slot — invisible widest verb pins the
+                  layout so 'more listings.' never shifts as the verb cycles. */}
+              <span className="relative inline-block align-baseline">
+                <span aria-hidden className="invisible">
+                  {heroVerbs.reduce((a, b) => (b.length > a.length ? b : a))}
+                </span>
+                <span className="absolute inset-y-0 left-0 right-0 overflow-hidden">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={heroVerb}
+                      initial={{ y: "110%", opacity: 0 }}
+                      animate={{ y: "0%", opacity: 1 }}
+                      exit={{ y: "-110%", opacity: 0 }}
+                      transition={{ duration: 1.1, ease: EASE }}
+                      className="absolute inset-0"
+                    >
+                      {heroVerb}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
               </span>{" "}
-              more
-              <br />
-              listings.
+              more listings.
             </motion.h1>
             <motion.p
               variants={fadeUp}
