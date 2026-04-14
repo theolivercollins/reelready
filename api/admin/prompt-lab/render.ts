@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .update({
         clip_url: result.clipUrl,
         provider: result.provider,
-        cost_cents: (iteration.cost_cents ?? 0) + result.costCents,
+        cost_cents: Math.round((iteration.cost_cents ?? 0) + result.costCents),
       })
       .eq("id", iteration_id)
       .select()

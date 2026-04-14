@@ -20,6 +20,7 @@ import {
   createSession,
   getSession,
   deleteSession,
+  updateSession,
   analyzeSession,
   refineIteration,
   renderIteration,
@@ -260,9 +261,14 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
           </Link>
           <div>
             <span className="label text-muted-foreground">— Prompt Lab session</span>
-            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.02em]">
-              {session.label || "Untitled session"}
-            </h2>
+            <EditableLabel
+              value={session.label}
+              placeholder="Untitled session"
+              onSave={async (v) => {
+                await updateSession(sessionId, { label: v });
+                reload();
+              }}
+            />
           </div>
         </div>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -322,6 +328,56 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Editable label (click-to-edit) ───
+
+function EditableLabel({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string | null;
+  placeholder: string;
+  onSave: (v: string) => void | Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={async () => {
+          setEditing(false);
+          if (draft.trim() !== (value ?? "").trim()) await onSave(draft.trim());
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") {
+            setDraft(value ?? "");
+            setEditing(false);
+          }
+        }}
+        className="mt-1 w-full bg-transparent text-2xl font-semibold tracking-[-0.02em] outline-none border-b border-border focus:border-foreground"
+      />
+    );
+  }
+  return (
+    <h2
+      onClick={() => setEditing(true)}
+      className="mt-1 text-2xl font-semibold tracking-[-0.02em] cursor-text hover:opacity-70"
+      title="Click to edit"
+    >
+      {value || <span className="text-muted-foreground/60">{placeholder}</span>}
+    </h2>
   );
 }
 

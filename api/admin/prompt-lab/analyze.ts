@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         analysis_prompt_hash: ANALYSIS_PROMPT_HASH,
         director_output_json: scene,
         director_prompt_hash: DIRECTOR_PROMPT_HASH,
-        cost_cents: aCost + dCost,
+        cost_cents: Math.round(aCost + dCost),
       })
       .select()
       .single();

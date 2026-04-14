@@ -78,6 +78,10 @@ export function getSession(sessionId: string): Promise<{ session: LabSession; it
   return fetchJSON(`/api/admin/prompt-lab/${sessionId}`);
 }
 
+export function updateSession(sessionId: string, patch: { label?: string; archetype?: string }): Promise<LabSession> {
+  return fetchJSON(`/api/admin/prompt-lab/${sessionId}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
 export function deleteSession(sessionId: string): Promise<void> {
   return fetchJSON(`/api/admin/prompt-lab/${sessionId}`, { method: "DELETE" });
 }

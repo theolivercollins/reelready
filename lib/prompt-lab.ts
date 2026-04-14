@@ -112,7 +112,7 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
   const results: PhotoAnalysisResult[] = JSON.parse(jsonMatch[0]);
   if (!results[0]) throw new Error("Photo analyzer returned empty array");
   const usageCost = computeClaudeCost(response.usage as never);
-  return { analysis: results[0], costCents: usageCost.costCents };
+  return { analysis: results[0], costCents: Math.round(usageCost.costCents) };
 }
 
 // ---- Run director on a single-photo input ----
@@ -148,7 +148,7 @@ export async function directSinglePhoto(
   const scene = parsed.scenes?.[0];
   if (!scene) throw new Error("Director returned no scenes");
   const usageCost = computeClaudeCost(response.usage as never);
-  return { scene, costCents: usageCost.costCents };
+  return { scene, costCents: Math.round(usageCost.costCents) };
 }
 
 // ---- Refine director prompt with user feedback ----
@@ -227,7 +227,7 @@ ${DIRECTOR_SYSTEM}`;
     provider_preference: null,
   };
   const usageCost = computeClaudeCost(response.usage as never);
-  return { scene, rationale: parsed.rationale ?? "", costCents: usageCost.costCents };
+  return { scene, rationale: parsed.rationale ?? "", costCents: Math.round(usageCost.costCents) };
 }
 
 // ---- Actually render a clip via Kling/Runway ----
@@ -258,14 +258,14 @@ export async function renderLabClip(params: {
     return {
       clipUrl: null,
       provider: provider.name,
-      costCents: result.costCents ?? 0,
+      costCents: Math.round(result.costCents ?? 0),
       error: result.error ?? "render failed",
     };
   }
   return {
     clipUrl: result.videoUrl,
     provider: provider.name,
-    costCents: result.costCents ?? 0,
+    costCents: Math.round(result.costCents ?? 0),
     error: null,
   };
 }

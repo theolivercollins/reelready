@@ -29,6 +29,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ session, iterations: iterations ?? [] });
   }
 
+  if (req.method === "PATCH") {
+    const { label, archetype } = (req.body ?? {}) as { label?: string | null; archetype?: string | null };
+    const patch: Record<string, string | null> = {};
+    if (label !== undefined) patch.label = label?.toString().trim() || null;
+    if (archetype !== undefined) patch.archetype = archetype?.toString().trim() || null;
+    if (Object.keys(patch).length === 0) return res.status(400).json({ error: "no fields to update" });
+    const { data, error } = await supabase
+      .from("prompt_lab_sessions")
+      .update(patch)
+      .eq("id", sessionId)
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
   if (req.method === "DELETE") {
     const { data: session } = await supabase
       .from("prompt_lab_sessions")
@@ -43,6 +59,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(204).end();
   }
 
-  res.setHeader("Allow", "GET, DELETE");
+  res.setHeader("Allow", "GET, PATCH, DELETE");
   return res.status(405).json({ error: "Method not allowed" });
 }

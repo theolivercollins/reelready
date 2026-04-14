@@ -73,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         analysis_prompt_hash: prev.analysis_prompt_hash,
         director_output_json: scene,
         director_prompt_hash: DIRECTOR_PROMPT_HASH,
-        cost_cents: costCents,
+        cost_cents: Math.round(costCents),
         user_comment: rationale ? `[refiner rationale] ${rationale}` : null,
       })
       .select()
