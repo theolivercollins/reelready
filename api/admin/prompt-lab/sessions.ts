@@ -50,6 +50,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         row.iteration_count += 1;
         if (typeof it.rating === "number") {
           row.best_rating = Math.max(row.best_rating ?? 0, it.rating);
+          // A 5★ rating means the admin explicitly approved this iteration —
+          // counts as completed regardless of whether auto-promote succeeded
+          // (auto-promote can skip via the dedup RPC).
+          if (it.rating === 5) row.completed = true;
         }
         if (it.provider_task_id && !it.clip_url && !it.render_error) row.pending_render = true;
         if (it.clip_url && it.rating == null) row.ready_for_approval = true;
