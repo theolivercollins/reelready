@@ -54,6 +54,7 @@ EVALUATION CRITERIA
    - Mirrors, glass walls, or polished surfaces dominate and will warp under motion
    - Head-on static vignette with no motion path
    - Fisheye / hyper-wide perspective with no depth cue
+   - DOORWAY TRAP (critical): the photo shows a foyer, hallway, or entry with a prominent doorway/arch leading to an unseen space. The image-to-video model will walk the camera through the opening and hallucinate whatever is beyond. Includes: foyers with the front door open or an archway into the great room; hallways with a doorway at the vanishing point; rooms with a large unseen-space opening comprising more than ~25% of the frame. Mark these video_viable=false even if the photo itself is beautiful.
 
    video_viable is TRUE when:
    - There is a clear forward, lateral, upward, or reveal direction the camera can move
@@ -73,33 +74,51 @@ EVALUATION CRITERIA
    tilt_down          — vertical pivot downward from ceiling/view to a floor feature (hardwood, tile, fireplace hearth)
    crane_up           — vertical rise over counters, railings, or furniture to reveal the layout beyond (the "kitchen island reveal")
    crane_down         — vertical descent from high vantage into the room
-   reveal             — pass a foreground element (column, wall edge, plant) to expose the space hiding behind it
+   reveal             — camera starts with a FOREGROUND ELEMENT occluding a hero feature, then moves past the foreground to expose the feature. The photo must have an identifiable foreground element (wall edge, column, doorframe, potted plant, counter corner, archway) that the camera can physically pass in front of. If no such foreground element exists in the photo, DO NOT pick reveal — pick push_in or dolly instead.
    drone_push_in      — aerial approach toward the property from a distance (aerial photos only)
    drone_pull_back    — aerial retreat from the facade outward to reveal lot and neighborhood (aerial photos only)
    top_down           — overhead bird's-eye view showing roofline, pool, or lot geometry (aerial photos only)
    low_angle_glide    — near-floor horizontal glide making ceilings feel taller (grand entry halls, great rooms with dramatic ceilings)
+   feature_closeup    — extreme close-up on ONE hero feature with shallow depth of field. Use only when the photo frames a single statement element tightly enough that the model can keep the subject in focus and blur everything else: a standalone tub, a pendant chandelier, a fireplace mantel close-up, a chef's range, a vanity faucet, the front door with hardware. DO NOT pick feature_closeup on wide establishing shots — the feature must already dominate the frame.
 
    DO NOT emit "slow_pan" (dead verb, 0% success rate).
    DO NOT emit "orbital_slow" (renamed to "orbit").
 
    Motion-fit rules (strong defaults, use judgment):
-   - Kitchen with visible island + coffered ceiling → crane_up (over the island) or reveal (past the island)
+   - Kitchen with visible island + coffered ceiling → crane_up (over the island) or dolly_left_to_right across it
    - Kitchen tunnel view down the counter → push_in
    - Kitchen side angle showing the full counter length → dolly_left_to_right or dolly_right_to_left
+   - Kitchen with an occluding wall/column/corner in the foreground AND a clear hero feature behind → reveal (name the foreground element in motion_rationale)
    - Living room with coffered/vaulted ceiling → tilt_up or crane_up
    - Living room with picture window → low_angle_glide or pull_out
    - Master bedroom with bed as focal → push_in toward the bed, OR pull_out revealing the suite
-   - Bathroom with freestanding tub → push_in toward the tub
+   - Bathroom with freestanding tub in tight frame → feature_closeup (shallow DOF) OR push_in toward the tub
    - Bathroom with double vanity → dolly_left_to_right across the vanity
-   - Entry/foyer with staircase or chandelier → tilt_up or low_angle_glide
-   - Hallway with strong vanishing point → push_in (never past a doorway, stop at the vanishing point)
-   - Exterior front of house (ground level) → pull_out or orbit depending on angle
-   - Exterior back / yard → parallax or dolly
-   - Aerial pointing AT the house from the air → drone_push_in
-   - Aerial pulling BACK from the house → drone_pull_back
-   - Aerial directly overhead → top_down
-   - Pool close-up with foreground foliage → parallax
-   - Pool wide with the water as the subject → drone_push_in (if aerial) or orbit (if ground level)
+   - Tight detail shot of a single statement object (chandelier, faucet, range, pendant cluster, hardware) → feature_closeup
+   - Entry/foyer with staircase or chandelier → tilt_up ONLY if the ceiling dominates the frame; otherwise reject as doorway trap
+   - Hallway → only pick if the vanishing point is a wall or niche, NOT a doorway. If a doorway is at the end, video_viable=false.
+   - Exterior front (ground level): pull_out centered on the facade, OR orbit if the photo shows a three-quarter angle
+   - Exterior back / yard: parallax or dolly past a foreground element
+   - Aerial pointing AT the house: drone_push_in
+   - Aerial pulling BACK from the house: drone_pull_back
+   - Aerial directly overhead: top_down
+   - Pool close-up with foreground foliage: parallax
+   - Pool wide with the water as the subject: drone_push_in (if aerial) or orbit (if ground level)
+
+   EXTERIOR-SPECIFIC HARD RULES (since exterior scenes are the production
+   workhorse and small prompt mistakes have caused bad Runway output):
+   - The prompt must name ONE focal element only. Ban prompts that list
+     multiple targets ("revealing the driveway, palms, and entry") —
+     this causes the model to invent content for whichever target isn't
+     visible in the source frame.
+   - Drone motions must specify direction with simple words: "forward",
+     "backward", "upward", "rising", "descending". Do NOT use "from X
+     toward Y" — that construction confuses Runway about motion direction.
+   - Drone motions may include an altitude hint: "rooftop height",
+     "high altitude", "low altitude near the treeline".
+   - motion_rationale for exterior photos must identify the ONE focal
+     subject the camera centers on (e.g., "the arched entry portico",
+     "the canal-front rear facade", "the full lot from high altitude").
 
 10. motion_rationale: ONE short sentence (under 15 words) explaining why the motion fits, referencing a SPECIFIC visible feature. Example: "crane up over the waterfall granite island revealing the coffered ceiling and pendant lights". If video_viable is false, use the rationale to explain why not. Example: "camera trapped behind sink, island occludes forward direction, no clean motion path".
 

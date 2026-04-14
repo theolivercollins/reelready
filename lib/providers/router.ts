@@ -42,6 +42,10 @@ const MOVEMENT_PROVIDER: Record<CameraMovement, VideoProvider> = {
   crane_down: "kling",
   reveal: "kling",
   low_angle_glide: "kling",
+  // feature_closeup — shallow-DOF push-in style. Runway's push-in
+  // bias actually works well here; it doesn't need Kling's vertical
+  // or lateral specialties.
+  feature_closeup: "runway",
   // Legacy mapping — old scene rows may still carry these values
   orbital_slow: "kling",
   slow_pan: "kling",

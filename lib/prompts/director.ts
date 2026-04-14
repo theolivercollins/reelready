@@ -29,7 +29,7 @@ Formula: [speed adjective] [style adjective] [movement verb] [direction or targe
 
 Style adjectives (always include at least one): smooth, cinematic, slow, steady
 
-14-verb cinematography vocabulary (what they do and when to use them):
+15-verb cinematography vocabulary (what they do and when to use them):
 - push in — camera moves straight forward toward a focal subject (door, island, tub, bed, fireplace, view)
 - pull out — camera retreats from a subject to reveal scale and context
 - orbit — camera circles around a fixed anchor point (interior: kitchen island, dining table, staircase; exterior: the house itself)
@@ -39,23 +39,25 @@ Style adjectives (always include at least one): smooth, cinematic, slow, steady
 - tilt down — vertical pivot downward from ceiling or view to land on a floor feature
 - crane up — camera rises vertically to lift over counters, railings, or furniture and reveal the layout beyond (the classic "kitchen island reveal")
 - crane down — camera descends from a high vantage into the scene
-- reveal — camera moves past a foreground element (column, wall edge, plant, doorway) to expose the space hiding behind it
+- reveal — camera starts with a FOREGROUND ELEMENT occluding part of the hero feature, then moves forward or sideways past that foreground element to expose the feature. A reveal REQUIRES an identifiable foreground element named in the prompt — a wall corner, doorframe edge, kitchen island end, column, potted plant, or similar. Without an explicit foreground, reveal collapses into a generic push-in and is indistinguishable from push_in. Prompt format: "smooth cinematic reveal past the [foreground element] to the [hero feature]"
 - drone push in — aerial approach toward the property from a distance, establishing location
 - drone pull back — aerial retreat from the facade outward, revealing lot, neighborhood, and surroundings (the classic property opening move)
 - top down — straight-down aerial shot showing roofline, pool, or lot geometry
 - low angle glide — camera travels near floor height to make ceilings feel taller and spaces grander
+- feature closeup — extreme close-up on a single hero feature with shallow depth of field, background softly blurred. Use opportunistically when a photo tightly frames one statement object (freestanding tub, chandelier, fireplace mantel, chef's range, pendant cluster, vanity faucet, front door hardware). Max 1-2 per video, used as accent shots between the wider establishing and room clips. Prompt format: "cinematic slow push in with shallow depth of field on the [hero feature], background softly blurred"
 
 Good prompt examples (these are the QUALITY BAR — match this style, reference a SPECIFIC feature by name from the photo's key_features):
 - "smooth cinematic crane up over the waterfall granite island"
-- "steady cinematic drone pull back from the waterfront facade"
+- "steady cinematic drone pull back rising backward and upward from the front facade"
 - "slow cinematic tilt up from the entry door to the coffered ceiling"
-- "smooth cinematic reveal past the kitchen island into the living room"
+- "smooth cinematic reveal past the kitchen island corner to the fireplace alcove"
 - "slow cinematic push in toward the freestanding soaking tub"
+- "cinematic slow push in with shallow depth of field on the freestanding tub, background softly blurred"
 - "smooth cinematic orbit around the dining table and chandelier"
 - "smooth cinematic dolly right across the double vanity"
 - "steady cinematic low angle glide through the great room"
 - "smooth cinematic top down of the pool and spa deck"
-- "smooth cinematic drone push in toward the front facade"
+- "smooth cinematic drone flying forward at rooftop height toward the front facade"
 - "slow cinematic tilt down from the vaulted ceiling to the hardwood floor"
 
 Bad prompt examples (DO NOT DO THIS):
@@ -63,6 +65,9 @@ Bad prompt examples (DO NOT DO THIS):
 - Stability anchors: "smooth dolly right across the kitchen, preserving the cabinets. The camera stays in the room and does not pass through any doorway."
 - Generic target: "slow cinematic push in to the kitchen" (say WHAT in the kitchen — the island, the range, the vanity)
 - Dead verb: "smooth cinematic slow pan right across the living room" (slow pan is banned)
+- Multi-target list on exteriors: "smooth cinematic drone pull back revealing the waterfront lot, dual boat lifts, and screened pool enclosure" (three targets = model invents; pick ONE)
+- "from X toward Y" on drone moves: "drone push in from the street toward the canal-front home" (confuses direction; use "drone flying forward at rooftop height toward the front facade")
+- Reveal without a foreground element: "smooth cinematic reveal past the frosted-glass entry doors" (a doorway is NOT a foreground element the camera passes — it becomes a push-in through the door. Name a physical occluder: a wall corner, column, plant, counter edge)
 
 RULES FOR THE PROMPT STRING:
 - ONE sentence. Under 20 words. Lowercase is fine.
@@ -76,8 +81,8 @@ RULES FOR THE PROMPT STRING:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA MOVEMENT ENUM (for the camera_movement FIELD only, not the prompt)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-The camera_movement JSON field must be ONE of these 14 exact strings:
-"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "tilt_up" | "tilt_down" | "crane_up" | "crane_down" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide"
+The camera_movement JSON field must be ONE of these 15 exact strings:
+"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "tilt_up" | "tilt_down" | "crane_up" | "crane_down" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide" | "feature_closeup"
 
 DO NOT emit "slow_pan" or "orbital_slow" — those are legacy values retained only for historical DB rows. New runs must use the 14 values above.
 
@@ -99,18 +104,18 @@ Select scenes based on which room types are present in the photo list.
 Quotas (only apply if that room type is present):
 - exterior_front / front of house: 2-3 clips (drone and ground-level both count toward exterior total)
 - aerial: 1-2 clips (counts toward exterior total)
-- living_room: 2 clips
-- kitchen: 1-2 clips
+- living_room: 2 clips (hard min 2 when 2+ viable photos exist)
+- kitchen: 2-3 clips (hard min 2; pick 3 when 3+ viable kitchen photos exist and at least one has depth_rating=high or aesthetic≥8)
 - dining: 1 clip
 - exterior_back / backyard: 1 clip
 - lanai: 1 clip (if present)
 - pool: 2 clips (if present)
-- master_bedroom: 1-2 clips
+- master_bedroom: 2 clips (hard min 2 when 2+ viable photos exist)
 - bedroom (each additional): 1-2 clips per bedroom
 - bathroom: 1-2 clips per bathroom
 - hallway / foyer / garage / other "extras": 1-2 clips total across all extras combined
 
-Within a 1-2 range, pick 2 if the room has depth_rating "high" OR aesthetic_score >= 8, otherwise pick 1.
+Multi-clip rooms (kitchen, living_room, master_bedroom) MUST pick complementary angles, not duplicates. Prefer variety over raw aesthetic score when picking the second and third clip — an island shot + a cabinet wall shot is better than two island shots. Motion_rationale of the picked photos should differ.
 
 Final scene count lands between 10 and 16. Total duration 30-60 seconds. Skip room types that aren't present. Do not pad with filler.
 
@@ -160,6 +165,44 @@ Preferred assignments by room + angle (defaults; override if suggested_motion sa
 DEPTH OVERRIDES:
 - depth_rating "high": unlock parallax, reveal, crane_up, crane_down
 - depth_rating "low": prefer push_in, pull_out, tilt_up, tilt_down; avoid parallax and reveal
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXTERIOR-SPECIFIC HARD RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Exterior shots are the production workhorse and small prompt mistakes
+cause Runway to invent content or reverse motion direction. All
+exterior_front / exterior_back / aerial / pool prompts MUST follow
+these rules:
+
+1. ONE FOCAL SUBJECT ONLY. Pick the single most important thing in the
+   photo and make that the target. Banned: "revealing the driveway,
+   palms, and entry" or any list of 2+ targets in one prompt. Pick one.
+
+2. NO "FROM X TOWARD Y" CONSTRUCTIONS. Runway confuses direction when
+   given this construction on drone moves. Use "toward [subject]" only.
+   - Bad:  "drone push in from the street toward the canal-front home"
+   - Good: "drone flying forward at rooftop height toward the front facade"
+
+3. DRONE MOTIONS MAY INCLUDE AN ALTITUDE HINT. Options: "low altitude",
+   "near the treeline", "rooftop height", "high altitude". Helps Runway
+   produce the right vertical position.
+
+4. NO "REVEALING X, Y, AND Z" LISTS. This gives the model permission to
+   invent the list. Use "revealing [one thing]" or omit the clause.
+
+5. PROMPT STRUCTURE FOR DRONE MOVES:
+   "[speed] cinematic drone [motion verb] at [altitude] toward/from/across [ONE focal subject]"
+   Examples:
+   - "smooth cinematic drone flying forward at rooftop height toward the front facade"
+   - "smooth cinematic drone rising backward and upward from the front facade"
+   - "steady cinematic drone arcing slowly around the property at high altitude"
+   - "smooth cinematic top down of the pool enclosure and canal dock"
+
+6. PROMPT STRUCTURE FOR GROUND-LEVEL EXTERIORS:
+   "[speed] cinematic [verb] centered on the [ONE focal subject]"
+   Examples:
+   - "steady cinematic pull out centered on the arched entry portico"
+   - "slow cinematic orbit around the white columned entryway"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE

@@ -47,6 +47,7 @@ export type CameraMovement =
   | "drone_pull_back"       // aerial retreat — the classic opening move
   | "top_down"              // overhead bird's-eye
   | "low_angle_glide"       // floor-height glide making ceilings feel taller
+  | "feature_closeup"       // extreme close-up with shallow depth of field on one hero feature
   // Legacy — present ONLY so historical scene rows still typecheck.
   // The photo analyzer and director MUST NOT emit these for new runs.
   | "orbital_slow"
