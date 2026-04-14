@@ -267,31 +267,36 @@ const Index = () => {
             </motion.span>
             <motion.h1
               variants={fadeUp}
-              className="mt-8 whitespace-nowrap font-semibold tracking-[-0.035em] text-white"
+              className="mt-8 flex flex-wrap items-baseline gap-x-[0.3em] whitespace-nowrap font-semibold tracking-[-0.035em] text-white"
               style={{ fontSize: "clamp(2.25rem, 6vw, 5.5rem)", lineHeight: 1 }}
             >
-              {/* Reserved-width verb slot — invisible widest verb pins the
-                  layout so 'more listings.' never shifts as the verb cycles. */}
-              <span className="relative inline-block align-baseline">
-                <span aria-hidden className="invisible">
-                  {heroVerbs.reduce((a, b) => (b.length > a.length ? b : a))}
-                </span>
-                <span className="absolute inset-y-0 left-0 right-0 overflow-hidden">
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={heroVerb}
-                      initial={{ y: "110%", opacity: 0 }}
-                      animate={{ y: "0%", opacity: 1 }}
-                      exit={{ y: "-110%", opacity: 0 }}
-                      transition={{ duration: 1.1, ease: EASE }}
-                      className="absolute inset-0"
-                    >
-                      {heroVerb}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
-              </span>{" "}
-              more listings.
+              {/* Verb container — layout-animated so 'more listings.' glides
+                  into place when the verb width changes. AnimatePresence
+                  popLayout handles the y-axis swap of the verb itself. */}
+              <motion.span
+                layout
+                transition={{
+                  layout: { duration: 1.2, ease: EASE },
+                }}
+                className="relative inline-flex overflow-hidden"
+                style={{ height: "1em" }}
+              >
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span
+                    key={heroVerb}
+                    initial={{ y: "100%", opacity: 0, filter: "blur(8px)" }}
+                    animate={{ y: "0%", opacity: 1, filter: "blur(0px)" }}
+                    exit={{ y: "-100%", opacity: 0, filter: "blur(8px)" }}
+                    transition={{ duration: 1.2, ease: EASE }}
+                    className="block leading-none"
+                  >
+                    {heroVerb}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.span>
+              <motion.span layout transition={{ layout: { duration: 1.2, ease: EASE } }}>
+                more listings.
+              </motion.span>
             </motion.h1>
             <motion.p
               variants={fadeUp}
