@@ -29,11 +29,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       completed: boolean;
       pending_render: boolean;
       ready_for_approval: boolean;
+      has_feedback: boolean;
     }> = {};
     if (ids.length > 0) {
       const { data: its } = await supabase
         .from("prompt_lab_iterations")
-        .select("id, session_id, rating, clip_url, provider_task_id, render_error")
+        .select("id, session_id, rating, tags, user_comment, refinement_instruction, clip_url, provider_task_id, render_error")
         .in("session_id", ids);
       const iterationIdToSession = new Map<string, string>();
       for (const it of its ?? []) {
@@ -44,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           completed: false,
           pending_render: false,
           ready_for_approval: false,
+          has_feedback: false,
         });
         row.iteration_count += 1;
         if (typeof it.rating === "number") {
@@ -51,6 +53,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (it.provider_task_id && !it.clip_url && !it.render_error) row.pending_render = true;
         if (it.clip_url && it.rating == null) row.ready_for_approval = true;
+        // "Has feedback" = admin has rated, tagged, commented, or refined at
+        // least one iteration. Auto-generated analysis doesn't count.
+        const feedback = typeof it.rating === "number"
+          || (Array.isArray(it.tags) && it.tags.length > 0)
+          || (typeof it.user_comment === "string" && it.user_comment.trim().length > 0 && !it.user_comment.startsWith("[refiner rationale]"))
+          || (typeof it.refinement_instruction === "string" && it.refinement_instruction.trim().length > 0);
+        if (feedback) row.has_feedback = true;
       }
 
       const iterationIds = Array.from(iterationIdToSession.keys());
@@ -75,6 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           completed: false,
           pending_render: false,
           ready_for_approval: false,
+          has_feedback: false,
         }),
       })),
     });

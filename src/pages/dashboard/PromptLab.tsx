@@ -258,7 +258,10 @@ type ShotStatus = "not_started" | "in_progress" | "completed";
 
 function statusOf(s: LabSession): ShotStatus {
   if (s.completed) return "completed";
-  if ((s.iteration_count ?? 0) === 0) return "not_started";
+  // "Need to start" = admin hasn't given any feedback yet (no ratings,
+  // tags, comments, or refinements). An auto-analyzed session without any
+  // human input still counts as "need to start."
+  if (!s.has_feedback) return "not_started";
   return "in_progress";
 }
 
@@ -924,8 +927,19 @@ function IterationCard({
   const rating_saving = busy === `rate-${iteration.id}`;
 
   return (
-    <div className="border border-border bg-background p-6">
-      <div className="flex items-center justify-between">
+    <div
+      className={
+        isLatest
+          ? "relative border-2 border-foreground bg-background p-6 shadow-sm"
+          : "border border-border bg-background/60 p-6 opacity-80"
+      }
+    >
+      {isLatest && (
+        <div className="absolute -top-[1px] -left-[1px] rounded-br bg-foreground px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-background">
+          Latest · active
+        </div>
+      )}
+      <div className={`flex items-center justify-between ${isLatest ? "mt-3" : ""}`}>
         <div className="flex flex-wrap items-center gap-2">
           <span className="label text-muted-foreground">Iteration {iteration.iteration_number}</span>
           {iteration.provider && (
