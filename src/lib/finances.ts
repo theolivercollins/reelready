@@ -36,6 +36,20 @@ export async function createTokenPurchase(input: {
   return data as TokenPurchase;
 }
 
+export async function updateTokenPurchase(
+  id: string,
+  patch: Partial<Pick<TokenPurchase, "provider" | "amount_cents" | "units" | "unit_type" | "note" | "purchased_at">>,
+): Promise<TokenPurchase> {
+  const { data, error } = await supabase
+    .from("token_purchases")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as TokenPurchase;
+}
+
 export async function deleteTokenPurchase(id: string): Promise<void> {
   const { error } = await supabase.from("token_purchases").delete().eq("id", id);
   if (error) throw error;
@@ -66,6 +80,20 @@ export async function createExpense(input: {
       description: input.description || null,
       incurred_at: input.incurred_at || new Date().toISOString(),
     })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Expense;
+}
+
+export async function updateExpense(
+  id: string,
+  patch: Partial<Pick<Expense, "category" | "amount_cents" | "description" | "incurred_at">>,
+): Promise<Expense> {
+  const { data, error } = await supabase
+    .from("expenses")
+    .update(patch)
+    .eq("id", id)
     .select()
     .single();
   if (error) throw error;
@@ -110,9 +138,33 @@ export async function createRevenueEntry(input: {
   return data as RevenueEntry;
 }
 
+export async function updateRevenueEntry(
+  id: string,
+  patch: Partial<Pick<RevenueEntry, "source" | "amount_cents" | "property_id" | "note" | "received_at">>,
+): Promise<RevenueEntry> {
+  const { data, error } = await supabase
+    .from("revenue_entries")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as RevenueEntry;
+}
+
 export async function deleteRevenueEntry(id: string): Promise<void> {
   const { error } = await supabase.from("revenue_entries").delete().eq("id", id);
   if (error) throw error;
+}
+
+// Count of delivered videos (for cost-per-video calculations)
+export async function countDeliveredVideos(): Promise<number> {
+  const { count, error } = await supabase
+    .from("properties")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "complete");
+  if (error) throw error;
+  return count ?? 0;
 }
 
 // ─── Cost events (real per-call spend) ────────────────────────────

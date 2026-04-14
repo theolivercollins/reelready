@@ -263,6 +263,9 @@ const PropertyDetail = () => {
   const deliverables = scenes.filter((s) => s.clip_url);
   const costTotalCents = costEvents.reduce((s, e) => s + (e.cost_cents ?? 0), 0);
   const tone = statusTone[property.status] || "text-foreground";
+  // Primary image: prefer the first selected photo, fall back to the first
+  // photo overall. photos[] is already ordered by created_at from fetchProperty.
+  const primaryPhoto = photos.find((p) => p.selected) ?? photos[0] ?? null;
 
   return (
     <div className="space-y-16">
@@ -274,17 +277,53 @@ const PropertyDetail = () => {
         >
           <ArrowLeft className="h-3 w-3" /> All listings
         </Link>
-        <div className="mt-6 flex items-end justify-between gap-6">
+        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div>
             <span className={`label ${tone}`}>{property.status.replace("_", " ")}</span>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">{property.address}</h2>
-            <p className="tabular mt-2 text-xs text-muted-foreground">
-              {property.bedrooms}bd · {property.bathrooms}ba · ${property.price.toLocaleString()} · {property.listing_agent}
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em] md:text-4xl">
+              {property.address}
+            </h2>
+            <p className="tabular mt-3 text-xs text-muted-foreground">
+              {property.bedrooms}bd · {property.bathrooms}ba · ${property.price.toLocaleString()} ·{" "}
+              {property.listing_agent}
             </p>
+            <div className="mt-8">
+              <Button variant="outline" onClick={handleRerun} disabled={rerunning}>
+                <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun pipeline
+              </Button>
+            </div>
           </div>
-          <Button variant="outline" onClick={handleRerun} disabled={rerunning}>
-            <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun pipeline
-          </Button>
+
+          {/* Primary listing image */}
+          <div className="order-first lg:order-last">
+            <div className="relative aspect-[4/3] w-full overflow-hidden border border-border bg-secondary">
+              {primaryPhoto ? (
+                <img
+                  src={primaryPhoto.file_url}
+                  alt={primaryPhoto.file_name || property.address}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-muted-foreground/40">
+                  <span className="label">— No photos yet</span>
+                </div>
+              )}
+              {primaryPhoto && (
+                <span className="label absolute left-3 top-3 bg-black/60 px-2 py-1 text-white backdrop-blur-sm">
+                  Primary
+                </span>
+              )}
+            </div>
+            {primaryPhoto && primaryPhoto.room_type && (
+              <p className="label mt-3 text-muted-foreground">
+                {primaryPhoto.room_type.replace(/_/g, " ")}
+                {primaryPhoto.key_features && primaryPhoto.key_features.length > 0 && (
+                  <> · {primaryPhoto.key_features.slice(0, 2).join(" · ")}</>
+                )}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

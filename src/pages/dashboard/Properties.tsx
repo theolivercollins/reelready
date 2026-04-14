@@ -7,7 +7,9 @@ import { Search, ChevronLeft, ChevronRight, Loader2, ArrowRight } from "lucide-r
 import { formatCents, getRelativeTime } from "@/lib/types";
 import type { Property } from "@/lib/types";
 import { fetchProperties } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
+import { ImageOff } from "lucide-react";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -35,6 +37,7 @@ const Properties = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -58,6 +61,26 @@ const Properties = () => {
         setTotal(res.total);
         setTotalPages(res.totalPages);
         setError(null);
+
+        // Batch-load one thumbnail per property. Prefer the first selected
+        // (hero) photo; fall back to the first photo overall if none selected.
+        const ids = res.properties.map((p) => p.id);
+        if (ids.length > 0) {
+          const { data: photos } = await supabase
+            .from("photos")
+            .select("property_id, file_url, selected, created_at")
+            .in("property_id", ids)
+            .order("selected", { ascending: false })
+            .order("created_at", { ascending: true });
+          if (cancelled) return;
+          const map: Record<string, string> = {};
+          for (const ph of photos || []) {
+            if (!map[ph.property_id]) map[ph.property_id] = ph.file_url as string;
+          }
+          setThumbnails(map);
+        } else {
+          setThumbnails({});
+        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load properties");
@@ -114,7 +137,8 @@ const Properties = () => {
 
       {/* Table */}
       <div className="border-t border-border">
-        <div className="grid grid-cols-[3fr_1.2fr_1fr_1.2fr_0.6fr_1fr_1fr_0.5fr] gap-6 border-b border-border py-4">
+        <div className="grid grid-cols-[64px_3fr_1.2fr_1fr_1.2fr_0.6fr_1fr_1fr_0.5fr] gap-6 border-b border-border py-4">
+          <span className="label text-muted-foreground">Photo</span>
           <span className="label text-muted-foreground">Property</span>
           <span className="label text-muted-foreground">Agent</span>
           <span className="label text-right text-muted-foreground">Price</span>
@@ -136,14 +160,33 @@ const Properties = () => {
         ) : (
           properties.map((p, i) => {
             const tone = statusTone[p.status] || "text-foreground";
+            const thumb = thumbnails[p.id];
             return (
               <motion.div
                 key={p.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: i * 0.02, ease: EASE }}
-                className="group grid grid-cols-[3fr_1.2fr_1fr_1.2fr_0.6fr_1fr_1fr_0.5fr] items-center gap-6 border-b border-border py-5 transition-colors duration-500 hover:bg-secondary/40"
+                className="group grid grid-cols-[64px_3fr_1.2fr_1fr_1.2fr_0.6fr_1fr_1fr_0.5fr] items-center gap-6 border-b border-border py-5 transition-colors duration-500 hover:bg-secondary/40"
               >
+                <Link
+                  to={`/dashboard/properties/${p.id}`}
+                  className="relative block aspect-[4/3] w-16 overflow-hidden border border-border bg-secondary"
+                  aria-label={`View ${p.address}`}
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-700 ease-cinematic group-hover:scale-105"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-muted-foreground/40">
+                      <ImageOff className="h-4 w-4" strokeWidth={1.5} />
+                    </span>
+                  )}
+                </Link>
                 <Link to={`/dashboard/properties/${p.id}`} className="truncate text-sm font-medium hover:underline">
                   {p.address}
                 </Link>
