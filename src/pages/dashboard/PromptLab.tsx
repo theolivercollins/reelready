@@ -70,7 +70,7 @@ function SessionList() {
     try {
       const { url, path } = await uploadLabImage(file);
       const session = await createSession({ image_url: url, image_path: path, label: label || undefined });
-      navigate(`/dashboard/prompt-lab/${session.id}`);
+      navigate(`/dashboard/development/prompt-lab/${session.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -136,7 +136,7 @@ function SessionList() {
           {sessions.map((s) => (
             <Link
               key={s.id}
-              to={`/dashboard/prompt-lab/${s.id}`}
+              to={`/dashboard/development/prompt-lab/${s.id}`}
               className="border border-border bg-background transition hover:border-foreground"
             >
               <div className="aspect-video w-full overflow-hidden bg-muted">
@@ -199,7 +199,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   async function handleDelete() {
     if (!confirm("Delete this session and all iterations?")) return;
     await deleteSession(sessionId);
-    navigate("/dashboard/prompt-lab");
+    navigate("/dashboard/development/prompt-lab");
   }
 
   async function handleRender(iterationId: string, provider?: "kling" | "runway" | null) {
@@ -256,7 +256,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard/prompt-lab" className="text-muted-foreground hover:text-foreground">
+          <Link to="/dashboard/development/prompt-lab" className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>

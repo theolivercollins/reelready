@@ -22,6 +22,8 @@ import {
   Sparkles,
   DollarSign,
   FlaskConical,
+  Code2,
+  ChevronDown,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
@@ -32,10 +34,46 @@ const dashboardNav = [
   { to: "/dashboard/properties", label: "Listings", icon: Building2 },
   { to: "/dashboard/logs", label: "Logs", icon: FileText },
   { to: "/dashboard/finances", label: "Finances", icon: DollarSign },
-  { to: "/dashboard/learning", label: "Learning", icon: Sparkles },
-  { to: "/dashboard/prompt-lab", label: "Prompt Lab", icon: FlaskConical },
   { to: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
+
+function DevelopmentNav() {
+  const location = useLocation();
+  const active = location.pathname.startsWith("/dashboard/development");
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={`relative flex items-center gap-2 whitespace-nowrap py-[26px] text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ease-cinematic outline-none ${
+            active ? "text-foreground after:absolute after:inset-x-0 after:bottom-[-1px] after:h-[1px] after:bg-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Code2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Development
+          <ChevronDown className="h-3 w-3 opacity-70" strokeWidth={1.5} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/development" className="cursor-pointer">
+            <Code2 className="mr-2 h-3.5 w-3.5" /> Overview
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/development/learning" className="cursor-pointer">
+            <Sparkles className="mr-2 h-3.5 w-3.5" /> Learning
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/development/prompt-lab" className="cursor-pointer">
+            <FlaskConical className="mr-2 h-3.5 w-3.5" /> Prompt Lab
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function TopNav() {
   const { user, profile, signOut } = useAuth();
@@ -72,7 +110,27 @@ export function TopNav() {
         {/* Dashboard sub-nav — lives in the header when we're in /dashboard */}
         {inDashboard && isAdmin && (
           <nav className="ml-10 hidden items-center gap-8 md:flex">
-            {dashboardNav.map(({ to, label, icon: Icon, end }) => (
+            {dashboardNav.slice(0, -1).map(({ to, label, icon: Icon, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) =>
+                  `relative flex items-center gap-2 whitespace-nowrap py-[26px] text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ease-cinematic ${
+                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  } ${
+                    isActive
+                      ? "after:absolute after:inset-x-0 after:bottom-[-1px] after:h-[1px] after:bg-foreground"
+                      : ""
+                  }`
+                }
+              >
+                <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                {label}
+              </NavLink>
+            ))}
+            <DevelopmentNav />
+            {dashboardNav.slice(-1).map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
