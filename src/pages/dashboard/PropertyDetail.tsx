@@ -445,8 +445,18 @@ const PropertyDetail = () => {
                       </p>
                     )}
                     {photo.key_features && photo.key_features.length > 0 && (
-                      <p className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">
-                        {photo.key_features.join(" · ")}
+                      <ul className="space-y-0.5 text-[10px] leading-tight text-muted-foreground">
+                        {photo.key_features.map((f, i) => (
+                          <li key={i} className="flex gap-1">
+                            <span className="text-foreground/40">·</span>
+                            <span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {photo.composition && (
+                      <p className="border-t border-border/50 pt-2 text-[10px] italic leading-snug text-muted-foreground">
+                        {photo.composition}
                       </p>
                     )}
                     {!photo.selected && photo.discard_reason && (

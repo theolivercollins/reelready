@@ -41,6 +41,7 @@ export interface Photo {
   aesthetic_score: number;
   depth_rating: "high" | "medium" | "low";
   key_features: string[] | null;
+  composition: string | null;
   selected: boolean;
   discard_reason: string | null;
   video_viable: boolean | null;
