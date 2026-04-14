@@ -1,3 +1,4 @@
+node_modules
 node_modules/
 dist/
 .next/
@@ -8,3 +9,4 @@ dist/
 *.tsbuildinfo
 .vercel
 docs/CREDENTIALS.md
+.DS_Store

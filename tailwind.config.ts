@@ -15,8 +15,15 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
-        display: ["Space Grotesk", "Inter", "system-ui", "sans-serif"],
+        mono: ["Inter", "system-ui", "sans-serif"],
+        display: ["Inter", "system-ui", "sans-serif"],
+      },
+      transitionTimingFunction: {
+        cinematic: "cubic-bezier(0.16, 1, 0.3, 1)",
+        "cinematic-in": "cubic-bezier(0.7, 0, 0.84, 0)",
+      },
+      transitionDuration: {
+        cinematic: "700ms",
       },
       colors: {
         border: "hsl(var(--border))",

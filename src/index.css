@@ -1,77 +1,101 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Listing Elevate design system
+ * Palette: near-black, white, deep navy, electric blue
+ * Type: Inter only, semibold (600) for headers
+ * Radius: 0 — sharp geometric corners everywhere
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 214 32% 18%;
-    --card: 40 20% 98%;
-    --card-foreground: 214 32% 18%;
+    /* Light mode — editorial white with deep blue accent */
+    --background: 0 0% 100%;          /* #ffffff */
+    --foreground: 220 40% 8%;         /* near-black with navy cast */
+    --card: 0 0% 100%;
+    --card-foreground: 220 40% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 214 32% 18%;
-    --primary: 214 32% 18%;
+    --popover-foreground: 220 40% 8%;
+
+    --primary: 220 40% 8%;            /* near-black — main ink */
     --primary-foreground: 0 0% 100%;
-    --secondary: 40 15% 95%;
-    --secondary-foreground: 214 32% 18%;
-    --muted: 40 10% 95%;
-    --muted-foreground: 214 10% 45%;
-    --accent: 38 70% 50%;
+
+    --secondary: 220 15% 96%;         /* soft near-white */
+    --secondary-foreground: 220 40% 8%;
+
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 220 90% 56%;            /* electric blue — the ONE accent */
     --accent-foreground: 0 0% 100%;
+
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --info: 217 91% 60%;
+    --info: 220 90% 56%;
     --info-foreground: 0 0% 100%;
-    --border: 40 15% 88%;
-    --input: 40 15% 88%;
-    --ring: 214 32% 18%;
-    --radius: 0.25rem;
+
+    --border: 220 15% 91%;
+    --input: 220 15% 91%;
+    --ring: 220 90% 56%;
+
+    --radius: 0rem;                   /* zero radius everywhere by default */
+
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 214 32% 18%;
-    --sidebar-primary: 214 32% 18%;
+    --sidebar-foreground: 220 40% 8%;
+    --sidebar-primary: 220 40% 8%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 40 15% 95%;
-    --sidebar-accent-foreground: 214 32% 18%;
-    --sidebar-border: 40 15% 88%;
-    --sidebar-ring: 214 32% 18%;
+    --sidebar-accent: 220 15% 96%;
+    --sidebar-accent-foreground: 220 40% 8%;
+    --sidebar-border: 220 15% 91%;
+    --sidebar-ring: 220 90% 56%;
   }
 
   .dark {
-    --background: 30 15% 4%;
-    --foreground: 38 30% 92%;
-    --card: 30 12% 8%;
-    --card-foreground: 38 30% 92%;
-    --popover: 30 12% 8%;
-    --popover-foreground: 38 30% 92%;
-    --primary: 38 80% 50%;
-    --primary-foreground: 30 15% 4%;
-    --secondary: 30 10% 14%;
-    --secondary-foreground: 38 30% 92%;
-    --muted: 30 10% 14%;
-    --muted-foreground: 35 12% 55%;
-    --accent: 30 10% 14%;
-    --accent-foreground: 38 30% 92%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --info: 217 91% 60%;
+    /* Dark mode — near-black canvas with navy depth, electric blue accent */
+    --background: 222 40% 4%;         /* #050811 — deeper than black, navy cast */
+    --foreground: 0 0% 100%;
+    --card: 222 32% 7%;               /* slightly lifted surface */
+    --card-foreground: 0 0% 100%;
+    --popover: 222 32% 7%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;             /* inverted — white is now primary ink */
+    --primary-foreground: 222 40% 4%;
+
+    --secondary: 222 28% 11%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 222 28% 11%;
+    --muted-foreground: 220 12% 64%;
+
+    --accent: 217 100% 62%;           /* brighter electric blue for dark mode pop */
+    --accent-foreground: 222 40% 4%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 0%;
+    --info: 217 100% 62%;
     --info-foreground: 0 0% 100%;
-    --border: 30 10% 16%;
-    --input: 30 10% 16%;
-    --ring: 38 80% 50%;
-    --sidebar-background: 30 12% 6%;
-    --sidebar-foreground: 38 20% 90%;
-    --sidebar-primary: 38 80% 50%;
-    --sidebar-primary-foreground: 30 15% 4%;
-    --sidebar-accent: 30 8% 13%;
-    --sidebar-accent-foreground: 38 20% 90%;
-    --sidebar-border: 30 8% 13%;
-    --sidebar-ring: 38 80% 50%;
+
+    --border: 222 24% 14%;
+    --input: 222 24% 14%;
+    --ring: 217 100% 62%;
+
+    --sidebar-background: 222 40% 4%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 222 40% 4%;
+    --sidebar-accent: 222 28% 11%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 222 24% 14%;
+    --sidebar-ring: 217 100% 62%;
   }
 }
 
@@ -79,26 +103,83 @@
   * {
     @apply border-border;
   }
+  html {
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
   }
+  /* Legacy utility classes from old system — now route to Inter */
   .font-mono {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
   }
   .font-display {
-    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 }
 
 @layer utilities {
-  .animate-pulse-slow {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* Tabular numbers for prices, stats, IDs */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
   }
-  .text-gradient-gold {
-    background: linear-gradient(135deg, hsl(38 70% 50%), hsl(42 80% 58%), hsl(38 70% 50%));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+
+  /* Editorial display scale — used for hero + page titles */
+  .display-xl {
+    font-size: clamp(3rem, 8vw, 6.5rem);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+  }
+  .display-lg {
+    font-size: clamp(2.25rem, 5vw, 4rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .display-md {
+    font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+  }
+
+  /* Uppercase label — brand system label for section headers, tags */
+  .label {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  /* Cinematic ease — used by all Framer Motion transitions */
+  .ease-cinematic {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Subtle grain overlay for hero surfaces */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 }

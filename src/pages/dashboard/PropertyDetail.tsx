@@ -1,13 +1,17 @@
 import { useParams, Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Download, RotateCcw, Camera, Clock, DollarSign, Copy, Check, Loader2, AlertTriangle } from "lucide-react";
-import { getStatusColor, formatCents, formatDuration } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Download, RotateCcw, Copy, Check, Loader2, AlertTriangle } from "lucide-react";
+import { formatCents, formatDuration } from "@/lib/types";
 import type { Property, Photo, Scene, PipelineLog, CostEvent } from "@/lib/types";
 import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts } from "@/lib/api";
+
+const statusTone: Record<string, string> = {
+  complete: "text-accent",
+  failed: "text-destructive",
+  needs_review: "text-destructive",
+};
 
 const PropertyDetail = () => {
   const { id } = useParams();
@@ -32,15 +36,17 @@ const PropertyDetail = () => {
         setProperty(propData);
         setLogs(logsData.logs);
         setError(null);
-      } catch (err: any) {
+      } catch (err) {
         if (cancelled) return;
-        setError(err.message || "Failed to load property");
+        setError(err instanceof Error ? err.message : "Failed to load property");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const handleRerun = async () => {
@@ -50,8 +56,8 @@ const PropertyDetail = () => {
       await rerunProperty(id);
       const propData = await fetchProperty(id);
       setProperty(propData);
-    } catch (err: any) {
-      alert(`Failed to rerun: ${err.message}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Rerun failed");
     } finally {
       setRerunning(false);
     }
@@ -75,18 +81,23 @@ const PropertyDetail = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex justify-center py-24">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (error || !property) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center space-y-2">
-          <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
-          <p className="text-sm text-destructive">{error || "Property not found"}</p>
+      <div className="border border-destructive/40 bg-destructive/5 p-10">
+        <div className="flex items-start gap-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-destructive/40 bg-destructive/10 text-destructive">
+            <AlertTriangle className="h-5 w-5" strokeWidth={1.5} />
+          </div>
+          <div>
+            <span className="label text-destructive">— Error</span>
+            <p className="mt-3 text-sm text-muted-foreground">{error || "Property not found"}</p>
+          </div>
         </div>
       </div>
     );
@@ -95,206 +106,171 @@ const PropertyDetail = () => {
   const photos = property.photos || [];
   const scenes = property.scenes || [];
   const costEvents = property.costEvents || [];
-  const photoById = new Map(photos.map(p => [p.id, p]));
-  const deliverables = scenes.filter(s => s.clip_url);
+  const photoById = new Map(photos.map((p) => [p.id, p]));
+  const deliverables = scenes.filter((s) => s.clip_url);
   const costTotalCents = costEvents.reduce((s, e) => s + (e.cost_cents ?? 0), 0);
+  const tone = statusTone[property.status] || "text-foreground";
 
   return (
-    <div className="space-y-6 max-w-[1200px] mx-auto">
+    <div className="space-y-16">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/dashboard/properties"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-lg font-bold">{property.address}</h1>
-          <p className="text-sm text-muted-foreground font-mono">
-            {property.bedrooms} bed • {property.bathrooms} bath • ${property.price.toLocaleString()} • {property.listing_agent}
-          </p>
+      <div>
+        <Link
+          to="/dashboard/properties"
+          className="label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" /> All listings
+        </Link>
+        <div className="mt-6 flex items-end justify-between gap-6">
+          <div>
+            <span className={`label ${tone}`}>{property.status.replace("_", " ")}</span>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">{property.address}</h2>
+            <p className="tabular mt-2 text-xs text-muted-foreground">
+              {property.bedrooms}bd · {property.bathrooms}ba · ${property.price.toLocaleString()} · {property.listing_agent}
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleRerun} disabled={rerunning}>
+            <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun pipeline
+          </Button>
         </div>
-        <Badge className={getStatusColor(property.status)} variant="secondary">{property.status}</Badge>
       </div>
 
       {/* Stat strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid gap-px border border-border bg-border md:grid-cols-4">
         {[
-          { label: "Total Cost", value: formatCents(property.total_cost_cents), icon: DollarSign },
-          { label: "Processing Time", value: property.processing_time_ms > 0 ? formatDuration(property.processing_time_ms) : "In progress", icon: Clock },
-          { label: "Photos", value: `${property.selected_photo_count}/${property.photo_count} selected`, icon: Camera },
-          { label: "Clips Delivered", value: `${deliverables.length}/${scenes.length}`, icon: null },
-        ].map(s => (
-          <Card key={s.label}>
-            <CardContent className="pt-3 pb-3">
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-              <p className="font-mono text-sm font-semibold mt-1">{s.value}</p>
-            </CardContent>
-          </Card>
+          { label: "Total cost", value: formatCents(property.total_cost_cents) },
+          {
+            label: "Processing time",
+            value: property.processing_time_ms > 0 ? formatDuration(property.processing_time_ms) : "—",
+          },
+          { label: "Photos", value: `${property.selected_photo_count} / ${property.photo_count}` },
+          { label: "Clips delivered", value: `${deliverables.length} / ${scenes.length}` },
+        ].map((s) => (
+          <div key={s.label} className="bg-background p-6">
+            <span className="label text-muted-foreground">{s.label}</span>
+            <div className="tabular mt-4 text-2xl font-semibold tracking-[-0.02em]">{s.value}</div>
+          </div>
         ))}
-      </div>
-
-      <div className="flex gap-2">
-        <Button variant="outline" className="gap-2" onClick={handleRerun} disabled={rerunning}>
-          <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun Pipeline
-        </Button>
       </div>
 
       {/* Deliverables */}
       {deliverables.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              Deliverables
-              <Badge variant="secondary" className="text-[10px] h-4">{deliverables.length} clip{deliverables.length === 1 ? "" : "s"}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {deliverables.map(scene => (
-                <div key={scene.id} className="border border-border rounded-md overflow-hidden bg-card">
-                  <video
-                    src={scene.clip_url!}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    className="w-full aspect-video bg-black"
-                  />
-                  <div className="p-2 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">
-                        Scene {scene.scene_number} · {scene.camera_movement.replace(/_/g, " ")}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground font-mono">
-                        {scene.provider ?? "—"} · {scene.duration_seconds}s
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline" className="gap-1 shrink-0" asChild>
-                      <a href={scene.clip_url!} download={`scene_${scene.scene_number}.mp4`}>
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
-                    </Button>
+        <section>
+          <span className="label text-muted-foreground">— Deliverables</span>
+          <h3 className="mt-3 text-xl font-semibold tracking-[-0.01em]">
+            {deliverables.length} {deliverables.length === 1 ? "clip" : "clips"} ready
+          </h3>
+          <div className="mt-8 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+            {deliverables.map((scene) => (
+              <div key={scene.id} className="border border-border bg-secondary/30">
+                <video src={scene.clip_url!} controls playsInline preload="metadata" className="aspect-video w-full bg-black" />
+                <div className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold">
+                      Scene {scene.scene_number} · {scene.camera_movement.replace(/_/g, " ")}
+                    </p>
+                    <p className="tabular mt-1 text-[10px] text-muted-foreground">
+                      {scene.provider ?? "—"} · {scene.duration_seconds}s
+                    </p>
                   </div>
+                  <Button asChild size="sm" variant="outline">
+                    <a href={scene.clip_url!} download={`scene_${scene.scene_number}.mp4`}>
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
-      {/* Cost breakdown — real per-call numbers from providers */}
+      {/* Cost breakdown */}
       {costEvents.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              Cost Breakdown
-              <Badge variant="secondary" className="text-[10px] h-4 font-mono">{formatCents(costTotalCents)}</Badge>
-            </CardTitle>
-            <p className="text-[11px] text-muted-foreground">Real per-call costs: Claude token usage, Runway credits, Kling units.</p>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border text-left text-[10px] tracking-wider uppercase text-muted-foreground">
-                    <th className="py-1.5 pr-3">Stage</th>
-                    <th className="py-1.5 pr-3">Provider</th>
-                    <th className="py-1.5 pr-3">Scene</th>
-                    <th className="py-1.5 pr-3 text-right">Units</th>
-                    <th className="py-1.5 pl-3 text-right">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {costEvents.map(ev => {
-                    const sceneNum = ev.scene_id
-                      ? scenes.find(s => s.id === ev.scene_id)?.scene_number ?? "—"
-                      : "—";
-                    const unitsLabel = ev.units_consumed != null
-                      ? `${Math.round(ev.units_consumed).toLocaleString()} ${ev.unit_type ?? ""}`.trim()
-                      : "—";
-                    return (
-                      <tr key={ev.id} className="border-b border-border/40">
-                        <td className="py-1.5 pr-3 capitalize">{ev.stage}</td>
-                        <td className="py-1.5 pr-3 font-mono text-[11px]">{ev.provider}</td>
-                        <td className="py-1.5 pr-3 font-mono text-[11px] text-muted-foreground">{sceneNum}</td>
-                        <td className="py-1.5 pr-3 text-right font-mono text-[11px]">{unitsLabel}</td>
-                        <td className="py-1.5 pl-3 text-right font-mono">{formatCents(ev.cost_cents)}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr>
-                    <td colSpan={4} className="py-2 pr-3 text-right font-semibold">Total</td>
-                    <td className="py-2 pl-3 text-right font-mono font-semibold">{formatCents(costTotalCents)}</td>
-                  </tr>
-                </tbody>
-              </table>
+        <section>
+          <span className="label text-muted-foreground">— Costs</span>
+          <h3 className="mt-3 text-xl font-semibold tracking-[-0.01em]">
+            Real per-call breakdown · <span className="text-muted-foreground">{formatCents(costTotalCents)}</span>
+          </h3>
+          <div className="mt-8 border-t border-border">
+            <div className="grid grid-cols-[1.2fr_1fr_0.6fr_1fr_1fr] gap-6 border-b border-border py-4">
+              <span className="label text-muted-foreground">Stage</span>
+              <span className="label text-muted-foreground">Provider</span>
+              <span className="label text-right text-muted-foreground">Scene</span>
+              <span className="label text-right text-muted-foreground">Units</span>
+              <span className="label text-right text-muted-foreground">Cost</span>
             </div>
-          </CardContent>
-        </Card>
+            {costEvents.map((ev) => {
+              const sceneNum = ev.scene_id ? scenes.find((s) => s.id === ev.scene_id)?.scene_number ?? "—" : "—";
+              const unitsLabel =
+                ev.units_consumed != null
+                  ? `${Math.round(ev.units_consumed).toLocaleString()} ${ev.unit_type ?? ""}`.trim()
+                  : "—";
+              return (
+                <div key={ev.id} className="grid grid-cols-[1.2fr_1fr_0.6fr_1fr_1fr] items-center gap-6 border-b border-border py-3 text-xs">
+                  <span className="capitalize">{ev.stage}</span>
+                  <span className="tabular">{ev.provider}</span>
+                  <span className="tabular text-right text-muted-foreground">{sceneNum}</span>
+                  <span className="tabular text-right">{unitsLabel}</span>
+                  <span className="tabular text-right font-semibold">{formatCents(ev.cost_cents)}</span>
+                </div>
+              );
+            })}
+            <div className="grid grid-cols-[1.2fr_1fr_0.6fr_1fr_1fr] gap-6 py-5">
+              <span className="label text-foreground">Total</span>
+              <span /> <span /> <span />
+              <span className="tabular text-right text-base font-semibold">{formatCents(costTotalCents)}</span>
+            </div>
+          </div>
+        </section>
       )}
 
-      {/* Superview tabs */}
-      <Tabs defaultValue="photos" onValueChange={(v) => { if (v === "prompts") loadPrompts(); }}>
+      {/* Tabs */}
+      <Tabs defaultValue="photos" onValueChange={(v) => v === "prompts" && loadPrompts()}>
         <TabsList>
-          <TabsTrigger value="photos">Photos ({photos.length})</TabsTrigger>
-          <TabsTrigger value="shots">Shot Plan ({scenes.length})</TabsTrigger>
+          <TabsTrigger value="photos">Photos · {photos.length}</TabsTrigger>
+          <TabsTrigger value="shots">Shot plan · {scenes.length}</TabsTrigger>
           <TabsTrigger value="logs">Timeline</TabsTrigger>
-          <TabsTrigger value="prompts">System Prompts</TabsTrigger>
+          <TabsTrigger value="prompts">System prompts</TabsTrigger>
         </TabsList>
 
-        {/* ─── PHOTOS — Claude vision ratings overlaid on each image ─── */}
-        <TabsContent value="photos" className="space-y-3">
+        {/* Photos */}
+        <TabsContent value="photos" className="mt-10">
           {photos.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No photos</p>
+            <p className="py-16 text-center text-sm text-muted-foreground">No photos</p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {photos.map(photo => (
+            <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4">
+              {photos.map((photo) => (
                 <div
                   key={photo.id}
-                  className={`border rounded-md overflow-hidden bg-card ${
-                    photo.selected ? "border-primary" : "border-border opacity-70"
-                  }`}
+                  className={`border bg-secondary/30 ${photo.selected ? "border-foreground/60" : "border-border opacity-70"}`}
                 >
-                  <div className="relative aspect-[4/3] bg-muted">
-                    <img
-                      src={photo.file_url}
-                      alt={photo.file_name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    {photo.selected && (
-                      <Badge className="absolute top-1.5 left-1.5 bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
-                        SELECTED
-                      </Badge>
-                    )}
-                    {!photo.selected && (
-                      <Badge className="absolute top-1.5 left-1.5 bg-destructive text-destructive-foreground text-[9px] h-4 px-1.5">
-                        DISCARDED
-                      </Badge>
-                    )}
+                  <div className="relative aspect-[4/3] bg-secondary">
+                    <img src={photo.file_url} alt={photo.file_name} className="h-full w-full object-cover" loading="lazy" />
+                    <span
+                      className={`label absolute left-2 top-2 px-2 py-1 ${
+                        photo.selected ? "bg-foreground text-background" : "bg-destructive text-destructive-foreground"
+                      }`}
+                    >
+                      {photo.selected ? "Selected" : "Discarded"}
+                    </span>
                   </div>
-                  <div className="p-2 space-y-1.5">
+                  <div className="space-y-2 p-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium capitalize">
-                        {photo.room_type?.replace(/_/g, " ") ?? "—"}
-                      </span>
-                      <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                        depth: {photo.depth_rating ?? "—"}
-                      </Badge>
+                      <span className="label text-foreground">{photo.room_type?.replace(/_/g, " ") ?? "—"}</span>
+                      <span className="tabular text-[10px] text-muted-foreground">depth {photo.depth_rating ?? "—"}</span>
                     </div>
-                    <div className="flex gap-1">
-                      <Badge variant="secondary" className="text-[9px] h-4 px-1 font-mono">
-                        Q {photo.quality_score ?? "—"}
-                      </Badge>
-                      <Badge variant="secondary" className="text-[9px] h-4 px-1 font-mono">
-                        A {photo.aesthetic_score ?? "—"}
-                      </Badge>
+                    <div className="tabular flex gap-3 text-[10px] text-muted-foreground">
+                      <span>Q {photo.quality_score ?? "—"}</span>
+                      <span>A {photo.aesthetic_score ?? "—"}</span>
                     </div>
                     {photo.key_features && photo.key_features.length > 0 && (
-                      <p className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
+                      <p className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">
                         {photo.key_features.join(" · ")}
                       </p>
                     )}
                     {!photo.selected && photo.discard_reason && (
-                      <p className="text-[11px] text-destructive leading-snug pt-1 border-t border-border/50">
+                      <p className="border-t border-border/50 pt-2 text-[11px] leading-snug text-destructive">
                         {photo.discard_reason}
                       </p>
                     )}
@@ -305,172 +281,163 @@ const PropertyDetail = () => {
           )}
         </TabsContent>
 
-        {/* ─── SHOT PLAN — verbatim prompt + inline clip + full metadata ─── */}
-        <TabsContent value="shots" className="space-y-3">
+        {/* Shot plan */}
+        <TabsContent value="shots" className="mt-10">
           {scenes.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No scenes yet</p>
+            <p className="py-16 text-center text-sm text-muted-foreground">No scenes yet</p>
           ) : (
-            scenes.map(scene => {
-              const sourcePhoto = photoById.get(scene.photo_id);
-              return (
-                <Card key={scene.id}>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start gap-3">
+            <div className="grid gap-px bg-border">
+              {scenes.map((scene) => {
+                const sourcePhoto = photoById.get(scene.photo_id);
+                return (
+                  <div key={scene.id} className="bg-background p-6">
+                    <div className="flex items-start gap-4">
                       {sourcePhoto ? (
-                        <img
-                          src={sourcePhoto.file_url}
-                          alt={sourcePhoto.file_name}
-                          className="w-24 h-16 object-cover rounded bg-muted shrink-0"
-                        />
+                        <img src={sourcePhoto.file_url} alt={sourcePhoto.file_name} className="h-16 w-24 shrink-0 object-cover" />
                       ) : (
-                        <div className="w-24 h-16 bg-muted rounded shrink-0" />
+                        <div className="h-16 w-24 shrink-0 bg-secondary" />
                       )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-semibold">#{scene.scene_number}</span>
-                          <span className="text-xs font-medium capitalize">
-                            {scene.camera_movement?.replace(/_/g, " ")}
-                          </span>
-                          <Badge variant="secondary" className={`text-[9px] h-4 px-1 ${getStatusColor(scene.status)}`}>
-                            {scene.status?.replace(/_/g, " ")}
-                          </Badge>
-                          {scene.provider && (
-                            <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
-                              {scene.provider}
-                            </Badge>
-                          )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="tabular text-sm font-semibold">#{scene.scene_number}</span>
+                          <span className="text-xs font-medium capitalize">{scene.camera_movement?.replace(/_/g, " ")}</span>
+                          <span className="label text-muted-foreground">{scene.status?.replace(/_/g, " ")}</span>
+                          {scene.provider && <span className="label text-muted-foreground">{scene.provider}</span>}
                         </div>
-                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                        <p className="tabular mt-1 text-[10px] text-muted-foreground">
                           source: {sourcePhoto?.file_name ?? "—"} · {sourcePhoto?.room_type?.replace(/_/g, " ") ?? "—"}
                         </p>
                       </div>
                     </div>
 
-                    {/* Verbatim prompt */}
-                    <div className="relative">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] tracking-wider uppercase text-muted-foreground font-semibold">
-                          Prompt sent to {scene.provider ?? "provider"}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 gap-1 text-[10px]"
+                    {/* Prompt */}
+                    <div className="mt-5">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="label text-muted-foreground">Prompt sent to {scene.provider ?? "provider"}</span>
+                        <button
+                          type="button"
                           onClick={() => handleCopyPrompt(scene.id, scene.prompt)}
+                          className="label inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
                         >
                           {copiedScene === scene.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                           {copiedScene === scene.id ? "Copied" : "Copy"}
-                        </Button>
+                        </button>
                       </div>
-                      <pre className="bg-muted/50 border border-border rounded p-2 text-[11px] font-mono whitespace-pre-wrap leading-relaxed">
+                      <pre className="whitespace-pre-wrap border border-border bg-secondary/30 p-4 text-[11px] leading-relaxed">
                         {scene.prompt}
                       </pre>
                     </div>
 
-                    {/* Metadata grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-1 border-t border-border">
-                      <div>
-                        <p className="text-muted-foreground text-[10px]">Duration</p>
-                        <p className="font-mono">{scene.duration_seconds}s</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[10px]">Attempts</p>
-                        <p className="font-mono">{scene.attempt_count ?? 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[10px]">Gen Time</p>
-                        <p className="font-mono">{scene.generation_time_ms ? formatDuration(scene.generation_time_ms) : "—"}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[10px]">Cost</p>
-                        <p className="font-mono">{scene.generation_cost_cents ? formatCents(scene.generation_cost_cents) : "—"}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[10px]">QC Verdict</p>
-                        <p className="font-mono">{scene.qc_verdict ?? "—"}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[10px]">QC Confidence</p>
-                        <p className="font-mono">{scene.qc_confidence != null ? `${Math.round(scene.qc_confidence * 100)}%` : "—"}</p>
-                      </div>
+                    {/* Metadata */}
+                    <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-5 md:grid-cols-3 lg:grid-cols-6">
+                      {[
+                        { l: "Duration", v: `${scene.duration_seconds}s` },
+                        { l: "Attempts", v: scene.attempt_count ?? 0 },
+                        { l: "Gen time", v: scene.generation_time_ms ? formatDuration(scene.generation_time_ms) : "—" },
+                        { l: "Cost", v: scene.generation_cost_cents ? formatCents(scene.generation_cost_cents) : "—" },
+                        { l: "QC verdict", v: scene.qc_verdict ?? "—" },
+                        { l: "QC confidence", v: scene.qc_confidence != null ? `${Math.round(scene.qc_confidence * 100)}%` : "—" },
+                      ].map((m) => (
+                        <div key={m.l}>
+                          <p className="label text-muted-foreground">{m.l}</p>
+                          <p className="tabular mt-1.5 text-xs">{m.v}</p>
+                        </div>
+                      ))}
                     </div>
 
-                    {/* Inline clip */}
+                    {/* Output clip */}
                     {scene.clip_url && (
-                      <div>
-                        <p className="text-[10px] tracking-wider uppercase text-muted-foreground font-semibold mb-1">Output clip</p>
+                      <div className="mt-5">
+                        <span className="label text-muted-foreground">Output clip</span>
                         <video
                           src={scene.clip_url}
                           controls
                           playsInline
                           preload="metadata"
-                          className="w-full max-w-md aspect-video bg-black rounded"
+                          className="mt-3 aspect-video w-full max-w-md bg-black"
                         />
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              );
-            })
+                  </div>
+                );
+              })}
+            </div>
           )}
         </TabsContent>
 
-        {/* ─── TIMELINE — full chronological log with stage + level + metadata ─── */}
-        <TabsContent value="logs">
-          <div className="bg-card border border-border rounded-lg p-3 max-h-[600px] overflow-y-auto font-mono text-xs space-y-1">
-            {logs.length === 0 && <p className="text-muted-foreground text-center py-8">No logs for this property</p>}
-            {logs.map(log => (
-              <div key={log.id} className="flex items-start gap-2">
-                <span className="text-muted-foreground shrink-0 w-16">
-                  {new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                </span>
-                <Badge variant="secondary" className="text-[9px] h-4 px-1 shrink-0">{log.stage}</Badge>
-                <Badge
-                  variant="secondary"
-                  className={`text-[9px] h-4 px-1 shrink-0 ${
-                    log.level === "error" ? "bg-destructive text-destructive-foreground" :
-                    log.level === "warn" ? "bg-warning text-warning-foreground" : ""
-                  }`}
-                >
-                  {log.level}
-                </Badge>
-                <span className={`flex-1 ${log.level === "error" ? "text-destructive" : log.level === "warn" ? "text-warning" : "text-foreground"}`}>
-                  {log.message}
-                  {log.metadata && Object.keys(log.metadata).length > 0 && (
-                    <span className="text-muted-foreground ml-1">{JSON.stringify(log.metadata)}</span>
-                  )}
-                </span>
+        {/* Timeline */}
+        <TabsContent value="logs" className="mt-10">
+          <div className="max-h-[640px] overflow-y-auto border border-border bg-secondary/20">
+            {logs.length === 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">No logs for this property</p>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {logs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="grid grid-cols-[80px_90px_60px_1fr] items-start gap-4 px-5 py-2.5 text-[11px] leading-relaxed"
+                  >
+                    <span className="tabular text-muted-foreground/60">
+                      {new Date(log.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </span>
+                    <span className="label text-muted-foreground">{log.stage}</span>
+                    <span
+                      className={`label ${
+                        log.level === "error"
+                          ? "text-destructive"
+                          : log.level === "warn"
+                          ? "text-accent"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {log.level}
+                    </span>
+                    <span
+                      className={
+                        log.level === "error"
+                          ? "text-destructive"
+                          : log.level === "warn"
+                          ? "text-accent"
+                          : "text-foreground"
+                      }
+                    >
+                      {log.message}
+                      {log.metadata && Object.keys(log.metadata).length > 0 && (
+                        <span className="ml-2 text-muted-foreground">{JSON.stringify(log.metadata)}</span>
+                      )}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </TabsContent>
 
-        {/* ─── SYSTEM PROMPTS — Claude's rulebook ─── */}
-        <TabsContent value="prompts" className="space-y-4">
+        {/* System prompts */}
+        <TabsContent value="prompts" className="mt-10 space-y-12">
           {!prompts ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <>
-              {[
-                { label: "Photo Analysis", desc: "Used by Claude Sonnet to score every photo on quality, aesthetics, depth, and room type.", body: prompts.analysis },
-                { label: "Director (Shot Planning)", desc: "Used by Claude Sonnet to turn selected photos into an ordered shot list.", body: prompts.director },
-                { label: "QC Evaluator", desc: "Used by Claude Sonnet to judge generated clips. Currently auto-passing pending frame-extraction infra.", body: prompts.qc },
-              ].map(p => (
-                <Card key={p.label}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold">{p.label}</CardTitle>
-                    <p className="text-[11px] text-muted-foreground">{p.desc}</p>
-                  </CardHeader>
-                  <CardContent>
-                    <pre className="bg-muted/50 border border-border rounded p-3 text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto">
-                      {p.body}
-                    </pre>
-                  </CardContent>
-                </Card>
-              ))}
-            </>
+            [
+              { label: "Photo analysis", desc: "Used by Claude Sonnet to score every photo on quality, aesthetics, depth, and room type.", body: prompts.analysis },
+              { label: "Director (shot planning)", desc: "Used to turn selected photos into an ordered shot list.", body: prompts.director },
+              { label: "QC evaluator", desc: "Used to judge generated clips. Currently auto-passing pending frame-extraction infra.", body: prompts.qc },
+            ].map((p) => (
+              <section key={p.label}>
+                <span className="label text-muted-foreground">— {p.label}</span>
+                <h3 className="mt-3 text-lg font-semibold tracking-[-0.01em]">{p.label}</h3>
+                <p className="mt-2 text-xs text-muted-foreground">{p.desc}</p>
+                <pre className="mt-6 max-h-[480px] overflow-y-auto whitespace-pre-wrap border border-border bg-secondary/30 p-5 text-[11px] leading-relaxed">
+                  {p.body}
+                </pre>
+              </section>
+            ))
           )}
         </TabsContent>
       </Tabs>

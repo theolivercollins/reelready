@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, AlertTriangle, Check, RotateCcw, SkipForward, Loader2 } from "lucide-react";
-import { statusStages, getStatusColor, getRelativeTime } from "@/lib/types";
+import { AlertTriangle, Check, RotateCcw, SkipForward, Loader2, Clock } from "lucide-react";
+import { statusStages, getRelativeTime } from "@/lib/types";
 import type { Property, Scene } from "@/lib/types";
 import { fetchProperties, fetchProperty, approveScene, retryScene, skipScene } from "@/lib/api";
+import { motion } from "framer-motion";
+
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 const Pipeline = () => {
   const [propertiesByStatus, setPropertiesByStatus] = useState<Record<string, Property[]>>({});
@@ -18,213 +19,215 @@ const Pipeline = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        // Fetch properties for each pipeline stage
-        const stagePromises = statusStages.map(stage =>
-          fetchProperties({ status: stage.key, limit: 50 })
-        );
+        const stagePromises = statusStages.map((stage) => fetchProperties({ status: stage.key, limit: 50 }));
         const stageResults = await Promise.all(stagePromises);
         if (cancelled) return;
-
         const byStatus: Record<string, Property[]> = {};
         statusStages.forEach((stage, i) => {
           byStatus[stage.key] = stageResults[i].properties;
         });
         setPropertiesByStatus(byStatus);
 
-        // Fetch needs_review properties and their scenes
         const reviewRes = await fetchProperties({ status: "needs_review", limit: 20 });
         if (cancelled) return;
-
         const scenesWithAddress: (Scene & { propertyAddress?: string })[] = [];
         for (const prop of reviewRes.properties) {
           try {
             const detail = await fetchProperty(prop.id);
             if (cancelled) return;
-            const failedScenes = detail.scenes.filter(s =>
-              s.status === "qc_hard_reject" || s.status === "qc_soft_reject" || s.status === "needs_review"
+            const failed = detail.scenes.filter(
+              (s) => s.status === "qc_hard_reject" || s.status === "qc_soft_reject" || s.status === "needs_review",
             );
-            failedScenes.forEach(s => scenesWithAddress.push({ ...s, propertyAddress: prop.address }));
+            failed.forEach((s) => scenesWithAddress.push({ ...s, propertyAddress: prop.address }));
           } catch {
-            // Skip if we can't fetch detail
+            // skip
           }
         }
         setReviewScenes(scenesWithAddress);
         setError(null);
-      } catch (err: any) {
+      } catch (err) {
         if (cancelled) return;
-        setError(err.message || "Failed to load pipeline data");
+        setError(err instanceof Error ? err.message : "Failed to load pipeline");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleApprove = async (sceneId: string) => {
-    setActionLoading(prev => ({ ...prev, [sceneId]: true }));
+  const wrap = async (sceneId: string, fn: () => Promise<void>) => {
+    setActionLoading((p) => ({ ...p, [sceneId]: true }));
     try {
-      await approveScene(sceneId);
-      setReviewScenes(prev => prev.filter(s => s.id !== sceneId));
-    } catch (err: any) {
-      alert(`Failed to approve: ${err.message}`);
+      await fn();
+      setReviewScenes((prev) => prev.filter((s) => s.id !== sceneId));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Action failed");
     } finally {
-      setActionLoading(prev => ({ ...prev, [sceneId]: false }));
-    }
-  };
-
-  const handleRetry = async (sceneId: string, prompt: string) => {
-    setActionLoading(prev => ({ ...prev, [sceneId]: true }));
-    try {
-      await retryScene(sceneId, prompt);
-      setReviewScenes(prev => prev.filter(s => s.id !== sceneId));
-    } catch (err: any) {
-      alert(`Failed to retry: ${err.message}`);
-    } finally {
-      setActionLoading(prev => ({ ...prev, [sceneId]: false }));
-    }
-  };
-
-  const handleSkip = async (sceneId: string) => {
-    setActionLoading(prev => ({ ...prev, [sceneId]: true }));
-    try {
-      await skipScene(sceneId);
-      setReviewScenes(prev => prev.filter(s => s.id !== sceneId));
-    } catch (err: any) {
-      alert(`Failed to skip: ${err.message}`);
-    } finally {
-      setActionLoading(prev => ({ ...prev, [sceneId]: false }));
+      setActionLoading((p) => ({ ...p, [sceneId]: false }));
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex justify-center py-24">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center space-y-2">
-          <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
-          <p className="text-sm text-destructive">{error}</p>
+      <div className="border border-destructive/40 bg-destructive/5 p-10">
+        <div className="flex items-start gap-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-destructive/40 bg-destructive/10 text-destructive">
+            <AlertTriangle className="h-5 w-5" strokeWidth={1.5} />
+          </div>
+          <div>
+            <span className="label text-destructive">— Error</span>
+            <p className="mt-3 text-sm text-muted-foreground">{error}</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto">
-      {/* Kanban */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {statusStages.map(stage => {
-          const props = propertiesByStatus[stage.key] || [];
-          return (
-            <div key={stage.key} className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{stage.label}</span>
-                <Badge variant="secondary" className="text-[10px] h-5">{props.length}</Badge>
-              </div>
-              <div className="space-y-2 min-h-[200px]">
-                {props.length === 0 && (
-                  <div className="border border-dashed border-border rounded-lg p-4 text-center">
-                    <p className="text-xs text-muted-foreground">No items</p>
-                  </div>
-                )}
-                {props.map(prop => (
-                  <Card key={prop.id} className="hover:border-primary/30 transition-colors cursor-pointer">
-                    <CardContent className="p-3 space-y-2">
-                      <p className="text-xs font-medium truncate">{prop.address}</p>
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
-                        <Clock className="h-3 w-3" />
-                        {getRelativeTime(prop.created_at)}
-                      </div>
-                      {stage.key === "generating" && (
-                        <div className="text-[10px] font-mono text-info">
-                          {prop.selected_photo_count > 0
-                            ? `${Math.floor(prop.selected_photo_count * 0.4)}/${prop.selected_photo_count} clips`
-                            : "Starting..."}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className="space-y-20">
+      {/* Stage columns */}
+      <section>
+        <span className="label text-muted-foreground">— Pipeline</span>
+        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em]">By stage.</h2>
 
-      {/* Needs Review */}
-      <Card>
-        <CardContent className="pt-5">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="h-4 w-4 text-warning" />
-            <h3 className="text-sm font-medium">Needs Review</h3>
-            <Badge className="bg-warning text-warning-foreground text-[10px] h-5">
-              {reviewScenes.length}
-            </Badge>
-          </div>
-          {reviewScenes.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">No scenes need review</p>
-          )}
-          <div className="space-y-3">
-            {reviewScenes.map(scene => (
-              <div key={scene.id} className="border border-border rounded-lg p-4 flex flex-col md:flex-row gap-4">
-                <div className="w-full md:w-40 aspect-video bg-muted rounded flex items-center justify-center text-xs text-muted-foreground shrink-0">
-                  Clip Preview
+        <div className="mt-12 grid gap-px bg-border md:grid-cols-3 xl:grid-cols-6">
+          {statusStages.map((stage, idx) => {
+            const props = propertiesByStatus[stage.key] || [];
+            return (
+              <div key={stage.key} className="flex min-h-[260px] flex-col bg-background p-5">
+                <div className="mb-5 flex items-center justify-between">
+                  <span className="label text-foreground">
+                    <span className="text-muted-foreground">0{idx + 1}</span> {stage.label}
+                  </span>
+                  <span className="tabular text-xs text-muted-foreground">{props.length}</span>
                 </div>
                 <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Scene {scene.scene_number}</span>
-                    <Badge className={getStatusColor(scene.status)} variant="secondary">{scene.status.replace(/_/g, " ")}</Badge>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      Confidence: {(scene.qc_confidence * 100).toFixed(0)}%
+                  {props.length === 0 ? (
+                    <div className="border border-dashed border-border py-6 text-center">
+                      <p className="text-[11px] text-muted-foreground/60">Empty</p>
+                    </div>
+                  ) : (
+                    props.map((p, i) => (
+                      <motion.div
+                        key={p.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: i * 0.03, ease: EASE }}
+                        className="group cursor-pointer border border-border bg-secondary/30 p-3 transition-colors duration-500 hover:border-foreground/40 hover:bg-secondary"
+                      >
+                        <p className="truncate text-xs font-semibold tracking-[-0.005em]">{p.address}</p>
+                        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {getRelativeTime(p.created_at)}
+                        </div>
+                        {stage.key === "generating" && p.selected_photo_count > 0 && (
+                          <p className="tabular mt-2 text-[10px] text-accent">
+                            {Math.floor(p.selected_photo_count * 0.4)} / {p.selected_photo_count} clips
+                          </p>
+                        )}
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Needs review */}
+      <section>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="label text-muted-foreground">— Manual review</span>
+            <h3 className="mt-3 text-xl font-semibold tracking-[-0.01em]">
+              {reviewScenes.length === 0 ? "All clear" : `${reviewScenes.length} scenes need a decision`}
+            </h3>
+          </div>
+        </div>
+
+        {reviewScenes.length === 0 ? (
+          <div className="mt-10 border border-dashed border-border bg-secondary/30 py-16 text-center text-sm text-muted-foreground">
+            Every clip passed automated QC.
+          </div>
+        ) : (
+          <div className="mt-10 grid gap-px bg-border">
+            {reviewScenes.map((scene, i) => (
+              <motion.div
+                key={scene.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: i * 0.04, ease: EASE }}
+                className="grid gap-6 bg-background p-6 md:grid-cols-[200px_1fr_auto]"
+              >
+                <div className="flex aspect-video items-center justify-center border border-border bg-secondary text-[10px] text-muted-foreground">
+                  Clip preview
+                </div>
+                <div>
+                  <div className="flex items-baseline gap-3">
+                    <span className="tabular text-xs font-semibold">Scene {scene.scene_number}</span>
+                    <span className="label text-destructive">{scene.status.replace(/_/g, " ")}</span>
+                    <span className="tabular text-[11px] text-muted-foreground">
+                      Confidence {(scene.qc_confidence * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">{scene.prompt}</p>
+                  {scene.propertyAddress && (
+                    <p className="mt-1 text-xs text-muted-foreground">{scene.propertyAddress}</p>
+                  )}
+                  <p className="mt-3 line-clamp-2 text-xs text-muted-foreground">{scene.prompt}</p>
                   {scene.qc_issues?.issues && (
-                    <ul className="space-y-1">
-                      {scene.qc_issues.issues.map((issue: string, i: number) => (
-                        <li key={i} className="text-xs text-destructive flex items-start gap-1">
-                          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                    <ul className="mt-3 space-y-1.5">
+                      {scene.qc_issues.issues.slice(0, 3).map((issue: string, idx: number) => (
+                        <li key={idx} className="flex items-start gap-2 text-[11px] text-destructive">
+                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={1.5} />
                           {issue}
                         </li>
                       ))}
                     </ul>
                   )}
-                  <div className="flex gap-2 pt-1">
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs gap-1"
-                      disabled={actionLoading[scene.id]}
-                      onClick={() => handleApprove(scene.id)}
-                    >
-                      <Check className="h-3 w-3" /> Approve
-                    </Button>
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs gap-1"
-                      disabled={actionLoading[scene.id]}
-                      onClick={() => handleRetry(scene.id, scene.prompt)}
-                    >
-                      <RotateCcw className="h-3 w-3" /> Retry
-                    </Button>
-                    <Button
-                      size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground"
-                      disabled={actionLoading[scene.id]}
-                      onClick={() => handleSkip(scene.id)}
-                    >
-                      <SkipForward className="h-3 w-3" /> Skip
-                    </Button>
-                  </div>
                 </div>
-              </div>
+                <div className="flex flex-row gap-2 md:flex-col">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoading[scene.id]}
+                    onClick={() => wrap(scene.id, () => approveScene(scene.id))}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoading[scene.id]}
+                    onClick={() => wrap(scene.id, () => retryScene(scene.id, scene.prompt))}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Retry
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={actionLoading[scene.id]}
+                    onClick={() => wrap(scene.id, () => skipScene(scene.id))}
+                  >
+                    <SkipForward className="h-3.5 w-3.5" /> Skip
+                  </Button>
+                </div>
+              </motion.div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </section>
     </div>
   );
 };
