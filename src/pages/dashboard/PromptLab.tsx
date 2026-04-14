@@ -57,26 +57,61 @@ function SessionList() {
   const [sessions, setSessions] = useState<LabSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [label, setLabel] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchLabel, setBatchLabel] = useState("");
+  const [autoAnalyze, setAutoAnalyze] = useState(true);
   const navigate = useNavigate();
 
+  async function reload() {
+    try {
+      const r = await listSessions();
+      setSessions(r.sessions);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   useEffect(() => {
-    listSessions()
-      .then((r) => setSessions(r.sessions))
-      .catch((e) => setError(String(e)));
+    reload();
   }, []);
 
-  async function handleUpload(file: File) {
+  async function handleUpload(files: FileList) {
+    if (!files.length) return;
     setUploading(true);
     setError(null);
+    setUploadProgress({ done: 0, total: files.length });
+    const batch = batchLabel.trim() || null;
+    const createdIds: string[] = [];
     try {
-      const { url, path } = await uploadLabImage(file);
-      const session = await createSession({ image_url: url, image_path: path, label: label || undefined });
-      navigate(`/dashboard/development/prompt-lab/${session.id}`);
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const { url, path } = await uploadLabImage(f);
+        const session = await createSession({
+          image_url: url,
+          image_path: path,
+          label: f.name.replace(/\.[^.]+$/, ""),
+          batch_label: batch ?? undefined,
+        });
+        createdIds.push(session.id);
+        setUploadProgress({ done: i + 1, total: files.length });
+      }
+
+      if (autoAnalyze) {
+        // Kick off analyses in parallel, don't wait — user can watch progress in list.
+        await Promise.allSettled(createdIds.map((id) => analyzeSession(id)));
+      }
+
+      await reload();
+
+      // If only one uploaded, jump into its detail view.
+      if (createdIds.length === 1) {
+        navigate(`/dashboard/development/prompt-lab/${createdIds[0]}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -91,32 +126,45 @@ function SessionList() {
       </div>
 
       <div className="border border-border bg-background p-6">
-        <div className="label text-muted-foreground">New session</div>
+        <div className="label text-muted-foreground">New session(s)</div>
         <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
           <div className="flex-1">
-            <label className="text-xs text-muted-foreground">Label (optional)</label>
+            <label className="text-xs text-muted-foreground">Batch label (groups these uploads together)</label>
             <Input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="kitchen with waterfall island"
+              value={batchLabel}
+              onChange={(e) => setBatchLabel(e.target.value)}
+              placeholder="e.g. Smith property · Kitchen study #2"
               className="mt-1"
             />
           </div>
+          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={autoAnalyze} onChange={(e) => setAutoAnalyze(e.target.checked)} disabled={uploading} />
+            Auto-analyze on upload
+          </label>
           <label className="inline-flex cursor-pointer items-center gap-2 border border-border bg-background px-4 py-2 text-sm hover:bg-accent">
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            <span>{uploading ? "Uploading…" : "Upload image"}</span>
+            <span>
+              {uploading
+                ? uploadProgress
+                  ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
+                  : "Uploading…"
+                : "Upload images"}
+            </span>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleUpload(f);
+                if (e.target.files) handleUpload(e.target.files);
               }}
               disabled={uploading}
             />
           </label>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Drop multiple files to create one session per image. With auto-analyze, the director runs on all of them in parallel — you can start rating as soon as they finish.
+        </p>
         {error && (
           <div className="mt-3 flex items-start gap-2 text-sm text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -134,31 +182,66 @@ function SessionList() {
           No sessions yet. Upload an image above to start.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {sessions.map((s) => (
-            <Link
-              key={s.id}
-              to={`/dashboard/development/prompt-lab/${s.id}`}
-              className="border border-border bg-background transition hover:border-foreground"
-            >
-              <div className="aspect-video w-full overflow-hidden bg-muted">
-                <img src={s.image_url} alt={s.label ?? "session"} className="h-full w-full object-cover" />
-              </div>
-              <div className="p-4">
-                <div className="text-sm font-medium truncate">{s.label || s.archetype || "Untitled"}</div>
-                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{s.iteration_count ?? 0} iteration{s.iteration_count === 1 ? "" : "s"}</span>
-                  {typeof s.best_rating === "number" && (
-                    <span className="inline-flex items-center gap-1">
-                      <Star className="h-3 w-3 fill-foreground text-foreground" />
-                      {s.best_rating}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        (() => {
+          // Group by batch_label (null/empty → "Unbatched"); newest batch first.
+          const groups = new Map<string, LabSession[]>();
+          for (const s of sessions) {
+            const key = s.batch_label?.trim() || "Unbatched";
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(s);
+          }
+          // Sort batch entries by newest session's created_at
+          const ordered = Array.from(groups.entries()).sort((a, b) => {
+            const aNewest = Math.max(...a[1].map((s) => new Date(s.created_at).getTime()));
+            const bNewest = Math.max(...b[1].map((s) => new Date(s.created_at).getTime()));
+            return bNewest - aNewest;
+          });
+          return (
+            <div className="space-y-10">
+              {ordered.map(([batch, items]) => {
+                const avgRating =
+                  items.filter((i) => typeof i.best_rating === "number").reduce((s, i) => s + (i.best_rating ?? 0), 0) /
+                    Math.max(1, items.filter((i) => typeof i.best_rating === "number").length) || null;
+                return (
+                  <div key={batch}>
+                    <div className="mb-3 flex items-baseline justify-between">
+                      <h3 className="text-lg font-semibold tracking-tight">{batch}</h3>
+                      <span className="text-xs text-muted-foreground">
+                        {items.length} session{items.length === 1 ? "" : "s"}
+                        {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
+                      </span>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {items.map((s) => (
+                        <Link
+                          key={s.id}
+                          to={`/dashboard/development/prompt-lab/${s.id}`}
+                          className="border border-border bg-background transition hover:border-foreground"
+                        >
+                          <div className="aspect-video w-full overflow-hidden bg-muted">
+                            <img src={s.image_url} alt={s.label ?? "session"} className="h-full w-full object-cover" />
+                          </div>
+                          <div className="p-3">
+                            <div className="text-xs font-medium truncate">{s.label || s.archetype || "Untitled"}</div>
+                            <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span>{s.iteration_count ?? 0} iter{s.iteration_count === 1 ? "" : "s"}</span>
+                              {typeof s.best_rating === "number" && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Star className="h-3 w-3 fill-foreground text-foreground" />
+                                  {s.best_rating}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()
       )}
     </div>
   );
@@ -250,12 +333,15 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     setBusy(`rate-${iterationId}`);
     setError(null);
     try {
-      await rateIteration({
+      const result = await rateIteration({
         iteration_id: iterationId,
         rating: payload.rating,
         tags: payload.tags.length ? payload.tags : null,
         comment: payload.comment || null,
       });
+      if (result.auto_promoted) {
+        setError(`✓ Saved. Auto-promoted to recipe "${result.auto_promoted.archetype}"`);
+      }
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

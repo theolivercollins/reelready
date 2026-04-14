@@ -15,9 +15,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const { data, error } = await supabase
       .from("prompt_lab_sessions")
-      .select("id, created_by, image_url, image_path, label, archetype, created_at")
+      .select("id, created_by, image_url, image_path, label, archetype, batch_label, created_at")
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(200);
     if (error) return res.status(500).json({ error: error.message });
 
     // Also grab iteration counts + best rating per session in one pass.
@@ -42,11 +42,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { image_url, image_path, label, archetype } = (req.body ?? {}) as {
+    const { image_url, image_path, label, archetype, batch_label } = (req.body ?? {}) as {
       image_url?: string;
       image_path?: string;
       label?: string;
       archetype?: string;
+      batch_label?: string;
     };
     if (!image_url || !image_path) {
       return res.status(400).json({ error: "image_url and image_path required" });
@@ -59,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         image_path,
         label: label ?? null,
         archetype: archetype ?? null,
+        batch_label: batch_label?.trim() || null,
       })
       .select()
       .single();

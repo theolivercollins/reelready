@@ -7,6 +7,7 @@ export interface LabSession {
   image_path: string;
   label: string | null;
   archetype: string | null;
+  batch_label: string | null;
   created_at: string;
   iteration_count?: number;
   best_rating?: number | null;
@@ -86,7 +87,7 @@ export function listSessions(): Promise<{ sessions: LabSession[] }> {
   return fetchJSON("/api/admin/prompt-lab/sessions");
 }
 
-export function createSession(body: { image_url: string; image_path: string; label?: string; archetype?: string }): Promise<LabSession> {
+export function createSession(body: { image_url: string; image_path: string; label?: string; archetype?: string; batch_label?: string }): Promise<LabSession> {
   return fetchJSON("/api/admin/prompt-lab/sessions", { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -121,7 +122,7 @@ export function rateIteration(body: {
   rating?: number | null;
   tags?: string[] | null;
   comment?: string | null;
-}): Promise<LabIteration> {
+}): Promise<{ iteration: LabIteration; auto_promoted: { id: string; archetype: string } | null }> {
   return fetchJSON("/api/admin/prompt-lab/rate", { method: "POST", body: JSON.stringify(body) });
 }
 
