@@ -4,8 +4,8 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, ArrowUpRight, Mail, Loader2, CheckCircle, Plus, Minus, Sun, Moon } from "lucide-react";
-import { motion, useScroll, useTransform, type Variants } from "framer-motion";
-import { useRef, useState } from "react";
+import { motion, AnimatePresence, useScroll, useTransform, type Variants } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
@@ -76,6 +76,17 @@ const Index = () => {
   const navigate = useNavigate();
   const { theme, toggle: toggleTheme } = useTheme();
   const heroRef = useRef<HTMLElement>(null);
+
+  // Hero verb cycle — Take → Retain → Sell
+  const heroVerbs = ["Take", "Retain", "Sell"] as const;
+  const [heroVerbIndex, setHeroVerbIndex] = useState(0);
+  const heroVerb = heroVerbs[heroVerbIndex];
+  useEffect(() => {
+    const id = setInterval(() => {
+      setHeroVerbIndex((i) => (i + 1) % heroVerbs.length);
+    }, 2600);
+    return () => clearInterval(id);
+  }, []);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0]);
@@ -259,9 +270,23 @@ const Index = () => {
               className="mt-8 font-semibold tracking-[-0.035em] text-white"
               style={{ fontSize: "clamp(3rem, 8vw, 7rem)", lineHeight: 0.95 }}
             >
-              Every property,
+              <span className="relative inline-block align-baseline overflow-hidden" style={{ minWidth: "1ch" }}>
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={heroVerb}
+                    initial={{ y: "100%", opacity: 0 }}
+                    animate={{ y: "0%", opacity: 1 }}
+                    exit={{ y: "-100%", opacity: 0 }}
+                    transition={{ duration: 0.9, ease: EASE }}
+                    className="inline-block"
+                  >
+                    {heroVerb}
+                  </motion.span>
+                </AnimatePresence>
+              </span>{" "}
+              more
               <br />
-              in motion.
+              listings.
             </motion.h1>
             <motion.p
               variants={fadeUp}
