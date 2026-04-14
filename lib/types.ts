@@ -27,14 +27,30 @@ export type RoomType =
 
 export type DepthRating = "high" | "medium" | "low";
 
+// 14-verb cinematography vocabulary matched to real-estate shot types.
+// See docs/PROJECT-STATE.md for the full taxonomy and per-room routing.
 export type CameraMovement =
-  | "orbital_slow"
+  // Kept from the original 7
+  | "push_in"
+  | "pull_out"
+  | "orbit"                 // renamed from orbital_slow
+  | "parallax"
   | "dolly_left_to_right"
   | "dolly_right_to_left"
-  | "slow_pan"
-  | "parallax"
-  | "push_in"
-  | "pull_out";
+  // Added for room-appropriate motion
+  | "tilt_up"               // emphasize high ceilings / chandeliers
+  | "tilt_down"             // ground from ceiling to focal feature
+  | "crane_up"              // lift over counters / furniture
+  | "crane_down"            // descend into the space
+  | "reveal"                // pass foreground element to expose background
+  | "drone_push_in"         // aerial approach
+  | "drone_pull_back"       // aerial retreat — the classic opening move
+  | "top_down"              // overhead bird's-eye
+  | "low_angle_glide"       // floor-height glide making ceilings feel taller
+  // Legacy — present ONLY so historical scene rows still typecheck.
+  // The photo analyzer and director MUST NOT emit these for new runs.
+  | "orbital_slow"
+  | "slow_pan";
 
 export type SceneStatus =
   | "pending"

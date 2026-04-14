@@ -3,7 +3,13 @@ export type SceneStatus = "pending" | "generating" | "qc_pass" | "qc_soft_reject
 export type LogLevel = "info" | "warn" | "error" | "debug";
 export type PipelineStage = "intake" | "analysis" | "scripting" | "generation" | "qc" | "assembly" | "delivery";
 export type RoomType = "kitchen" | "living_room" | "master_bedroom" | "bedroom" | "bathroom" | "exterior_front" | "exterior_back" | "pool" | "aerial" | "dining" | "hallway" | "garage" | "other";
-export type CameraMovement = "orbital_slow" | "dolly_left_to_right" | "dolly_right_to_left" | "slow_pan" | "parallax" | "push_in" | "pull_out";
+export type CameraMovement =
+  | "push_in" | "pull_out" | "orbit" | "parallax"
+  | "dolly_left_to_right" | "dolly_right_to_left"
+  | "tilt_up" | "tilt_down" | "crane_up" | "crane_down"
+  | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide"
+  // Legacy compat only — not emitted by new runs
+  | "orbital_slow" | "slow_pan";
 
 export interface Property {
   id: string;

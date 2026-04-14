@@ -19,21 +19,37 @@ import { LumaProvider } from "./luma.js";
 // Luma Ray2 is configured but not actively wired into the routing
 // decisions — it can be added back here if / when we want a third tier.
 
+// Movement → provider mapping for the 14-verb vocabulary.
+// Runway's strength: push/pull/orbit/drone/top_down (straight forward,
+// backward, and sweeping aerial arcs). Runway defaults every motion
+// to push-in-style, so lateral/vertical/reveal moves must go to Kling.
+// Kling's strength: tilt, crane, reveal, parallax, dolly, interior orbit.
 const MOVEMENT_PROVIDER: Record<CameraMovement, VideoProvider> = {
-  push_in: "runway",          // Runway's native strength
-  pull_out: "runway",          // same
-  dolly_left_to_right: "kling", // lateral — Kling handles this better
-  dolly_right_to_left: "kling", // lateral — Kling handles this better
-  slow_pan: "kling",            // rotation — Kling handles this better
-  parallax: "kling",            // layered depth — Kling strength
-  orbital_slow: "kling",        // Kling handles interior arcs; for exteriors we
-                                // fall back by room type below
+  // Runway — forward/backward + drone + overhead
+  push_in: "runway",
+  pull_out: "runway",
+  orbit: "kling",              // interior default; exterior override below
+  drone_push_in: "runway",
+  drone_pull_back: "runway",
+  top_down: "runway",
+  // Kling — lateral, vertical, reveal, depth
+  dolly_left_to_right: "kling",
+  dolly_right_to_left: "kling",
+  parallax: "kling",
+  tilt_up: "kling",
+  tilt_down: "kling",
+  crane_up: "kling",
+  crane_down: "kling",
+  reveal: "kling",
+  low_angle_glide: "kling",
+  // Legacy mapping — old scene rows may still carry these values
+  orbital_slow: "kling",
+  slow_pan: "kling",
 };
 
-// Fallback routing when provider selected above is unavailable, or when
-// orbital_slow is scheduled on a wide exterior/aerial shot (Runway handles
-// those sweeping outdoor arcs well).
-const EXTERIOR_ORBITAL_OVERRIDE: Partial<Record<RoomType, VideoProvider>> = {
+// Exterior/aerial orbit override: Runway handles sweeping outdoor arcs
+// around the full house better than Kling.
+const EXTERIOR_ORBIT_OVERRIDE: Partial<Record<RoomType, VideoProvider>> = {
   exterior_front: "runway",
   exterior_back: "runway",
   aerial: "runway",
@@ -97,10 +113,10 @@ export function selectProvider(
   if (cameraMovement) {
     let provider = MOVEMENT_PROVIDER[cameraMovement];
 
-    // Override: orbital_slow on wide exterior / aerial shots goes to
-    // Runway, not Kling. Runway handles those sweeping outdoor arcs well.
-    if (cameraMovement === "orbital_slow") {
-      const override = EXTERIOR_ORBITAL_OVERRIDE[roomType];
+    // Override: orbit on wide exterior / aerial shots goes to Runway,
+    // which handles those sweeping outdoor arcs better than Kling.
+    if (cameraMovement === "orbit" || cameraMovement === "orbital_slow") {
+      const override = EXTERIOR_ORBIT_OVERRIDE[roomType];
       if (override) provider = override;
     }
 

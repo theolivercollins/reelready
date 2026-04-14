@@ -222,6 +222,7 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
       aesthetic_score: analysis.aesthetic_score,
       depth_rating: analysis.depth_rating,
       key_features: analysis.key_features,
+      composition: analysis.composition ?? null,
       selected: isSelected,
       discard_reason: analysis.suggested_discard
         ? analysis.discard_reason
@@ -399,16 +400,18 @@ async function runScripting(propertyId: string): Promise<void> {
   }
 
   const client = new Anthropic();
-  const photoData = photos.map((p: Photo & { suggested_motion?: string | null; motion_rationale?: string | null }) => ({
+  const photoData = photos.map((p: Photo & { composition?: string | null; suggested_motion?: string | null; motion_rationale?: string | null }) => ({
     id: p.id,
     file_name: p.file_name ?? "unknown.jpg",
     room_type: p.room_type ?? "other",
     aesthetic_score: p.aesthetic_score ?? 5,
     depth_rating: p.depth_rating ?? "medium",
     key_features: p.key_features ?? [],
-    // Claude's per-photo video-viability hints — the director should use
-    // suggested_motion as its camera_movement unless there's a strong
-    // diversity reason to override.
+    // Claude's per-photo composition description and video-viability hints.
+    // The director uses composition to ground each prompt in the real
+    // photo layout and suggested_motion as the default camera movement
+    // unless diversity forces an override.
+    composition: p.composition ?? null,
     suggested_motion: p.suggested_motion ?? null,
     motion_rationale: p.motion_rationale ?? null,
   }));

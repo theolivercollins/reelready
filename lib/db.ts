@@ -287,6 +287,7 @@ export async function updatePhotoAnalysis(
     aesthetic_score: number;
     depth_rating: DepthRating;
     key_features: string[];
+    composition?: string | null;
     selected: boolean;
     discard_reason: string | null;
     video_viable?: boolean | null;
