@@ -15,7 +15,7 @@ import {
   log,
 } from "./db.js";
 import { computeClaudeCost } from "./utils/claude-cost.js";
-import type { Photo, RoomType, DepthRating, VideoProvider } from "./types.js";
+import type { Photo, RoomType, DepthRating, VideoProvider, CameraMovement } from "./types.js";
 import {
   PHOTO_ANALYSIS_SYSTEM,
   buildAnalysisUserPrompt,
@@ -608,8 +608,9 @@ async function runGenerationWithQC(propertyId: string): Promise<void> {
 
           const provider = selectProvider(
             (photo.room_type as RoomType) ?? "other",
+            scene.camera_movement as CameraMovement | null,
             scene.provider as VideoProvider | null,
-            excludeProviders
+            excludeProviders,
           );
           currentProvider = provider.name;
 

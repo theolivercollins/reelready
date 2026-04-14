@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // We use selectProvider to get the cached provider instance. Passing
         // the provider name as preference guarantees we get that exact one
         // (or fall through if disabled).
-        const provider = selectProvider('other', scene.provider as any, []);
+        const provider = selectProvider('other', null, scene.provider as any, []);
         if (provider.name !== scene.provider) {
           // Provider was disabled between submission and polling. Mark stuck.
           await supabase.from('scenes').update({ status: 'needs_review' }).eq('id', scene.id);

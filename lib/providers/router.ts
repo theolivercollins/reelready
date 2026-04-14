@@ -1,29 +1,47 @@
-import type { RoomType, VideoProvider } from "../db.js";
+import type { RoomType, VideoProvider, CameraMovement } from "../db.js";
 import type { IVideoProvider } from "./provider.interface.js";
 import { RunwayProvider } from "./runway.js";
 import { KlingProvider } from "./kling.js";
 import { LumaProvider } from "./luma.js";
 
-// Default routing: which provider handles which room types best
-const ROOM_TYPE_ROUTING: Record<RoomType, VideoProvider> = {
+// Router strategy — movement first, room type as tiebreaker.
+//
+// Runway gen4_turbo has a known tendency to default every motion to a
+// push-in regardless of the text prompt. So Runway only gets scenes
+// whose motion is already push_in or pull_out (its native strength),
+// plus wide exterior/aerial orbitals where Runway handles sweeping
+// cinematography reasonably well.
+//
+// Kling v2-master handles lateral motion (dolly L/R, slow pan, parallax)
+// and interior orbital arcs significantly better, so everything with
+// a lateral or orbital motion flavor routes to Kling.
+//
+// Luma Ray2 is configured but not actively wired into the routing
+// decisions — it can be added back here if / when we want a third tier.
+
+const MOVEMENT_PROVIDER: Record<CameraMovement, VideoProvider> = {
+  push_in: "runway",          // Runway's native strength
+  pull_out: "runway",          // same
+  dolly_left_to_right: "kling", // lateral — Kling handles this better
+  dolly_right_to_left: "kling", // lateral — Kling handles this better
+  slow_pan: "kling",            // rotation — Kling handles this better
+  parallax: "kling",            // layered depth — Kling strength
+  orbital_slow: "kling",        // Kling handles interior arcs; for exteriors we
+                                // fall back by room type below
+};
+
+// Fallback routing when provider selected above is unavailable, or when
+// orbital_slow is scheduled on a wide exterior/aerial shot (Runway handles
+// those sweeping outdoor arcs well).
+const EXTERIOR_ORBITAL_OVERRIDE: Partial<Record<RoomType, VideoProvider>> = {
   exterior_front: "runway",
   exterior_back: "runway",
   aerial: "runway",
-  kitchen: "kling",
-  living_room: "kling",
-  master_bedroom: "kling",
-  bedroom: "kling",
-  bathroom: "kling",
-  dining: "kling",
-  pool: "luma",
-  hallway: "kling",
-  foyer: "kling",
-  garage: "kling",
-  other: "runway",
 };
 
-// Priority order for fallback
-const FALLBACK_ORDER: VideoProvider[] = ["runway", "kling", "luma"];
+// Priority order for absolute fallback (neither movement-preferred nor
+// room-type-override provider is available).
+const FALLBACK_ORDER: VideoProvider[] = ["kling", "runway", "luma"];
 
 const providerCache = new Map<VideoProvider, IVideoProvider>();
 
@@ -56,30 +74,42 @@ export function getEnabledProviders(): VideoProvider[] {
 
 export function selectProvider(
   roomType: RoomType,
+  cameraMovement: CameraMovement | null,
   preference: VideoProvider | null,
-  excludeProviders: VideoProvider[] = []
+  excludeProviders: VideoProvider[] = [],
 ): IVideoProvider {
   const enabled = getEnabledProviders();
   const available = enabled.filter((p) => !excludeProviders.includes(p));
 
   if (available.length === 0) {
     throw new Error(
-      "No video generation providers available. Configure at least one API key."
+      "No video generation providers available. Configure at least one API key.",
     );
   }
 
-  // 1. Use explicit preference if available
+  // 1. Explicit director preference wins if still available.
   if (preference && available.includes(preference)) {
     return getProviderInstance(preference);
   }
 
-  // 2. Use room-type routing if that provider is available
-  const routed = ROOM_TYPE_ROUTING[roomType];
-  if (available.includes(routed)) {
-    return getProviderInstance(routed);
+  // 2. Movement-first routing. If we have a camera_movement, use the
+  // movement → provider map above.
+  if (cameraMovement) {
+    let provider = MOVEMENT_PROVIDER[cameraMovement];
+
+    // Override: orbital_slow on wide exterior / aerial shots goes to
+    // Runway, not Kling. Runway handles those sweeping outdoor arcs well.
+    if (cameraMovement === "orbital_slow") {
+      const override = EXTERIOR_ORBITAL_OVERRIDE[roomType];
+      if (override) provider = override;
+    }
+
+    if (available.includes(provider)) {
+      return getProviderInstance(provider);
+    }
   }
 
-  // 3. Fall back to priority order
+  // 3. Absolute fallback — priority order over whatever is available.
   for (const fallback of FALLBACK_ORDER) {
     if (available.includes(fallback)) {
       return getProviderInstance(fallback);
