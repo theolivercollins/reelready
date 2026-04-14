@@ -38,9 +38,7 @@ export type CameraMovement =
   | "dolly_left_to_right"
   | "dolly_right_to_left"
   // Added for room-appropriate motion
-  | "tilt_up"               // emphasize high ceilings / chandeliers
   | "tilt_down"             // ground from ceiling to focal feature
-  | "crane_up"              // lift over counters / furniture
   | "crane_down"            // descend into the space
   | "reveal"                // pass foreground element to expose background
   | "drone_push_in"         // aerial approach
@@ -51,7 +49,9 @@ export type CameraMovement =
   // Legacy — present ONLY so historical scene rows still typecheck.
   // The photo analyzer and director MUST NOT emit these for new runs.
   | "orbital_slow"
-  | "slow_pan";
+  | "slow_pan"
+  | "tilt_up"               // deleted — looked awkward, "why tilt up to a ceiling"
+  | "crane_up";             // deleted — same reason
 
 export type SceneStatus =
   | "pending"

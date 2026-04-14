@@ -70,9 +70,7 @@ EVALUATION CRITERIA
    parallax           — lateral move with strong foreground object (outdoor with foliage, lanai with columns, pool with landscaping)
    dolly_left_to_right — constant-distance slide sideways across a long subject (counter, bookshelf wall)
    dolly_right_to_left — same, opposite direction
-   tilt_up            — vertical pivot upward to emphasize vaulted/coffered ceilings, tall windows, chandeliers
    tilt_down          — vertical pivot downward from ceiling/view to a floor feature (hardwood, tile, fireplace hearth)
-   crane_up           — vertical rise over counters, railings, or furniture to reveal the layout beyond (the "kitchen island reveal")
    crane_down         — vertical descent from high vantage into the room
    reveal             — camera starts with a FOREGROUND ELEMENT occluding a hero feature, then moves past the foreground to expose the feature. The photo must have an identifiable foreground element (wall edge, column, doorframe, potted plant, counter corner, archway) that the camera can physically pass in front of. If no such foreground element exists in the photo, DO NOT pick reveal — pick push_in or dolly instead.
    drone_push_in      — aerial approach toward the property from a distance (aerial photos only)
@@ -83,19 +81,22 @@ EVALUATION CRITERIA
 
    DO NOT emit "slow_pan" (dead verb, 0% success rate).
    DO NOT emit "orbital_slow" (renamed to "orbit").
+   DO NOT emit "tilt_up" or "crane_up" — both deleted. Awkward in practice;
+   tilting the camera up to a ceiling doesn't make sense as a real-estate
+   shot. Use push_in, pull_out, or dolly instead.
 
    Motion-fit rules (strong defaults, use judgment):
-   - Kitchen with visible island + coffered ceiling → crane_up (over the island) or dolly_left_to_right across it
+   - Kitchen with visible island + ceiling → dolly_left_to_right across the island or pull_out from the island
    - Kitchen tunnel view down the counter → push_in
    - Kitchen side angle showing the full counter length → dolly_left_to_right or dolly_right_to_left
    - Kitchen with an occluding wall/column/corner in the foreground AND a clear hero feature behind → reveal (name the foreground element in motion_rationale)
-   - Living room with coffered/vaulted ceiling → tilt_up or crane_up
+   - Living room with coffered/vaulted ceiling → low_angle_glide or pull_out (NOT tilt_up — that verb is deleted)
    - Living room with picture window → low_angle_glide or pull_out
    - Master bedroom with bed as focal → push_in toward the bed, OR pull_out revealing the suite
    - Bathroom with freestanding tub in tight frame → feature_closeup (shallow DOF) OR push_in toward the tub
    - Bathroom with double vanity → dolly_left_to_right across the vanity
    - Tight detail shot of a single statement object (chandelier, faucet, range, pendant cluster, hardware) → feature_closeup
-   - Entry/foyer with staircase or chandelier → tilt_up ONLY if the ceiling dominates the frame; otherwise reject as doorway trap
+   - Entry/foyer with staircase or chandelier → low_angle_glide or reveal — but reject as doorway trap if the front door/archway is open
    - Hallway → only pick if the vanishing point is a wall or niche, NOT a doorway. If a doorway is at the end, video_viable=false.
    - Exterior front (ground level): pull_out centered on the facade, OR orbit if the photo shows a three-quarter angle
    - Exterior back / yard: parallax or dolly past a foreground element

@@ -29,15 +29,13 @@ Formula: [speed adjective] [style adjective] [movement verb] [direction or targe
 
 Style adjectives (always include at least one): smooth, cinematic, slow, steady
 
-15-verb cinematography vocabulary (what they do and when to use them):
+13-verb cinematography vocabulary (what they do and when to use them):
 - push in — camera moves straight forward toward a focal subject (door, island, tub, bed, fireplace, view)
 - pull out — camera retreats from a subject to reveal scale and context
 - orbit — camera circles around a fixed anchor point (interior: kitchen island, dining table, staircase; exterior: the house itself)
 - parallax — lateral slide with a strong foreground element for exaggerated depth (outdoor with foliage, lanai columns, pool landscaping)
 - dolly left / dolly right — constant-distance slide sideways across a long subject (counter, built-in, bookshelf wall)
-- tilt up — vertical pivot upward to emphasize vaulted/coffered ceilings, tall windows, chandeliers
 - tilt down — vertical pivot downward from ceiling or view to land on a floor feature
-- crane up — camera rises vertically to lift over counters, railings, or furniture and reveal the layout beyond (the classic "kitchen island reveal")
 - crane down — camera descends from a high vantage into the scene
 - reveal — camera starts with a FOREGROUND ELEMENT occluding part of the hero feature, then moves forward or sideways past that foreground element to expose the feature. A reveal REQUIRES an identifiable foreground element named in the prompt — a wall corner, doorframe edge, kitchen island end, column, potted plant, or similar. Without an explicit foreground, reveal collapses into a generic push-in and is indistinguishable from push_in. Prompt format: "smooth cinematic reveal past the [foreground element] to the [hero feature]"
 - drone push in — aerial approach toward the property from a distance, establishing location
@@ -47,10 +45,9 @@ Style adjectives (always include at least one): smooth, cinematic, slow, steady
 - feature closeup — extreme close-up on a single hero feature with shallow depth of field, background softly blurred. Use opportunistically when a photo tightly frames one statement object (freestanding tub, chandelier, fireplace mantel, chef's range, pendant cluster, vanity faucet, front door hardware). Max 1-2 per video, used as accent shots between the wider establishing and room clips. Prompt format: "cinematic slow push in with shallow depth of field on the [hero feature], background softly blurred"
 
 Good prompt examples (these are the QUALITY BAR — match this style, reference a SPECIFIC feature by name from the photo's key_features):
-- "smooth cinematic crane up over the waterfall granite island"
 - "steady cinematic drone pull back rising backward and upward from the front facade"
-- "slow cinematic tilt up from the entry door to the coffered ceiling"
 - "smooth cinematic reveal past the kitchen island corner to the fireplace alcove"
+- "smooth cinematic dolly right across the waterfall granite island"
 - "slow cinematic push in toward the freestanding soaking tub"
 - "cinematic slow push in with shallow depth of field on the freestanding tub, background softly blurred"
 - "smooth cinematic orbit around the dining table and chandelier"
@@ -81,8 +78,10 @@ RULES FOR THE PROMPT STRING:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA MOVEMENT ENUM (for the camera_movement FIELD only, not the prompt)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-The camera_movement JSON field must be ONE of these 15 exact strings:
-"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "tilt_up" | "tilt_down" | "crane_up" | "crane_down" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide" | "feature_closeup"
+The camera_movement JSON field must be ONE of these 13 exact strings:
+"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "tilt_down" | "crane_down" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide" | "feature_closeup"
+
+DO NOT emit tilt_up, crane_up, slow_pan, or orbital_slow — all deleted or banned.
 
 DO NOT emit "slow_pan" or "orbital_slow" — those are legacy values retained only for historical DB rows. New runs must use the 14 values above.
 
@@ -146,25 +145,25 @@ Preferred assignments by room + angle (defaults; override if suggested_motion sa
 - aerial (toward house): drone_push_in
 - aerial (away from house): drone_pull_back
 - aerial (overhead): top_down
-- kitchen (island in frame): crane_up or reveal
+- kitchen (island in frame): dolly_left_to_right or reveal (past the island corner)
 - kitchen (tunnel view): push_in
 - kitchen (side angle, long counter): dolly_left_to_right / dolly_right_to_left
-- living_room (coffered/vaulted ceiling): tilt_up or crane_up
+- living_room (coffered/vaulted ceiling): low_angle_glide or pull_out
 - living_room (picture window): low_angle_glide or pull_out
 - dining: orbit (around table) or dolly past it
 - master_bedroom / bedroom: push_in toward bed or pull_out revealing suite
 - bathroom (freestanding tub): push_in
 - bathroom (double vanity): dolly across it
 - hallway: push_in toward vanishing point
-- foyer: tilt_up (staircase/chandelier) or low_angle_glide
+- foyer: low_angle_glide or reveal (past the doorframe edge)
 - garage: dolly_left_to_right
 - pool (ground): parallax or orbit
 - pool (aerial): drone_push_in or top_down
 - lanai: parallax or reveal
 
 DEPTH OVERRIDES:
-- depth_rating "high": unlock parallax, reveal, crane_up, crane_down
-- depth_rating "low": prefer push_in, pull_out, tilt_up, tilt_down; avoid parallax and reveal
+- depth_rating "high": unlock parallax, reveal, crane_down
+- depth_rating "low": prefer push_in, pull_out, tilt_down; avoid parallax and reveal
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXTERIOR-SPECIFIC HARD RULES
@@ -267,7 +266,8 @@ Photos:
 ${photoList}
 
 Reminders (system prompt has full detail):
-- Each prompt must be ONE sentence, under 20 words, using real cinematography verbs (push in, pull out, orbit, dolly, tilt up, tilt down, crane up, crane down, reveal, parallax, drone push in, drone pull back, top down, low angle glide).
+- Each prompt must be ONE sentence, under 20 words, using real cinematography verbs (push in, pull out, orbit, dolly, tilt down, crane down, reveal, parallax, drone push in, drone pull back, top down, low angle glide, feature closeup).
+- NEVER use "tilt up", "crane up", "slow pan", or "orbital" — all banned.
 - Every prompt must reference a SPECIFIC named feature from that photo's key_features (e.g. "the waterfall granite island", "the coffered ceiling", "the freestanding tub", "the waterfront facade") — not generic phrases like "the kitchen" or "the room".
 - Do NOT describe materials, colors, or adjacent rooms in detail. One descriptor max.
 - Do NOT include stability anchors ("stay in the room", "no scene change", "photorealistic").
