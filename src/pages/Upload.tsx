@@ -351,7 +351,7 @@ const Upload = () => {
                     {done && <Check className="h-3 w-3 text-accent" />}
                   </span>
                   <span
-                    className={`h-px w-full transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                    className={`h-px w-full transition-all duration-700 ease-cinematic ${
                       active ? "bg-foreground" : done ? "bg-foreground/60" : "bg-border"
                     }`}
                   />
@@ -382,7 +382,7 @@ const Upload = () => {
                           key={pkg.id}
                           type="button"
                           onClick={() => setSelectedPackage(pkg.id)}
-                          className={`group relative flex items-start gap-5 bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                          className={`group relative flex items-start gap-5 bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
                             sel ? "bg-secondary" : "hover:bg-secondary/40"
                           }`}
                         >
@@ -422,7 +422,7 @@ const Upload = () => {
                           key={d.id}
                           type="button"
                           onClick={() => setSelectedDuration(d.id)}
-                          className={`group flex items-end justify-between bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                          className={`group flex items-end justify-between bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
                             sel ? "bg-secondary" : "hover:bg-secondary/40"
                           }`}
                         >
@@ -457,7 +457,7 @@ const Upload = () => {
                           key={o.id}
                           type="button"
                           onClick={() => setSelectedOrientation(o.id)}
-                          className={`group flex items-center justify-between bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                          className={`group flex items-center justify-between bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
                             sel ? "bg-secondary" : "hover:bg-secondary/40"
                           }`}
                         >
@@ -534,7 +534,7 @@ const Upload = () => {
                           key={addon.label}
                           type="button"
                           onClick={addon.toggle}
-                          className={`group flex items-start gap-6 bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                          className={`group flex items-start gap-6 bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
                             addon.active ? "bg-secondary" : "hover:bg-secondary/40"
                           }`}
                         >
@@ -729,7 +729,7 @@ const Upload = () => {
                       handleFiles(e.dataTransfer.files);
                     }}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`relative mt-10 flex aspect-[16/7] cursor-pointer items-center justify-center border-2 border-dashed text-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                    className={`relative mt-10 flex aspect-[16/7] cursor-pointer items-center justify-center border-2 border-dashed text-center transition-all duration-500 ease-cinematic ${
                       isDragging
                         ? "border-accent bg-accent/5"
                         : "border-border bg-secondary/30 hover:border-foreground/40 hover:bg-secondary/60"

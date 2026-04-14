@@ -55,7 +55,7 @@ export function TopNav() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="ml-1 flex h-9 w-9 items-center justify-center border border-border text-foreground transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-foreground/40 hover:bg-secondary"
+                    className="ml-1 flex h-9 w-9 items-center justify-center border border-border text-foreground transition-all duration-500 ease-cinematic hover:border-foreground/40 hover:bg-secondary"
                     aria-label="Account menu"
                   >
                     <User className="h-4 w-4" />

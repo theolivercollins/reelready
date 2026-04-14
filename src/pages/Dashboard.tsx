@@ -26,7 +26,7 @@ const Dashboard = () => {
               to={to}
               end={end}
               className={({ isActive }) =>
-                `relative flex items-center gap-2 whitespace-nowrap py-4 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                `relative flex items-center gap-2 whitespace-nowrap py-4 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ease-cinematic ${
                   isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 } ${isActive ? "after:absolute after:inset-x-0 after:bottom-[-1px] after:h-[1px] after:bg-foreground" : ""}`
               }

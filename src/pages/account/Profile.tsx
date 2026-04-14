@@ -181,7 +181,7 @@ export default function AccountProfile() {
               </>
             ) : (
               <label className="cursor-pointer">
-                <div className="flex h-24 w-24 items-center justify-center border border-dashed border-border bg-secondary/30 text-muted-foreground transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-foreground/40 hover:text-foreground">
+                <div className="flex h-24 w-24 items-center justify-center border border-dashed border-border bg-secondary/30 text-muted-foreground transition-all duration-500 ease-cinematic hover:border-foreground/40 hover:text-foreground">
                   {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" strokeWidth={1.5} />}
                 </div>
                 <input

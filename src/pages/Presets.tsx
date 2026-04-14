@@ -149,7 +149,7 @@ const Presets = () => {
                           type="button"
                           onClick={() => setConfirmId(preset.id)}
                           aria-label="Delete preset"
-                          className="flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-destructive hover:text-destructive"
+                          className="flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-all duration-500 ease-cinematic hover:border-destructive hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" strokeWidth={1.5} />
                         </button>

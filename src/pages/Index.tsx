@@ -51,7 +51,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
         <span className="pr-8 text-base font-semibold tracking-[-0.01em] text-foreground md:text-lg">
           {question}
         </span>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border text-muted-foreground transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:border-foreground group-hover:text-foreground">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border text-muted-foreground transition-all duration-500 ease-cinematic group-hover:border-foreground group-hover:text-foreground">
           {open ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
         </div>
       </button>
@@ -178,7 +178,7 @@ const Index = () => {
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="inline-flex h-9 w-9 items-center justify-center border border-white/20 text-white/80 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-white/60 hover:bg-white/10"
+              className="inline-flex h-9 w-9 items-center justify-center border border-white/20 text-white/80 transition-all duration-500 ease-cinematic hover:border-white/60 hover:bg-white/10"
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
@@ -377,7 +377,7 @@ const Index = () => {
                   <img
                     src={step.image}
                     alt={step.title}
-                    className="h-full w-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
+                    className="h-full w-full object-cover transition-transform [transition-duration:1400ms] ease-cinematic group-hover:scale-[1.04]"
                     loading="lazy"
                   />
                 </div>
@@ -440,7 +440,7 @@ const Index = () => {
                   muted
                   playsInline
                   poster={v.poster}
-                  className={`w-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04] ${
+                  className={`w-full object-cover transition-transform [transition-duration:1400ms] ease-cinematic group-hover:scale-[1.04] ${
                     i === 0 ? "h-full min-h-[420px] md:min-h-[640px]" : "h-[220px] md:h-[310px]"
                   }`}
                 >
