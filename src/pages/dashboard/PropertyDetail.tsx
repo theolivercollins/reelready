@@ -166,6 +166,15 @@ const statusTone: Record<string, string> = {
   needs_review: "text-destructive",
 };
 
+const ACTIVE_STATUSES = new Set([
+  "queued",
+  "analyzing",
+  "scripting",
+  "generating",
+  "qc",
+  "assembling",
+]);
+
 const PropertyDetail = () => {
   const { id } = useParams();
   const [property, setProperty] = useState<(Property & { photos: Photo[]; scenes: RatedScene[]; costEvents: CostEvent[] }) | null>(null);
@@ -175,6 +184,8 @@ const PropertyDetail = () => {
   const [rerunning, setRerunning] = useState(false);
   const [prompts, setPrompts] = useState<{ analysis: string; director: string; qc: string } | null>(null);
   const [copiedScene, setCopiedScene] = useState<string | null>(null);
+
+  const isPolling = !!property && ACTIVE_STATUSES.has(property.status);
 
   useEffect(() => {
     if (!id) return;
@@ -201,6 +212,58 @@ const PropertyDetail = () => {
       cancelled = true;
     };
   }, [id]);
+
+  // Live polling while pipeline is running. Pauses when tab hidden, resumes on focus.
+  useEffect(() => {
+    if (!id || !isPolling) return;
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = async () => {
+      try {
+        const [propData, logsData] = await Promise.all([
+          fetchProperty(id),
+          fetchLogs({ property_id: id, limit: 500 }),
+        ]);
+        if (cancelled) return;
+        setProperty(propData);
+        setLogs(logsData.logs);
+      } catch {
+        // swallow transient polling errors; keep existing state
+      }
+    };
+
+    const start = () => {
+      if (intervalId != null) return;
+      intervalId = setInterval(poll, 3000);
+    };
+    const stop = () => {
+      if (intervalId != null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        poll();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    if (document.visibilityState === "visible") {
+      start();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [id, isPolling]);
 
   const handleRerun = async () => {
     if (!id) return;
@@ -276,7 +339,18 @@ const PropertyDetail = () => {
         </Link>
         <div className="mt-6 flex items-end justify-between gap-6">
           <div>
-            <span className={`label ${tone}`}>{property.status.replace("_", " ")}</span>
+            <div className="flex items-center gap-3">
+              <span className={`label ${tone}`}>{property.status.replace("_", " ")}</span>
+              {isPolling && (
+                <span className="label inline-flex items-center gap-1.5 text-accent">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent"></span>
+                  </span>
+                  Live
+                </span>
+              )}
+            </div>
             <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">{property.address}</h2>
             <p className="tabular mt-2 text-xs text-muted-foreground">
               {property.bedrooms}bd · {property.bathrooms}ba · ${property.price.toLocaleString()} · {property.listing_agent}
