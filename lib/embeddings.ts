@@ -1,27 +1,26 @@
-// Voyage AI embeddings. voyage-3 returns 1024-dim vectors.
-// Anthropic's recommended embedding partner — keeps the stack Anthropic-aligned.
+// OpenAI text-embedding-3-small. 1536 dim. $0.02/M tokens.
 
-const MODEL = "voyage-3";
+const MODEL = "text-embedding-3-small";
 
 export async function embedText(text: string): Promise<{ vector: number[]; model: string }> {
-  const apiKey = process.env.VOYAGE_API_KEY;
-  if (!apiKey) throw new Error("VOYAGE_API_KEY not set");
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set");
 
-  const response = await fetch("https://api.voyageai.com/v1/embeddings", {
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ model: MODEL, input: text, input_type: "document" }),
+    body: JSON.stringify({ model: MODEL, input: text }),
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Voyage embeddings ${response.status}: ${body || response.statusText}`);
+    throw new Error(`OpenAI embeddings ${response.status}: ${body || response.statusText}`);
   }
   const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
   const vector = data.data?.[0]?.embedding;
-  if (!vector) throw new Error("Voyage embeddings returned no vector");
+  if (!vector) throw new Error("OpenAI embeddings returned no vector");
   return { vector, model: MODEL };
 }
 
@@ -49,35 +48,13 @@ export function toPgVector(vector: number[]): string {
   return "[" + vector.join(",") + "]";
 }
 
-// Try to embed, never throw. Returns null if VOYAGE_API_KEY is missing or
+// Try to embed, never throw. Returns null if OPENAI_API_KEY is missing or
 // the call fails. Lab should degrade gracefully — no key == no retrieval.
 export async function embedTextSafe(
   text: string
 ): Promise<{ vector: number[]; model: string } | null> {
   try {
     return await embedText(text);
-  } catch {
-    return null;
-  }
-}
-
-// For query-side embedding — Voyage distinguishes query vs document input.
-export async function embedQuerySafe(
-  text: string
-): Promise<{ vector: number[]; model: string } | null> {
-  try {
-    const apiKey = process.env.VOYAGE_API_KEY;
-    if (!apiKey) return null;
-    const response = await fetch("https://api.voyageai.com/v1/embeddings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: MODEL, input: text, input_type: "query" }),
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
-    const vector = data.data?.[0]?.embedding;
-    if (!vector) return null;
-    return { vector, model: MODEL };
   } catch {
     return null;
   }
