@@ -116,6 +116,15 @@ export function refineIteration(body: {
   return fetchJSON("/api/admin/prompt-lab/refine", { method: "POST", body: JSON.stringify(body) });
 }
 
+export function rateIteration(body: {
+  iteration_id: string;
+  rating?: number | null;
+  tags?: string[] | null;
+  comment?: string | null;
+}): Promise<LabIteration> {
+  return fetchJSON("/api/admin/prompt-lab/rate", { method: "POST", body: JSON.stringify(body) });
+}
+
 export function renderIteration(
   iterationId: string,
   provider?: "kling" | "runway" | null

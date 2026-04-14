@@ -24,6 +24,7 @@ import {
   analyzeSession,
   refineIteration,
   renderIteration,
+  rateIteration,
   type LabSession,
   type LabIteration,
 } from "@/lib/promptLabApi";
@@ -241,6 +242,28 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     }
   }
 
+  async function handleRate(iterationId: string, payload: {
+    rating: number | null;
+    tags: string[];
+    comment: string;
+  }) {
+    setBusy(`rate-${iterationId}`);
+    setError(null);
+    try {
+      await rateIteration({
+        iteration_id: iterationId,
+        rating: payload.rating,
+        tags: payload.tags.length ? payload.tags : null,
+        comment: payload.comment || null,
+      });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!data) {
     return (
       <div className="py-20 text-center">
@@ -323,6 +346,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   busy={busy}
                   onRender={(provider) => handleRender(it.id, provider)}
                   onRefine={(p) => handleRefine(it.id, p)}
+                  onRate={(p) => handleRate(it.id, p)}
                 />
               ))
           )}
@@ -498,12 +522,14 @@ function IterationCard({
   busy,
   onRender,
   onRefine,
+  onRate,
 }: {
   iteration: LabIteration;
   isLatest: boolean;
   busy: string | null;
   onRender: (provider: "kling" | "runway" | null) => void;
   onRefine: (payload: { rating: number | null; tags: string[]; comment: string; chatInstruction: string }) => void;
+  onRate: (payload: { rating: number | null; tags: string[]; comment: string }) => void;
 }) {
   const [rating, setRating] = useState<number | null>(iteration.rating);
   const [tags, setTags] = useState<string[]>(iteration.tags ?? []);
@@ -521,6 +547,7 @@ function IterationCard({
 
   const rendering = busy === `render-${iteration.id}`;
   const refining = busy === `refine-${iteration.id}`;
+  const rating_saving = busy === `rate-${iteration.id}`;
 
   return (
     <div className="border border-border bg-background p-6">
@@ -695,8 +722,20 @@ function IterationCard({
             />
           </div>
 
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRate({ rating, tags, comment })}
+              disabled={rating_saving || (rating === null && tags.length === 0 && !comment.trim())}
+            >
+              {rating_saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Star className="mr-2 h-3 w-3" />}
+              Save rating
+            </Button>
+          </div>
+
           <div>
-            <span className="label text-muted-foreground">What should change?</span>
+            <span className="label text-muted-foreground">What should change? (optional — only if refining)</span>
             <Textarea
               value={chat}
               onChange={(e) => setChat(e.target.value)}
