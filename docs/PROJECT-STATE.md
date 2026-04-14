@@ -1,476 +1,256 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-14** (late-session sync after 30+ commits of pipeline work)
+Last updated: **2026-04-14** — end-of-day after Prompt Lab learning-loop build.
 
-This is the authoritative state-of-the-project doc. Read it first when entering
-the repo. If something here conflicts with code you see, trust the code and
-update this doc.
+Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
 
 ---
 
 ## Product
 
-**Listing Elevate** is a real estate AI video automation pipeline. Agents
-upload 10–60 property photos; the system produces cinematic walkthrough
-video clips using AI analysis, shot planning, and multi-provider video
-generation. Individual clips are the deliverable today; Shotstack assembly
-is wired in but optional (gated on `SHOTSTACK_API_KEY`).
+**Listing Elevate** is a real estate AI video automation pipeline. Agents upload 10–60 property photos; the system produces cinematic walkthrough clips via Claude vision analysis + shot planning + multi-provider generation (Kling / Runway / Luma). Individual clips are the deliverable today; Shotstack assembly is wired in and active when `SHOTSTACK_API_KEY` is set.
 
-- **Live URL:** `https://www.listingelevate.com` (custom domain, pointing at Vercel)
-- **Legacy URLs:** `reelready-eight.vercel.app` (still works), historic names: Real Estate Pipeline, ReelReady, Key Frame
-- **Repo:** `theolivercollins/reelready` (repo rename pending, doesn't block)
+- **Live URL:** `https://www.listingelevate.com` (Vercel custom domain)
+- **Legacy URLs:** `reelready-eight.vercel.app` (works), historic: Real Estate Pipeline, ReelReady, Key Frame
+- **Repo:** `theolivercollins/reelready` on GitHub (rename pending, doesn't block)
 - **Local path:** `/Users/oliverhelgemo/real-estate-pipeline`
-- **Primary user:** Oliver (`oliver@recasi.com`, `user_profiles.role='admin'`). Sole admin. Agent signup flow exists (magic link → profile row with role='user') but no approval/invitation gate yet.
+- **Primary user:** Oliver (`oliver@recasi.com`, `user_profiles.role='admin'`). Sole admin. Agent signup via magic link exists; no approval gate yet.
 
-## Communication preferences Oliver expects
+## Communication preferences
 
-Oliver wants plain language, bottom-line answers, no jargon, direct action.
-Things he's flagged as annoying:
-
+Oliver wants plain language, bottom-line answers, no jargon, direct action. Things flagged as annoying:
 - Long responses with headers and bullet lists when a sentence would do
 - Presenting A/B/C options when one has a clear vote
 - Restating a plan before executing it
-- Technical vocabulary that obscures the point
+- Emotional adjectives in status updates
 - Asking "do you want me to…" when he already said go
-- Emotional adjectives in status updates ("great!", "huge win", etc.)
 
-Bottom line: short, terse, pick the right path, say what you did, move on.
-
----
-
-## Pipeline stages (current, as shipped)
-
-File: `lib/pipeline.ts`. `runPipeline(propertyId)` executes in order:
-
-1. **Stamp `pipeline_started_at`** — new column. Cron finalization uses this (not `properties.created_at`) to compute `processing_time_ms` so reruns don't show "737 minutes".
-
-2. **Prompt revision snapshot** (best-effort, non-blocking) — hashes every
-   system prompt (`PHOTO_ANALYSIS_SYSTEM`, `DIRECTOR_SYSTEM`, `STYLE_GUIDE_SYSTEM`,
-   `QC_SYSTEM`, `PROMPT_QA_SYSTEM` — the last is dead code but still hashed for
-   continuity) and inserts into `prompt_revisions` if any body changed since
-   the last recorded version. Feeds the Learning → Changelog tab.
-
-3. **Intake** — verify ≥5 photos.
-
-4. **Analysis** (`runAnalysis`) — Claude Sonnet 4.6 vision analyzes each photo
-   in batches of 8. Returns per photo: `room_type`, `quality_score`,
-   `aesthetic_score`, `depth_rating`, **rich specific `key_features`** (3–6
-   named descriptors, not generic nouns — "dark espresso waterfall island
-   with three bronze pendant lights overhead"), **`composition`** (1–2 sentence
-   spatial layout description), `suggested_discard` / `discard_reason`,
-   **`video_viable`**, **`suggested_motion`**, **`motion_rationale`**.
-   The analyzer is told to reject doorway-trap photos (front-door-open foyers,
-   hallways ending at a doorway, any room with >25% of the frame dominated
-   by an unseen-space opening).
-
-5. **Style Guide** (`runPropertyStyleGuide`) — one extra Claude vision pass
-   seeing all selected photos at once, producing a structured `PropertyStyleGuide`
-   JSON (exterior materials, interior palette, kitchen, living, bedrooms,
-   bathrooms, outdoor features). Saved to `properties.style_guide`.
-   **IMPORTANT:** the guide is NOT injected into the director's user message
-   anymore — it's stored for potential future use (keyframe providers,
-   multi-image context when a provider supports it) but the director runs
-   without it because injection was bloating prompts and regressing output.
-
-6. **Scripting** (`runScripting`) — Director picks 10–16 scenes from the viable
-   selected photos. Writes a short one-sentence cinematography-verb prompt per
-   scene. Injects **past rating examples** (up to 5 winners with rating≥4 and
-   up to 5 losers with rating≤2 from the last 30 days) into the user message
-   as a "PAST GENERATIONS" block. This is the self-improving learning loop.
-
-7. **Generation SUBMIT** (`runGenerationSubmit`) — **Fire-and-forget.** Worker
-   pool of 4 (configurable via `GENERATION_CONCURRENCY`) submits each scene
-   to its routed provider and persists `provider_task_id` + `submitted_at`.
-   Does NOT poll. Does NOT download. Pipeline function exits in ~15–30s
-   regardless of clip count.
-
-8. **Return** — pipeline function exits. A log entry says "All scenes
-   submitted to providers. Cron backstop will collect clips + finalize."
-
-Out-of-band:
-
-- **Cron** (`api/cron/poll-scenes.ts`, runs every minute per `vercel.json`
-  `crons` entry) picks up scenes with `provider_task_id` set and `clip_url`
-  still null. For each, calls `provider.checkStatus`, downloads completed
-  clips, records real cost (with fallback estimate when the provider doesn't
-  return credit usage: Runway ~5 credits/sec, Kling fixed 10 units/clip),
-  and flips the property to `complete` / `needs_review` once all scenes
-  have settled. **Doesn't finalize** if any scene is still `pending` without
-  a `provider_task_id` — preventing false "complete" on abandoned scenes.
-
-- **Preflight QA** (`runPreflightQA`) was removed from the pipeline on
-  2026-04-14. File `lib/prompts/prompt-qa.ts` still exists as dead code but
-  is not called. Reason: it was burning ~95s of the 300s function budget on
-  12 sequential Claude vision calls AND silently rewriting the director's
-  short crisp prompts into 80-word narrative paragraphs with banned verbs
-  like `slow_pan`. The director + video_viable filter + per-room feature
-  vocab + rating learning loop are the real quality levers. QA was adding
-  more regressions than it prevented.
-
-- **Inline QC** (`runQCForScene`) was removed at the same time. All clips
-  auto-pass today; real QC with frame extraction is deferred pending an
-  ffmpeg-capable runtime.
-
-- **Assembly** (`runAssembly`) moved to inside the Shotstack integration.
-  The pipeline function does NOT call assembly inline anymore — it returns
-  after submission. Cron finalizes. Shotstack stitching (if `SHOTSTACK_API_KEY`
-  is set) runs as part of the finalize flow. Otherwise individual clips are
-  the deliverable.
+**New rule (2026-04-14):** Do not push to GitHub or deploy to Vercel without explicit permission in the same turn. Local commits are fine. Wait for "push", "deploy", "ship it", etc.
 
 ---
 
-## Camera movement vocabulary (11 verbs + 8 sub-variants)
+## Pipeline stages (main product — unchanged this session)
 
-The `CameraMovement` enum is 11 active values plus 4 legacy-only values that
-only exist so historical scene rows still typecheck. The analyzer and
-director are banned from emitting the legacy values.
+`lib/pipeline.ts` `runPipeline(propertyId)` runs in order:
 
-**Active (11):**
+1. **Stamp `pipeline_started_at`** — cron uses this for timing, not `properties.created_at`
+2. **Prompt revision snapshot** — hashes every system prompt, inserts `prompt_revisions` row if changed
+3. **Intake** — verify ≥5 photos
+4. **Analysis** — Claude Sonnet 4.6 vision per photo: room, quality, aesthetic, depth, key_features, composition, video_viable, suggested_motion
+5. **Style guide** — built and stored on `properties.style_guide` but NOT injected into director (bloat regression)
+6. **Scripting** — director picks 10–16 scenes. PAST GENERATIONS block (winners ≥4, losers ≤2, last 30 days) injected as in-context learning
+7. **Generation SUBMIT** — fire-and-forget. Submits to provider, persists `provider_task_id`, exits in ~30s
+8. **Cron finalize** — `/api/cron/poll-scenes` every minute: downloads clips, records cost, flips property to complete. Shotstack stitches if key is set.
 
-```
-push_in · pull_out · orbit · parallax
-dolly_left_to_right · dolly_right_to_left
-reveal · drone_push_in · drone_pull_back · top_down
-low_angle_glide · feature_closeup
-```
+Preflight QA and inline QC were deleted on 2026-04-14 AM. They were regressing output.
 
-**Legacy (banned, not emitted):** `orbital_slow`, `slow_pan`, `tilt_up`,
-`tilt_down`, `crane_up`, `crane_down`. Vertical motions don't map to
-real-estate shot types — floors and ceilings aren't hero subjects, and
-source photos have no overhead starting frame for a crane to descend from.
+### Camera vocabulary (11 verbs + 8 cinematographer sub-variants)
 
-**8 cinematographer sub-variants** (prompt-level styles the director picks
-within an existing verb, not new enum values — see `lib/prompts/director.ts`
-"CINEMATOGRAPHER SHOT STYLES" section):
+Active: `push_in · pull_out · orbit · parallax · dolly_left_to_right · dolly_right_to_left · reveal · drone_push_in · drone_pull_back · top_down · low_angle_glide · feature_closeup`
 
-| Shot style | Mapped verb | Prompt style |
+Banned (not emitted): `tilt_up · tilt_down · crane_up · crane_down · slow_pan · orbital_slow`. Vertical-only motions don't map to real-estate shot types.
+
+Sub-variants (prompt-level styles within an existing verb): Straight Push, Straight Push Curve, Straight Push with Rise, Orbiting Detail Rise and Drop, Cowboy Lift, PTF Orbit, Detail Slider, Top Down Detail.
+
+### Reveal hardening (shipped 2026-04-14 PM)
+
+`lib/prompts/director.ts`: reveal prompts must name a foreground that appears verbatim in the photo's `key_features`. A reveal whose foreground is invented (e.g. "reveal past the kitchen island corner" when the photo has no island) is banned. Director falls back to push_in or dolly.
+
+### Scene allocation quotas
+
+Kitchen 2–3 (hard min 2, pick 3 with 3+ viable photos w/ depth=high or aesthetic≥8), living_room 2 (hard min 2), master_bedroom 2 (hard min 2), dining 1, pool 2 (if present), lanai 1, bathroom 1–2, exterior_front 2–3, aerial 1–2, bedrooms 1–2 each, extras 1–2 total.
+
+### Router
+
+Movement first, room type as tiebreaker. `lib/providers/router.ts`.
+
+- Runway: `push_in · pull_out · feature_closeup · drone_* · top_down · orbit (exterior)`
+- Kling: `dolly_* · parallax · reveal · low_angle_glide · orbit (interior)`
+
+---
+
+## Prompt Lab (new subsystem — shipped 2026-04-14 PM)
+
+An admin-only iterative prompt-refinement workbench at `/dashboard/development/prompt-lab`. Separate from production — changes here do not touch `lib/pipeline.ts` or production director output.
+
+### Why
+
+Only 7 rated scenes in prod (0 kitchen, 0 living). Can't tune director prompts from data that doesn't exist. Lab generates that data on-demand without running a full property.
+
+### Capabilities
+
+**Upload & generate:** drag-drop multi-file upload on the list page. Each image becomes a session; with auto-analyze on, `PHOTO_ANALYSIS_SYSTEM` + `DIRECTOR_SYSTEM` run per session in parallel. Result: the proposed camera_movement + prompt for every uploaded photo in one shot.
+
+**Batches:** sessions can carry a `batch_label` (e.g. "Smith property"). List view groups by batch. Session cards are draggable — drop on another batch header to move, drop on the "create new batch" zone at the bottom to make a new group. Click a batch title to rename all its sessions at once.
+
+**Filter chips per batch:** All / Need to start / In progress / Completed. "Need to start" means no admin feedback yet (no rating, tag, comment, or refinement). "Completed" means any iteration rated 5★ OR any iteration became the source of a recipe.
+
+**Card states on the list view:**
+- `Rendering` amber pill over thumbnail while any iteration has `provider_task_id` set + no `clip_url` + no error
+- `Ready for approval` sky banner when there's a rendered clip with no rating
+- `✓ Completed` emerald badge (top-right) when 5★ rated or promoted to recipe
+- Auto-refreshes every 15s when any session is active (visibility-gated)
+
+**Detail view (`/dashboard/development/prompt-lab/:sessionId`):** click-to-edit label in header; iteration stack with newest on top. Latest iteration has 2px foreground border + "Latest · active" pill. Older iterations muted. Each iteration card shows analysis summary, director prompt, retrieval chips ("Based on N similar wins" / "Recipe · archetype"), render controls on latest, rating widget + chat.
+
+**Render (async — shipped 2026-04-14 PM):** fire-and-forget. Render endpoint submits to Kling/Runway and stores `provider_task_id`. `/api/cron/poll-lab-renders` runs every minute, downloads completed clips, uploads to Supabase Storage (`property-videos/prompt-lab/<session>/<iteration>.mp4` — permanent URL, CORS-safe), sets `clip_url`. Safe to navigate away mid-render. Provider picker (Auto / Kling / Runway) on each render control.
+
+**Save rating** button (separate from Refine) persists rating + tags + comment without forcing a new iteration.
+
+**Refine** button: Claude gets the previous iteration + user feedback + exemplars from similarity retrieval, proposes a revised director prompt, creates a new iteration.
+
+### Learning loop (the ML part — shipped 2026-04-14 PM)
+
+Three layered mechanisms, all Lab-scoped.
+
+**1. Similarity retrieval (few-shot)** — every iteration's analysis gets embedded via OpenAI `text-embedding-3-small` (1536 dim) and stored in `prompt_lab_iterations.embedding`. On each new analyze, the new photo's embedding queries `match_lab_iterations` RPC with `rating >= 4` and weighted distance (5★ effectively 15% closer than 4★). Top-5 exemplars are injected into the director user message as a "PAST WINNERS ON STRUCTURALLY SIMILAR PHOTOS" block. Same retrieval runs on Refine.
+
+**2. Recipe library** — `prompt_lab_recipes` table keyed by archetype + room_type + camera_movement. Auto-populated on rating=5 (with dedup: skip if an active recipe exists within cosine distance 0.2 + same room_type). Manual "Promote to recipe" button on 5★ iterations. When a new photo's embedding matches a recipe within distance 0.35 on the same room_type, director gets a "VALIDATED RECIPE MATCH" block instructing it to use the template verbatim after feature substitution. `times_applied` increments per use. Recipes UI at `/dashboard/development/prompt-lab/recipes`: list, edit, archive, delete.
+
+**3. Rule mining + proposals** — `/dashboard/development/proposals` page. "Run rule mining" aggregates rated Lab iterations by (room × movement × provider) bucket, passes winners + losers + evidence to Claude with `DIRECTOR_PATCH_SYSTEM`, which returns a unified diff + per-change citations. Admin reviews (diff + bucket evidence), clicks Apply → new `lab_prompt_overrides` row. Lab's director resolves the override at call time; production director does NOT consult overrides. Reject is one click, audit-logged on the proposal row.
+
+### Data model
+
+- **`prompt_lab_sessions`** — id, created_by, image_url, image_path, label, archetype, batch_label, created_at
+- **`prompt_lab_iterations`** — id, session_id, iteration_number, analysis_json, analysis_prompt_hash, director_output_json, director_prompt_hash, clip_url, provider, provider_task_id, render_submitted_at, render_error, cost_cents, rating, tags, user_comment, refinement_instruction, embedding vector(1536), embedding_model, retrieval_metadata, created_at
+- **`prompt_lab_recipes`** — id, archetype, room_type, camera_movement, provider, composition_signature, prompt_template, source_iteration_id, rating_at_promotion, promoted_by, promoted_at, times_applied, embedding vector(1536), status
+- **`lab_prompt_overrides`** — prompt_name, body, body_hash, is_active (UNIQUE partial index on active rows)
+- **`lab_prompt_proposals`** — prompt_name, base_body_hash, proposed_diff, proposed_body, evidence JSONB, rationale, status, reviewed_at, reviewed_by
+- **`dev_session_notes`** — session_date, objective, accomplishments (for the Development dashboard working log)
+
+RPC helpers: `match_lab_iterations`, `match_lab_recipes`, `recipe_exists_near`.
+
+### Lab key files
+
+| File | Purpose |
+|---|---|
+| `lib/prompt-lab.ts` | Core helpers: analyze, direct, refine, submit/finalize render, retrieve exemplars/recipes, resolve override |
+| `lib/embeddings.ts` | OpenAI text-embedding-3-small wrapper |
+| `lib/prompts/director-patch.ts` | DIRECTOR_PATCH_SYSTEM meta-prompt for rule mining |
+| `api/admin/prompt-lab/sessions.ts` | List + create (with batch_label) |
+| `api/admin/prompt-lab/[sessionId].ts` | Detail + PATCH (label, archetype, batch_label) + DELETE |
+| `api/admin/prompt-lab/analyze.ts` | Run analyze + director with retrieval injection |
+| `api/admin/prompt-lab/refine.ts` | Save feedback + generate refined iteration |
+| `api/admin/prompt-lab/render.ts` | Submit provider job (async) |
+| `api/admin/prompt-lab/rate.ts` | Save rating; auto-promote 5★ to recipe if novel |
+| `api/admin/prompt-lab/recipes.ts` | GET list + POST promote + PATCH edit + DELETE |
+| `api/admin/prompt-lab/mine.ts` | Aggregate evidence, run DIRECTOR_PATCH_SYSTEM, store proposal |
+| `api/admin/prompt-lab/proposals.ts` | List + apply/reject |
+| `api/cron/poll-lab-renders.ts` | Every minute: finalize completed renders |
+| `src/pages/dashboard/PromptLab.tsx` | Main Lab UI (list + detail) |
+| `src/pages/dashboard/PromptLabRecipes.tsx` | Recipe library UI |
+| `src/pages/dashboard/PromptProposals.tsx` | Rule-mining proposals UI |
+| `src/pages/dashboard/Development.tsx` | Landing page: session notes, links, changelog |
+
+---
+
+## Dashboard nav (reorg shipped 2026-04-14 PM)
+
+TopNav sub-nav now: Overview · Pipeline · Listings · Logs · Finances · **Development** (dropdown) · Settings.
+
+Development dropdown: Overview · Learning · Prompt Lab · Recipes · Proposals.
+
+Legacy routes `/dashboard/learning` and `/dashboard/prompt-lab` 404 — all moved under `/dashboard/development/*`.
+
+Development landing (`/dashboard/development`) shows:
+- Session notes — per-session objective + accomplishments log (CRUD via `/api/admin/dev-notes`)
+- Quick-link cards to Learning, Prompt Lab, Recipes, Proposals
+- Prompt revision changelog summary (latest version per prompt)
+- Static "How it works" reference: pipeline stages, router, vocabulary, key tables
+
+---
+
+## Providers (credit status 2026-04-14 PM)
+
+| Provider | Status | Notes |
 |---|---|---|
-| Straight Push | `push_in` | "slow cinematic straight push centered on [subject]" |
-| Straight Push Curve | `push_in` | "slow cinematic straight push with gentle curve toward [subject]" |
-| Straight Push with Rise | `push_in` | "slow cinematic straight push rising upward toward [subject]" |
-| Orbiting Detail Rise and Drop | `orbit` | "slow cinematic orbit rising and dropping around [subject]" |
-| Cowboy Lift | `orbit` | "tight 50mm cinematic orbit lifting around [subject] with foreground depth" |
-| PTF Orbit | `orbit` | "advanced 50mm cinematic orbit wrapping around [subject] rising upward" |
-| Detail Slider | `dolly_left_to_right` | "cinematic detail slider tracking across [subject], perfectly level horizontals" |
-| Top Down Detail | `top_down` | "cinematic top down detail pulling back from [subject] with foreground framing" |
-
-**Vertical-motion rule** (resolving an apparent contradiction): *pure*
-vertical motion is banned (tilt up alone, camera ending staring at a
-ceiling). Vertical motion as ONE component of a richer 3D move (push with
-rise, orbit with lift, top-down pulling back with an upward tilt) is
-allowed — the distinction is the terminal framing. Don't end on a ceiling.
-
-**Tripod:** explicitly NOT implemented. Image-to-video models can't produce
-a true static shot. If a photo needs to read as static, use `feature_closeup`
-with shallow depth of field.
-
----
-
-## Director prompt writing rules (enforced)
-
-See `lib/prompts/director.ts`. Every per-scene prompt MUST:
-
-- Be ONE sentence under 20 words
-- Use real cinematography verbs, not narrative paraphrase
-- Reference a SPECIFIC named feature from the photo's `key_features`
-  (not "the kitchen" but "the waterfall granite island")
-- Include one style adjective (smooth / slow / steady / cinematic)
-- Match the `camera_movement` enum value (e.g. enum `push_in` → prompt contains "push in")
-- NEVER include stability anchors ("stay in the room", "no scene change", "photorealistic" — all implied)
-- NEVER describe materials or colors in detail (photo already shows them)
-- NEVER mention people, brand names, or personal items
-
-**Reveal requires an explicit foreground element.** A doorway is NOT a
-foreground element. The prompt must name a physical occluder the camera
-passes past: "reveal past the kitchen island corner to the fireplace",
-"reveal past the potted palm to the front door". Without the foreground,
-reveal collapses into a generic push-in.
-
-**Exterior HARD rules:**
-- ONE focal subject per prompt (no lists of 3 targets)
-- Banned "from X toward Y" construction on drone moves (confuses direction)
-- Banned "revealing X, Y, and Z" lists (gives the model permission to invent)
-- Drone moves may include altitude hints ("rooftop height", "high altitude")
-- Structure: "[speed] cinematic drone [verb] at [altitude] toward/from/across [ONE focal]"
-
-**Feature_closeup** requires a photo that already frames one statement
-element tightly. Prompts use "with shallow depth of field" and "background
-softly blurred" as style hints. Picked opportunistically, max 1–2 per video.
-
----
-
-## Scene allocation quotas
-
-From `DIRECTOR_SYSTEM`:
-
-| Room type | Quota | Notes |
-|---|---|---|
-| exterior_front | 2–3 clips | Drone + ground-level both count |
-| aerial | 1–2 clips | Counts toward exterior total |
-| living_room | 2 clips | HARD min 2 when 2+ viable photos exist |
-| kitchen | **2–3 clips** | HARD min 2; pick 3 when 3+ viable photos with depth_rating=high or aesthetic≥8 |
-| dining | 1 clip | |
-| exterior_back / backyard | 1 clip | |
-| lanai | 1 clip (if present) | |
-| pool | 2 clips (if present) | |
-| master_bedroom | 2 clips | HARD min 2 when 2+ viable photos exist |
-| bedroom (each additional) | 1–2 clips | |
-| bathroom | 1–2 clips | |
-| hallway / foyer / garage / "extras" | 1–2 clips total | Dining can fold in here |
-
-Multi-clip rooms (kitchen, living_room, master_bedroom) MUST pick
-complementary angles, not duplicates. An island shot + a cabinet wall
-shot beats two island shots. The director is told to prefer variety
-over raw aesthetic score when picking the second/third clip.
-
----
-
-## Providers
-
-| Provider | Model | Status | Notes |
-|---|---|---|---|
-| Runway | `gen4_turbo` | **Active** | Push-in specialist. Duration snapped to 5 or 10. `RUNWAY_CENTS_PER_CREDIT` env (default 1). |
-| Kling | `kling-v2-master` | **Active** | Everything lateral/vertical/reveal/parallax. `cfg_scale: 0.75`. No `negative_prompt` (long anchors made it worse). 5-concurrent task cap on trial plan. `KLING_CENTS_PER_UNIT` env (default 0 on trial). |
-| Luma | Ray 2 | Coded but not exercised | `lib/providers/luma.ts` exists, router doesn't send anything to Luma currently. `LUMA_API_KEY` env if we ever enable. |
-| Higgsfield | DoP standard | **Scaffolded, not wired** | See `docs/HIGGSFIELD-INTEGRATION.md`. Keyframe (first-last-frame) mode verified to work via API but doesn't help for real-estate listings — listings don't contain burst-shot sequences, so the two "keyframes" are usually two different hero angles that can't be interpolated smoothly. Integration deferred. |
-| Shotstack | Timeline API | **Active if key set** | `lib/providers/shotstack.ts`. Runway assembly happens in `runAssembly` if `SHOTSTACK_API_KEY` / `SHOTSTACK_API_KEY_STAGE` is set. Renders both 16:9 and 9:16 sequentially with crossfades + text overlays. Falls back to individual clips if key missing. |
-
-### Router logic
-
-File: `lib/providers/router.ts`. Routes by camera_movement first, room_type as tiebreaker:
-
-| Movement | Provider | Reason |
-|---|---|---|
-| `push_in`, `pull_out`, `feature_closeup` | Runway | Runway's native strength (push-in bias) |
-| `drone_push_in`, `drone_pull_back`, `top_down` | Runway | Sweeping outdoor arcs and straight-line aerials |
-| `orbit` (exterior_front / exterior_back / aerial) | Runway | Exterior sweeping orbits |
-| `orbit` (interior) | Kling | Interior arcs |
-| `dolly_left_to_right`, `dolly_right_to_left` | Kling | Lateral motion |
-| `parallax` | Kling | Layered depth |
-| `reveal` | Kling | Foreground-pass motion |
-| `low_angle_glide` | Kling | Horizontal floor-level glide |
-
-**Failover on retry**: if a provider fails, it's added to `excludeProviders`
-for subsequent attempts on that scene. Too aggressive on transient errors
-(Runway 5xx, Kling 1303 parallel-limit) — should only exclude on 401/402/400
-permanent errors. Known issue, low priority.
-
----
-
-## Scene rating + learning loop
-
-New tables:
-
-- **`scene_ratings`**: `id`, `scene_id` (CASCADE delete), `property_id`,
-  `rating` (1–5), `comment`, `tags` (text[]), `rated_by`, timestamps.
-  One row per scene, upsertable.
-- **`prompt_revisions`**: `id`, `prompt_name`, `version`, `body`, `note`,
-  `body_hash`, `created_at`. Snapshots every system prompt when it
-  changes. Inserted by `recordPromptRevisionIfChanged` at the top of
-  each pipeline run.
-
-Rating flow:
-
-1. Admin rates clips in the Deliverables card on `/dashboard/properties/:id`
-   (5-star widget + comment textarea + tag pills). Auto-saves on click/blur.
-2. Server (`api/scenes/[id]/rate.ts`) verifies bearer JWT against
-   `user_profiles.role='admin'` before accepting. Attributes `rated_by`
-   to the admin user_id.
-3. On next pipeline run, `runScripting` calls `fetchRatedExamples` twice
-   (once for rating≥4 winners, once for rating≤2 losers with comments),
-   limits 5 each, last 30 days. Builds a "PAST GENERATIONS" block and
-   appends it to the director's user message. Claude's in-context learning
-   does the rest — next run biases toward winning patterns and away from
-   losing patterns without any fine-tuning.
-
-**Known limit:** rating FK uses `ON DELETE CASCADE`. If a rerun deletes
-scenes (which the rerun endpoint does), ratings tied to those scenes get
-cascade-deleted. Should denormalize rating context onto the rating row
-(prompt, camera_movement, room_type) so ratings survive scene deletion.
-Outstanding TODO.
-
-Learning dashboard at `/dashboard/learning`:
-
-- **Feedback tab**: summary strip (total ratings, avg, 14-day trend bars),
-  top 10 winners, top 10 losers with comments, avg rating per
-  (room_type × camera_movement) combo, avg rating per provider
-- **Changelog tab**: timeline of prompt revisions grouped by prompt_name,
-  expandable bodies, noting which version was in force at each point
+| Runway | Active | Went empty end-of-day; Prompt Lab added manual provider picker so Kling can be used when Runway is drained |
+| Kling | Active | 5-concurrent cap on trial. Topped up earlier. `KLING_CENTS_PER_UNIT` still 0 on trial plan — update when on paid |
+| Luma | Coded, not wired | |
+| Higgsfield | Scaffolded, not wired (deferred — see `docs/HIGGSFIELD-INTEGRATION.md`) | |
+| Shotstack | Active if key set. Stage + prod keys exist in `.env` | |
+| OpenAI | NEW 2026-04-14 PM — embeddings for Lab retrieval. `OPENAI_API_KEY` live in Vercel prod + preview |
 
 ---
 
 ## Cost tracking
 
-File: `lib/utils/claude-cost.ts` + `recordCostEvent` in `lib/db.ts` +
-`cost_events` table.
-
-**Every API call records a real line item:**
-
-- **Claude Sonnet 4.6**: parsed from `response.usage` with real token
-  counts. Prices: $3/MTok input, $15/MTok output, $0.30/MTok cache read,
-  $3.75/MTok cache write. Per-stage metadata includes input/output/cache
-  breakdowns.
-- **Runway**: parses `creditsUsed` / `usage.credits` from task response
-  if present. **Falls back to ~5 credits/sec × duration** when the
-  provider omits the field (current state — Runway's API doesn't seem
-  to return the field consistently). Multiplied by `RUNWAY_CENTS_PER_CREDIT`
-  env (default 1 = $0.01/credit).
-- **Kling**: fixed 10 units per clip at `kling-v2-master`. Multiplied by
-  `KLING_CENTS_PER_UNIT` env (default 0 on trial plan — **update when
-  Oliver moves to paid plan**).
-- **Shotstack**: not yet recording per-render cost (TODO).
-
-`properties.total_cost_cents` is atomically updated by `recordCostEvent`
-— SUM of cost_events for a property should equal the property total.
-Invariant breaks when ratings or scene cascades mutate history (see
-cron poll-scenes cost event code path which also records).
-
-Superview Cost Breakdown card renders every event as `stage / provider /
-scene / units / cost` with a total row. Old pre-rewrite property rows
-have blank breakdowns (no cost events were recorded pre-rewrite).
-
----
-
-## Photo analysis fields
-
-New columns on `photos`:
-
-- `video_viable` (bool) — filters out camera-trapped and doorway-trap photos
-- `suggested_motion` (text) — one of the 11 active camera movements
-- `motion_rationale` (text) — one short sentence naming a visible feature
-- `composition` (text) — 1–2 sentence spatial layout description (foreground, midground, background, leading lines)
-- `key_features` now holds 3–6 SPECIFIC named descriptors (not generic nouns)
-
-Per-room feature vocabularies in `PHOTO_ANALYSIS_SYSTEM` tell Claude
-what to look for once it identifies the room type — kitchen gets
-island/sink/stovetop/range hood/wall ovens/cabinets/backsplash/pendants/
-fridge/pantry/bar seating; living room gets sofa/fireplace/built-ins/
-coffered ceiling/etc.; 13 vocabularies total (kitchen, living, dining,
-master_bedroom, bedroom, bathroom, exterior_front, exterior_back, pool,
-lanai, aerial, hallway/foyer/garage).
-
----
-
-## Dashboard / admin surface
-
-- **Global sticky TopNav** (`src/components/TopNav.tsx`) — Listing Elevate wordmark, auth-aware nav, admin dropdown. Renders on every page except homepage (which has its own nav).
-- **`/dashboard`** — admin-only, gated by `RequireAdmin` which checks `profile.role === 'admin'`. Sub-nav: Overview, Pipeline, Listings, Logs, Learning, Finances, Settings.
-- **`/dashboard/properties/:id`** (PropertyDetail / Superview):
-  - Header with status pill + **LIVE** pulsing chip (while polling)
-  - Stat strip (cost, time, photos, clips)
-  - Deliverables card — inline clip players with 5-star rating widget + comment + tags, auto-saves
-  - Cost Breakdown card
-  - Tabs: Photos (thumbnails with Q/A scores, video_viable chip, suggested_motion, key_features bulleted, composition italicized, discard reason), Shot plan (verbatim prompts + inline players + copy buttons), Timeline, System prompts
-  - **Live auto-refresh polling** — 3s interval while property is in a non-terminal status; pauses on tab hidden; resumes on tab focus; stops at terminal status
-- **`/dashboard/learning`** — Feedback + Changelog tabs
-- **`/dashboard/finances`** — external session work, revenue/expenses/token balances
-- Homepage, Login, Upload, Account — UI redesigned by parallel session, do not touch unless explicitly asked
-
----
-
-## DB schema (current)
-
-- **`properties`**: + `drive_link`, + `style_guide jsonb`, + `pipeline_started_at timestamptz`
-- **`photos`**: + `video_viable`, + `suggested_motion`, + `motion_rationale`, + `composition`; `key_features` now holds richer descriptors
-- **`scenes`**: + `provider_task_id`, + `submitted_at`, partial index `idx_scenes_pending_poll`
-- **`cost_events`**: new. Columns: `id`, `property_id`, `scene_id`, `stage`, `provider`, `units_consumed`, `unit_type`, `cost_cents`, `metadata jsonb`, `created_at`
-- **`scene_ratings`**: new. Columns: `id`, `scene_id` (CASCADE), `property_id`, `rating (1-5)`, `comment`, `tags text[]`, `rated_by`, timestamps
-- **`prompt_revisions`**: new. Columns: `id`, `prompt_name`, `version`, `body`, `note`, `body_hash`, `created_at`
-- **`user_profiles`**, **`pipeline_logs`**, **`daily_stats`**: unchanged
-
----
-
-## What shipped this session (2026-04-14)
-
-Reverse chronological highlights:
-
-### Vocabulary + shot styles
-- Added 8 cinematographer shot sub-variants (straight push, straight push curve/rise, orbiting detail rise and drop, cowboy lift, PTF orbit, detail slider, top down detail). Mapped to existing verbs as prompt sub-variants.
-- Deleted `tilt_down` and `crane_down` (same problem as the up variants).
-- Deleted `tilt_up` and `crane_up` (awkward, vertical motions don't map to real-estate shot types).
-- Expanded vocab from 7 to 14 verbs, then dropped to 11.
-- Added `feature_closeup` shot type with shallow-DOF prompting.
-
-### Director + prompt quality
-- Reveal now requires a named foreground element.
-- Kitchen quota bumped to 2–3 with complementary angles required.
-- Exterior hard rules: single focal, no "from X toward Y", no multi-target lists, altitude hints.
-- Rewrote all prompts as short one-sentence cinematography-verb style (banned narrative paraphrase, banned stability anchors).
-- Removed style guide injection from director user message — guide still built and stored but not leaked.
-- Removed preflight QA stage entirely — it was regressing output.
-
-### Reliability + performance
-- Fire-and-forget generation. Pipeline function submits + persists task IDs, exits in ~30s. Cron collects clips over the next few minutes. No more 300s timeout aborts.
-- `pipeline_started_at` column for accurate run timing.
-- Cron won't finalize property if any scene is `pending` without a task_id.
-- Router by camera_movement first, room_type as tiebreaker (prevents Kling-specialty motions from being forced to Runway).
-- Cron cost fallback estimate when provider omits credit usage.
-
-### Analysis
-- New `video_viable` field filters doorway traps and camera-trapped angles.
-- New `composition` field — Claude's spatial layout description.
-- `key_features` now require 3–6 specific named descriptors per photo.
-- Per-room feature vocabularies baked into PHOTO_ANALYSIS_SYSTEM.
-- `suggested_motion` picks from the 11 active verbs with explicit per-room motion-fit rules.
-
-### Self-improvement loop
-- New `scene_ratings` table with upsert endpoint.
-- 5-star rating widget + comment + tag pills in the Deliverables card, auto-saves.
-- Server-side admin JWT verification on the rate endpoint.
-- `fetchRatedExamples` fetches winners + losers from last 30 days; injected into director user message as in-context learning.
-- New `prompt_revisions` table + `recordPromptRevisionIfChanged` helper.
-- Learning dashboard at `/dashboard/learning` with Feedback + Changelog tabs.
-
-### UI
-- Live auto-refresh polling on PropertyDetail (3s interval, pauses on tab hidden).
-- Composition + rich key_features surfaced in Photos tab.
-- Rating widget with tag pills (success tags: clean motion, cinematic, perfect, stayed in the room; failure tags: hallucinated architecture, wrong motion direction, camera exited room, warped geometry, added people/objects, too static/boring, too fast, low quality).
-
-### Higgsfield
-- Probe script verified first-last-frame keyframe mode works via API.
-- Two test runs showed keyframe mode produces jittery output on similar photos and teleport-hallucinations on different photos.
-- Decided NOT to wire Higgsfield into production. Keyframe mode structurally unsuited for real-estate listing photos (no burst-shot sequences exist in the source).
-- `lib/providers/higgsfield.ts` stays as scaffolded dead code.
-
-### Cost tracking
-- Replaced all hardcoded cost estimates with real per-call tracking.
-- Added Runway + Kling fallback estimates in cron poll-scenes.ts for when providers omit credit usage.
-
----
-
-## Providers: current credit status
-
-- **Runway**: topped up, active. Hits rooftop-level push_in / pull_out / drone / top_down / feature_closeup / exterior orbit.
-- **Kling**: topped up after earlier session, went back to empty mid-session, topped up again at end of session. Current plan has a 5-concurrent-task cap (hit 1303 errors in burst submissions). `KLING_CENTS_PER_UNIT` still 0 on trial plan.
-- **Higgsfield**: has ~490 credits remaining from the 500 loaded earlier. Not wired into production.
+`cost_events` table, `recordCostEvent` helper in `lib/db.ts`. Every Claude call + Runway/Kling/Shotstack render logged with tokens / credits / units + cent estimates. Lab iterations include analysis + director + render cost in `prompt_lab_iterations.cost_cents` (rounded to int — non-int fractional cents caused a 500 early in the Lab build).
 
 ---
 
 ## Known bugs / gotchas
 
-- **`scene_ratings` cascade on rerun**: rerun endpoint deletes scenes, which cascade-deletes associated ratings. Should denormalize rating context (prompt, movement, room_type, comment) onto the rating row so ratings survive. Oliver lost 7 ratings to this once already.
-- **Failover too aggressive**: excludes provider on any exception including transient 5xx and 429/1303. Should classify errors and retry same provider on transient failures.
-- **Kitchen quota sometimes picks 2 instead of 3** even when 3+ viable photos exist with aesthetic≥8. Director's aesthetic-first tiebreaker is too sticky. Consider adding explicit "pick 3 if count≥3" rule.
-- **Runway ignores non-push motion**: scenes routed to Runway with dolly/tilt/reveal/parallax in the prompt still come back as push-ins. The router avoids sending those to Runway now, but if Kling is ever unavailable, those scenes fall through and produce the wrong motion.
-- **Stale 2324 needs_review scenes**: current rerun of property `6f508e16` left 5 Kling scenes stuck at `needs_review` due to Kling balance errors at submit time. They won't auto-retry even though Kling is now topped up. Manual retry endpoint doesn't exist yet (TODO).
-- **Shotstack assembly cost not recorded** in `cost_events`.
-- **Prompt QA dead code**: `lib/prompts/prompt-qa.ts` and the `runPreflightQA` function body still exist but are never called. Leave for now, prune later.
+- **`scene_ratings` cascade on rerun** (production) — rerun deletes scenes, cascades rating rows. Denormalization onto rating rows is a planned TODO.
+- **Failover too aggressive** — excludes provider on any exception. Should only exclude on permanent errors (401/402/400).
+- **Runway ignores non-push motion** — router avoids sending those to Runway now; fallback path could still misroute.
+- **Stale `needs_review` Kling scenes from earlier property** — manual retry endpoint still not built for production.
+- **Shotstack cost not in `cost_events`** — still TODO.
+- **File-revert mystery** — unresolved. All Shotstack MVP files + the entire Lab build survived multiple sessions; probably dormant or specific to certain paths.
+- **Prompt QA dead code** — `lib/prompts/prompt-qa.ts` + body of `runPreflightQA` in pipeline.ts still present. Never called. Prune later.
+
+---
+
+## What shipped in today's session (2026-04-14 PM) — reverse chronological
+
+### Prompt Lab learning loop + async renders
+- **Rendering state on list cards**: amber spinner over thumbnail, "Ready for approval" sky banner when clip exists but not rated, auto-refresh 15s when active.
+- **Completed = any 5★ iteration OR recipe-promoted**. Was previously only recipe-promoted — dedup skips meant 5★ could stay "Ready for approval" indefinitely.
+- **Latest iteration highlight**: 2px foreground border + pill; older iterations muted + opacity 0.8.
+- **"Need to start" redefined**: means no admin feedback (rating/tag/comment/refinement), not "no iterations". Auto-analyzed-only sessions count as Need to start.
+- **Per-batch filter chips**: All · Need to start · In progress · Completed with live counts.
+- **Completed badge** on card thumbnails.
+- **Drag-drop batches**: session cards draggable between batch headers; bottom drop-zone creates a new batch on drop; click batch title to rename all.
+- **Multi-file upload + real file dropzone** on the new-session panel.
+- **Batch label** field on sessions; grouped list view.
+- **Auto-promote 5★ to recipe** with cosine-distance dedup (0.2 threshold).
+- **Rating-weighted retrieval** — 5★ rank 15% closer than 4★ at same cosine distance.
+- **Save rating** button (no forced refine).
+- **Render persistence** — downloads provider CDN URL + re-uploads to Supabase Storage so clips survive CDN expiry + CORS.
+- **Fire-and-forget render + cron finalizer** — render endpoint submits + returns; `/api/cron/poll-lab-renders` every minute downloads completed + sets clip_url. 30-min hard timeout.
+- **Render UI**: provider picker (Auto/Kling/Runway), pending badge, render_error display, "open in new tab" link.
+- **Rule-mining system** (M-L-4): DIRECTOR_PATCH_SYSTEM meta-prompt, mine endpoint, proposals page with diff + evidence buckets, apply → `lab_prompt_overrides` that Lab's director resolves at call time (prod untouched).
+- **Recipe library** (M-L-3): table + promote button + UI at `/recipes`. Archetype matching in analyze.
+- **Similarity retrieval** (M-L-2): pgvector + HNSW + `match_lab_iterations`/`match_lab_recipes` RPCs. "Based on N similar wins" / "Recipe · archetype" chips.
+- **pgvector + embeddings** (M-L-1): enabled extension, added embedding columns, OpenAI wrapper, backfill script.
+
+### Development dashboard
+- New nav reorg: **Development** dropdown replaces separate Learning + Prompt Lab entries.
+- New `/dashboard/development` landing page with **session notes** (working log, CRUD).
+- `dev_session_notes` table, `/api/admin/dev-notes` endpoint.
+
+### Prompt Lab core (earlier in the day)
+- Initial M-Lab-1 through M-Lab-4 scaffolding: sessions + iterations tables, analyze + direct + refine + render endpoints, upload flow, iteration UI, rating widget, PromoteRecipeControl, Development page.
+
+### Director prompt
+- **M2B**: reveal hardening — foreground element must appear in photo's `key_features`, bans hallucinated reveals.
+
+---
+
+## Migrations applied today
+
+| # | Name | What |
+|---|---|---|
+| 002 | `prompt_lab` | sessions + iterations tables + admin RLS |
+| 003 | `dev_session_notes` | Development working-log table |
+| 004 | `lab_learning` | pgvector, embedding columns, recipes + overrides + proposals |
+| 005 | `voyage_embeddings` | briefly swapped to Voyage (1024 dim) |
+| 006 | `openai_embeddings` | reverted to OpenAI text-embedding-3-small (1536 dim) |
+| 007 | `batches_and_weighted_retrieval` | batch_label + rating-weighted `match_lab_iterations` + `recipe_exists_near` |
+| 008 | `lab_render_async` | provider_task_id + render_error + render_submitted_at |
+
+SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the live path.
 
 ---
 
 ## Immediate next actions (start here next session)
 
-1. **Kitchen quota tuning**: hit the 3-clip case when it should fire. Look at the director's picking logic for multi-clip rooms. Preferably during the next full pipeline test.
-
-2. **`scene_ratings` denormalization**: add columns `rated_prompt`, `rated_camera_movement`, `rated_room_type`, `rated_provider`. Populate on upsert. Change FK to `ON DELETE SET NULL` so rerun doesn't cascade-destroy the learning signal.
-
-3. **Retry-scene endpoint**: `POST /api/scenes/:id/resubmit` that takes a scene_id, loads the scene, submits to the provider again with the existing prompt + camera_movement, persists new task_id, lets cron collect. Used for the stuck Kling scenes after a top-up.
-
-4. **Failover error classification**: only exclude provider on 401/402/400 permanent errors. Retry same provider on 5xx and rate-limit errors.
-
-5. **Shotstack cost tracking**: record per-render cost events when Shotstack assembles.
-
-6. **Feature_closeup validation**: the first fire-and-forget run picked feature_closeup on the tub photo. Need to see if the clip actually reads as shallow-DOF on Runway output.
+1. **Use the Lab.** Upload 10+ kitchen photos across a few batches, rate aggressively, let recipes accumulate. The learning loop needs data to start compounding.
+2. **Validate a recipe match end-to-end** — upload a kitchen-island photo, rate 5★, promote (or auto-promote), upload a second kitchen-island photo, confirm the recipe chip appears and the director uses the template.
+3. **Rule mining dry run** — once there are ~15 rated Lab iterations, hit the Proposals page, run mining, review the diff. See if Claude's suggestions track your intuition.
+4. **Retry-scene endpoint for PRODUCTION** — the stuck Kling scenes from property `6f508e16` still need a manual retry. Not built yet.
+5. **scene_ratings denormalization for PRODUCTION** — still the highest-value fix for the production learning loop. Hasn't been touched this session.
+6. **Promote-to-prod flow** — when a Lab override proves itself, there needs to be an explicit "apply this to production's DIRECTOR_SYSTEM" button. Right now Lab changes stay Lab-only, which is safe but inert for customers.
 
 ---
 
@@ -478,43 +258,33 @@ Reverse chronological highlights:
 
 | File | Purpose |
 |---|---|
-| `lib/pipeline.ts` | Pipeline orchestrator |
+| `lib/pipeline.ts` | Production pipeline orchestrator |
 | `lib/prompts/photo-analysis.ts` | Per-room vocab, video_viable rules, suggested_motion |
-| `lib/prompts/director.ts` | 11-verb + 8 sub-variant vocab, exterior hard rules, shot style guidance |
-| `lib/prompts/style-guide.ts` | Property style guide (built but not injected into director anymore) |
-| `lib/prompts/prompt-qa.ts` | **Dead code** — kept for history, never called |
-| `lib/prompts/qc-evaluator.ts` | Dead code — QC disabled (auto-pass) |
+| `lib/prompts/director.ts` | 11-verb + 8 sub-variant vocab, exterior hard rules, reveal foreground rule (HARDENED 2026-04-14 PM) |
+| `lib/prompts/director-patch.ts` | Meta-prompt for Lab rule mining |
+| `lib/prompts/style-guide.ts` | Property style guide (built, not injected) |
+| `lib/prompt-lab.ts` | Lab core helpers (NEW) |
+| `lib/embeddings.ts` | OpenAI embeddings wrapper (NEW) |
 | `lib/providers/router.ts` | Camera-movement-first routing |
-| `lib/providers/runway.ts` | Runway gen4_turbo |
-| `lib/providers/kling.ts` | Kling v2-master, no negative_prompt, cfg_scale 0.75 |
-| `lib/providers/higgsfield.ts` | Scaffolded, not wired |
-| `lib/providers/shotstack.ts` | Active when SHOTSTACK_API_KEY is set |
-| `lib/providers/luma.ts` | Unused |
-| `lib/db.ts` | All DB helpers including recordCostEvent, upsertSceneRating, fetchRatedExamples, recordPromptRevisionIfChanged |
-| `lib/utils/claude-cost.ts` | Claude token pricing |
-| `api/pipeline/[propertyId].ts` | Entrypoint that calls runPipeline |
-| `api/cron/poll-scenes.ts` | Backstop poller + property finalizer |
-| `api/properties/[id]/rerun.ts` | Reset-only rerun endpoint |
-| `api/properties/[id].ts` | Property detail (includes scenes w/ ratings + cost events) |
-| `api/scenes/[id]/rate.ts` | Rating upsert (admin-verified) |
-| `api/admin/learning.ts` | Aggregated feedback data |
-| `api/admin/prompt-revisions.ts` | Changelog data |
-| `api/admin/prompts.ts` | System prompts for Superview tab |
-| `api/admin/recover-kling.ts` | One-shot stranded-task recovery |
-| `src/pages/dashboard/PropertyDetail.tsx` | Superview with live polling + rating widget |
-| `src/pages/dashboard/Learning.tsx` | Learning + changelog tab |
-| `src/components/TopNav.tsx` | Global sticky nav |
+| `lib/providers/runway.ts` / `kling.ts` | Generation providers |
+| `lib/providers/shotstack.ts` | Assembly provider (active if key) |
+| `lib/db.ts` | DB helpers including recordCostEvent, upsertSceneRating, fetchRatedExamples, recordPromptRevisionIfChanged |
+| `api/pipeline/[propertyId].ts` | Production pipeline entrypoint |
+| `api/cron/poll-scenes.ts` | Production cron backstop |
+| `api/cron/poll-lab-renders.ts` | Lab render cron (NEW) |
+| `api/admin/prompt-lab/*` | Lab endpoints |
+| `api/admin/dev-notes.ts` | Development dashboard session notes |
+| `src/pages/dashboard/PromptLab.tsx` | Main Lab UI |
+| `src/pages/dashboard/PromptLabRecipes.tsx` | Recipe library |
+| `src/pages/dashboard/PromptProposals.tsx` | Rule-mining proposals |
+| `src/pages/dashboard/Development.tsx` | Dev landing page |
+| `src/components/TopNav.tsx` | Global sticky nav with Development dropdown |
 | `docs/PROJECT-STATE.md` | This file |
-| `docs/CREDENTIALS.md` | Local only, gitignored |
+| `docs/PROMPT-LAB-PLAN.md` | Lab design + milestone status |
 | `docs/TODO.md` | Current open work |
-| `docs/HIGGSFIELD-INTEGRATION.md` | Higgsfield probe results + deferral decision |
 
 ---
 
 ## One-liner for next session
 
-> Read `docs/PROJECT-STATE.md` first. The pipeline is in fire-and-forget mode
-> with cron finalization. 11-verb vocab + 8 cinematographer shot styles.
-> Preflight QA is dead, tilt/crane deleted. Next task: kitchen quota tuning,
-> scene_ratings denormalization, retry-scene endpoint. Start by asking Oliver
-> what he wants to prioritize.
+> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **Prompt Lab** now has pgvector-backed similarity retrieval + auto-promote recipe library + rule-mining proposals + async cron-finalized renders + drag-drop batch organization. Lab changes stay Lab-only — nothing flows back to production yet. Next tasks: use the Lab, validate an end-to-end recipe match, plan Lab→prod promotion flow, then finally the production `scene_ratings` denormalization.

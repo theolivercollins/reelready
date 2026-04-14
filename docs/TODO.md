@@ -1,47 +1,64 @@
 # TODO
 
-See `docs/PROJECT-STATE.md` for full project state, architecture, and recent changes. This file is the short punch list of open work.
+See `docs/PROJECT-STATE.md` for full project state and `docs/PROMPT-LAB-PLAN.md` for the Lab's roadmap.
 
 ## Critical (blocking quality)
 
-- [ ] **Kitchen quota tuning** — Director's aesthetic-first tiebreaker is too sticky and sometimes picks only 2 kitchen clips when it should pick 3. Loosen so the second kitchen angle is chosen from a complementary composition even if its aesthetic score is slightly lower. `lib/prompts/director.ts`.
+- [ ] **Retry-scene endpoint (production)** — stuck Kling scenes at `needs_review` from property `6f508e16` can't be resubmitted without re-running the whole pipeline. Needs `POST /api/scenes/:id/resubmit` + dashboard button.
 
-- [ ] **feature_closeup validation** — New sub-variant added to the 11-verb vocab + 8 cinematographer shot styles. Not yet proven on Runway output. Generate 3-5 samples (tub, chandelier, range, faucet, front door hardware) and confirm Runway keeps the subject in focus with shallow DoF rather than drifting to a wide.
+- [ ] **scene_ratings denormalization (production)** — ratings FK cascade-deletes on rerun. Denormalize `rated_prompt`, `rated_camera_movement`, `rated_room_type`, `rated_provider` onto the rating row and switch FK to `ON DELETE SET NULL`. Oliver has lost 7+ ratings to this.
 
-- [ ] **Stuck Kling scenes** — 5 scenes from the last run are sitting at `needs_review` after Kling 1102 balance errors. Need a manual "retry scene" endpoint + dashboard button so a single failed scene can be re-submitted without re-running the whole pipeline.
+- [ ] **Lab data generation** — use the Prompt Lab to rate 30+ interior iterations across real archetypes. The learning loop is shipped but inert until there's data.
 
 ## High priority
 
-- [ ] **scene_ratings cascade fix** — Ratings currently FK to `scenes.id` with cascade delete. If a property is re-run, old scene rows are deleted and historical ratings vanish. Denormalize room_type, camera_movement, prompt, provider, clip_url onto `scene_ratings` at rating time so the learning corpus survives scene deletion.
+- [ ] **Lab → production promotion** — once a `lab_prompt_overrides` row stabilizes (10+ renders at 4+★), expose an explicit "promote to production DIRECTOR_SYSTEM" button that writes a new `prompt_revisions` entry. Production currently has no path to benefit from Lab learning.
 
-- [ ] **Failover error classification** — `lib/pipeline.ts` currently excludes a provider from fallback on ANY error. A transient 429/500 from Runway should retry; only permanent errors (auth, invalid request, content policy) should trigger failover to Kling.
+- [ ] **Failover error classification (production)** — `lib/pipeline.ts` excludes provider on ANY error. Only 401/402/400 should trigger failover; 5xx and rate-limit errors should retry.
 
-- [ ] **Shotstack cost tracking** — Assembly stage runs through Shotstack when `SHOTSTACK_API_KEY` is set, but no cost_events row is written. Add a per-render flat estimate (~$0.10) until Shotstack exposes usage in the render callback.
+- [ ] **Shotstack cost tracking** — renders don't log a `cost_events` row. Add per-render flat estimate (~$0.10).
 
-- [ ] **Client-side photo compression** — Large phone photos (5-15MB) should be resized to max 2048px / JPEG 85 before upload to Supabase Storage. Use `browser-image-compression`. Cuts upload time and storage cost.
+- [ ] **Client-side photo compression** — resize to 2048px / JPEG 85 before upload to cut transfer + storage cost.
 
 ## Medium priority
 
-- [ ] **Supabase Realtime subscriptions** — Dashboard currently polls every 3s. Switch to Realtime channels on `properties`, `scenes`, `pipeline_logs` for cheaper live updates.
+- [ ] **Supabase Realtime subscriptions** — dashboard polls every 3s (prod) / 15s (Lab list). Switch to Realtime for cheaper live updates.
 
-- [ ] **Email/webhook notifications** — Notify the submitting agent when a video is complete. `properties.submitted_by` can hold an email. Send via Resend.
+- [ ] **Email/webhook notifications** — notify submitting agent when a video is complete.
 
-- [ ] **daily_stats aggregation cron** — Table exists, nothing populates it. Daily Vercel Cron that aggregates completed properties, clips, retries, costs, and avg processing time.
+- [ ] **daily_stats aggregation cron** — table exists, nothing populates it.
 
-- [ ] **Hourly throughput stats endpoint** — Overview dashboard chart still says "Coming soon". Needs `/api/stats/hourly` feeding time-series data.
+- [ ] **Hourly throughput stats endpoint** — Overview dashboard chart.
 
-- [ ] **Settings page backend** — `src/pages/dashboard/Settings.tsx` is local React state only. Persist to a `settings` table or env vars.
+- [ ] **Settings page backend** — persist to DB (currently React state only).
+
+- [ ] **Lab cost dashboard** — sum of Lab `cost_cents` per batch, visible on the list header.
 
 ## Low priority / Phase 2
 
-- [ ] **Full automated QC** — All clips currently auto-pass. QC evaluator prompt exists (`lib/prompts/qc-evaluator.ts`) but frame extraction needs FFmpeg (not available in Vercel Functions). Options: Vercel Sandbox, external frame API, or self-hosted worker.
+- [ ] **Full automated QC (production)** — frame extraction needs FFmpeg. Options: Vercel Sandbox, external frame API, self-hosted worker.
 
-- [ ] **Additional providers** — Pika, Seadance when APIs are accessible. Higgsfield is deferred — see `docs/HIGGSFIELD-INTEGRATION.md`.
+- [ ] **Additional providers** — Pika, Seadance. Higgsfield deferred permanently (see `docs/HIGGSFIELD-INTEGRATION.md`).
 
-- [ ] **Beat detection for music sync** — Align clip transitions to beats in the selected music track.
+- [ ] **Beat detection for music sync** — align transitions to beats.
 
-- [ ] **Smart vertical cropping** — Use photo analysis (subject position) to offset the 9:16 crop toward the main subject instead of a center crop.
+- [ ] **Smart vertical cropping** — subject-aware offset for 9:16.
 
-- [ ] **Brokerage branding templates** — Logo upload, brand colors, standard intro/outro per brokerage.
+- [ ] **Brokerage branding templates** — logo + brand colors per brokerage.
 
-- [ ] **Auth** — No authentication today. Need agent accounts, operator accounts, and API keys.
+- [ ] **Auth upgrade** — agent accounts, operator accounts, API keys.
+
+- [ ] **Visual-embedding option for Lab** — embed the IMAGE not just the analysis text. Higher fidelity, more cost.
+
+## Done this session (2026-04-14 PM)
+
+- [x] Director: reveal foreground must appear in key_features (M2B)
+- [x] Prompt Lab core (M-Lab-1 through M-Lab-4)
+- [x] Prompt Lab learning loop — pgvector + similarity retrieval + auto-promote recipes + rule mining
+- [x] Async Lab renders + cron finalizer
+- [x] Drag-drop batches + filter chips + Completed badge + Ready for approval state
+- [x] Development dashboard + session notes + nav reorg
+
+## Done earlier (2026-04-14 AM and prior)
+
+See `docs/PROJECT-STATE.md` "What shipped" sections for full history.
