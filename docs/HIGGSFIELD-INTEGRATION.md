@@ -1,57 +1,73 @@
-# Higgsfield Integration (Scaffolding)
+# Higgsfield Integration
 
-## What this is
+## Current status (2026-04-13): DEFERRED
 
-Scaffolding to evaluate Higgsfield (`platform.higgsfield.ai`) as a fourth video-generation provider alongside Runway, Kling, and Luma. Higgsfield's Cinema Studio / DoP engine advertises multi-image reference context, which we want in order to fix the "hallucinated kitchens visible through doorways" problem the single-image providers exhibit.
+Higgsfield's DoP API works and is authenticated. Both standard single-image
+mode and the `first-last-frame` keyframe mode were probed against real
+listing photos. **Neither is a good fit for real-estate listings right now**,
+so Higgsfield is not wired into `lib/providers/router.ts` and `pipeline.ts`
+does not call it.
 
-## What this is NOT
+### What we tested
 
-This is a test harness plus an unwired provider stub. `HiggsfieldProvider` is **not** registered in `lib/providers/router.ts` and `pipeline.ts` is untouched. Nothing will call Higgsfield in production until we explicitly wire it up after the test script confirms the API works.
+1. **Standard single-image mode** (`/higgsfield-ai/dop/standard`) — same
+   interface as Runway/Kling. Clips came back cleanly but offered no
+   advantage over Runway gen4_turbo for the same prompt/photo, so there was
+   no reason to route traffic here.
 
-## Running the test script
+2. **First-last-frame keyframe mode** (`/higgsfield-ai/dop/standard/first-last-frame`) —
+   intended to solve the "hallucinated kitchen visible through a doorway"
+   problem by pinning both endpoints of the camera move to real photos.
+   Two probes:
+   - **Similar photos** (two angles of the same kitchen): output was
+     jittery, with the camera visibly snapping between the two frames
+     instead of interpolating a smooth move.
+   - **Different rooms** (living room → kitchen): the model teleported
+     mid-clip, warping through an invented transition space. Worse than
+     the single-image baseline.
 
-You need credentials (API key + secret, supplied as a pair) and two publicly-fetchable image URLs. A third image is optional but recommended for probing multi-reference fields.
+   Probe clips are in the Higgsfield CDN; URLs are in the session
+   transcript. Both runs consumed real credits.
 
-```bash
-HIGGSFIELD_API_KEY=... \
-HIGGSFIELD_API_SECRET=... \
-HIGGSFIELD_TEST_IMAGE_1=https://.../living-room.jpg \
-HIGGSFIELD_TEST_IMAGE_2=https://.../kitchen.jpg \
-HIGGSFIELD_TEST_IMAGE_3=https://.../exterior.jpg \
-npx tsx scripts/test-higgsfield.ts
-```
+### Why we're not wiring it
 
-The script prints a JSON report to stdout and exits 0 only if the baseline single-image submit succeeded.
+Listing photos are architectural stills of the same property. The
+first-last-frame paradigm is built for narrative shots where the two
+endpoints are genuinely meant to be different scenes — it does not
+gracefully handle "two angles of one room" or "two adjacent rooms in the
+same house." The scaffolding to wire Higgsfield in exists
+(`lib/providers/higgsfield.ts`, `scripts/test-higgsfield.ts`), but there is
+no user-visible quality reason to pay for a third provider.
 
-## Reading the report
+### Reconsider if
 
-- **Probe 1 (`1-baseline-standard`)**: must be `pass`. If it fails, everything else is moot — check auth header format and HTTP status.
-- **Probe 2 (`2-baseline-poll`)**: confirms the `GET /requests/{id}/status` response schema. Copy the field paths into `lib/providers/higgsfield.ts` → `checkStatus()` if they differ from our current guesses.
-- **Probes 3-6**: determine multi-image support. Any probe with verdict `pass` (200 response) is the winning field name. Record it under `summary.multiImageAccepted`. If all four fail with 400/422, Higgsfield's public API does not expose multi-reference and we should deprioritize this integration.
-- **Probe 7 (`cinema-studio`)**: sanity-check for an alternate model path.
-- **Probe 8 (`preview`)**: confirms the cheaper tier is usable for dev testing.
-- **Probe 9**: opportunistic catalog discovery.
+- Higgsfield ships a true multi-reference mode (3+ reference images for
+  spatial consistency, not keyframes). This is what we originally wanted.
+- Runway or Kling regresses and we need a backup for a specific room type.
+- Higgsfield publishes a "photo walkthrough" or "architectural" preset
+  tuned for real estate.
 
-## Decision rule
+### Files left in place
 
-Commit `HiggsfieldProvider` to the router **only** if probe 1 passes AND at least one of probes 3-6 passes. Otherwise leave the stub in place and close this experiment.
+- `lib/providers/higgsfield.ts` — unwired provider stub
+- `scripts/test-higgsfield.ts` — probe harness
+- `docs/CREDENTIALS.md` — API key/secret and verified request shapes (gitignored)
 
-## Wiring into the router later
+None of these are loaded at runtime. They can stay until we either wire
+Higgsfield up or decide to remove the scaffolding entirely.
+
+### Wiring later (if the decision changes)
 
 In `lib/providers/router.ts`:
 
 1. `import { HiggsfieldProvider } from "./higgsfield.js";`
-2. Add a case to the `switch (name)` block in `getProviderInstance()`.
-3. Add a check to `getEnabledProviders()`: `if (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET) enabled.push("higgsfield");`
-4. Optionally reassign room types in `ROOM_TYPE_ROUTING` (likely interior rooms with visible adjacent rooms — `kitchen`, `living_room`, `hallway`, `foyer`).
-5. Add `"higgsfield"` to `FALLBACK_ORDER` in whatever priority makes sense.
+2. Add a case in `getProviderInstance()`.
+3. Add to `getEnabledProviders()`:
+   `if (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET) enabled.push("higgsfield");`
+4. Reassign room types in `ROOM_TYPE_ROUTING` / camera-movement routing.
+5. Add `"higgsfield"` to `FALLBACK_ORDER`.
 
-If the winning multi-image field is not `image_url`, update `generateClip()` in `lib/providers/higgsfield.ts` to use that field and take additional reference buffers.
-
-## Vercel Production env vars
-
-When promoting to production, add via `vercel env add`:
-
+Vercel env vars to add when promoting:
 - `HIGGSFIELD_API_KEY`
 - `HIGGSFIELD_API_SECRET`
-- `HIGGSFIELD_CENTS_PER_CREDIT` (optional — defaults to `1`; set once Higgsfield publishes pricing)
+- `HIGGSFIELD_CENTS_PER_CREDIT` (optional — defaults to `1`)

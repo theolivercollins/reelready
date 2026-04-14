@@ -1,72 +1,47 @@
 # TODO
 
-## Critical (Blocking Real Usage)
+See `docs/PROJECT-STATE.md` for full project state, architecture, and recent changes. This file is the short punch list of open work.
 
-- [ ] **Pipeline fails with "0 photos"** -- Supabase Storage upload policy was fixed (public upload enabled), but need to verify the full flow works end-to-end: frontend uploads photos to Storage -> POST /api/properties registers them -> POST /api/pipeline runs and finds them via `getPhotosForProperty`.
+## Critical (blocking quality)
 
-- [ ] **Full end-to-end pipeline test** -- Need to test the complete pipeline with real photos: upload -> analysis (Claude vision) -> scripting (Claude) -> generation (at least one provider) -> complete. The pipeline code is written but has not been validated against live APIs in production.
+- [ ] **Kitchen quota tuning** — Director's aesthetic-first tiebreaker is too sticky and sometimes picks only 2 kitchen clips when it should pick 3. Loosen so the second kitchen angle is chosen from a complementary composition even if its aesthetic score is slightly lower. `lib/prompts/director.ts`.
 
-- [ ] **Google Drive link intake** -- The backend accepts a `driveLink` field and stores it on the property, but there is no code to actually download photos from a Google Drive shared folder. This needs a Google Drive API service account, and logic to list + download files from the shared link. Currently, Drive-based submissions will fail because no photos get created in the photos table.
+- [ ] **feature_closeup validation** — New sub-variant added to the 11-verb vocab + 8 cinematographer shot styles. Not yet proven on Runway output. Generate 3-5 samples (tub, chandelier, range, faucet, front door hardware) and confirm Runway keeps the subject in focus with shallow DoF rather than drifting to a wide.
 
-## High Priority
+- [ ] **Stuck Kling scenes** — 5 scenes from the last run are sitting at `needs_review` after Kling 1102 balance errors. Need a manual "retry scene" endpoint + dashboard button so a single failed scene can be re-submitted without re-running the whole pipeline.
 
-- [ ] **Full automated QC** -- Currently all clips auto-pass (`qc_verdict: "auto_pass"`). The QC evaluator prompt exists (`lib/prompts/qc-evaluator.ts`) and the evaluation logic is designed, but frame extraction requires FFmpeg which is not available in Vercel Functions. Options:
-  - Use Vercel Sandbox (Firecracker microVM) for frame extraction
-  - Use an external frame extraction API
-  - Use a cloud function on a platform that supports FFmpeg (Railway, Fly.io, AWS Lambda with FFmpeg layer)
+## High priority
 
-- [ ] **Video assembly (FFmpeg stitching)** -- Currently the pipeline stores individual clips and marks complete. The FFmpeg assembly code exists (`lib/utils/ffmpeg.ts`) with crossfade transitions, audio, and text overlays, but cannot run on Vercel. Options:
-  - Shotstack API (cloud video editing)
-  - Creatomate API (template-based video assembly)
-  - Vercel Sandbox with FFmpeg installed
-  - Self-hosted worker (Railway/Fly.io)
+- [ ] **scene_ratings cascade fix** — Ratings currently FK to `scenes.id` with cascade delete. If a property is re-run, old scene rows are deleted and historical ratings vanish. Denormalize room_type, camera_movement, prompt, provider, clip_url onto `scene_ratings` at rating time so the learning corpus survives scene deletion.
 
-- [ ] **Client-side photo compression** -- Large photos (5-15MB each from modern phones/cameras) should be compressed before upload to Supabase Storage. Add client-side image resizing (max 2048px, JPEG quality 85) using canvas or a library like browser-image-compression. This will speed up uploads and reduce storage costs.
+- [ ] **Failover error classification** — `lib/pipeline.ts` currently excludes a provider from fallback on ANY error. A transient 429/500 from Runway should retry; only permanent errors (auth, invalid request, content policy) should trigger failover to Kling.
 
-- [ ] **Upload size handling** -- Related to compression above. Currently there is no size limit enforcement or progress feedback beyond the batch counter. Very large photo sets (50+ photos at full resolution) can time out or fail silently.
+- [ ] **Shotstack cost tracking** — Assembly stage runs through Shotstack when `SHOTSTACK_API_KEY` is set, but no cost_events row is written. Add a per-render flat estimate (~$0.10) until Shotstack exposes usage in the render callback.
 
-## Medium Priority
+- [ ] **Client-side photo compression** — Large phone photos (5-15MB) should be resized to max 2048px / JPEG 85 before upload to Supabase Storage. Use `browser-image-compression`. Cuts upload time and storage cost.
 
-- [ ] **Hourly throughput stats endpoint** -- The Overview dashboard chart shows "Coming soon". Needs a `/api/stats/hourly` endpoint or similar to feed the throughput chart with time-series data.
+## Medium priority
 
-- [ ] **Supabase Realtime subscriptions** -- The dashboard currently polls API endpoints to check status. It should subscribe to Supabase Realtime channels for live updates on:
-  - `properties` table changes (status updates)
-  - `scenes` table changes (clip completion)
-  - `pipeline_logs` inserts (live log stream)
+- [ ] **Supabase Realtime subscriptions** — Dashboard currently polls every 3s. Switch to Realtime channels on `properties`, `scenes`, `pipeline_logs` for cheaper live updates.
 
-- [ ] **Email/webhook notifications** -- Notify agents when their video is complete. The property has a `submitted_by` field that could hold an email address. Implement email sending via Resend, SendGrid, or similar.
+- [ ] **Email/webhook notifications** — Notify the submitting agent when a video is complete. `properties.submitted_by` can hold an email. Send via Resend.
 
-- [ ] **Daily stats aggregation** -- The `daily_stats` table exists but nothing populates it. Need a cron job (Vercel Cron) that runs daily to aggregate completed properties, clips generated, retries, costs, and average processing times.
+- [ ] **daily_stats aggregation cron** — Table exists, nothing populates it. Daily Vercel Cron that aggregates completed properties, clips, retries, costs, and avg processing time.
 
-- [ ] **Settings page backend** -- The dashboard Settings page (`src/pages/dashboard/Settings.tsx`) currently uses local React state only. Wire it to actual backend settings storage so changes persist. Could use a `settings` table in Supabase or environment variables managed via Vercel.
+- [ ] **Hourly throughput stats endpoint** — Overview dashboard chart still says "Coming soon". Needs `/api/stats/hourly` feeding time-series data.
 
-## Low Priority / Phase 2
+- [ ] **Settings page backend** — `src/pages/dashboard/Settings.tsx` is local React state only. Persist to a `settings` table or env vars.
 
-- [ ] **Additional video providers** -- Add support for more providers as they become API-accessible:
-  - Pika
-  - Higgsfield (when API is available)
-  - Seadance
+## Low priority / Phase 2
 
-- [ ] **Beat detection for music sync** -- Analyze the selected music track for beat positions and align clip transitions to beats for a more professional feel.
+- [ ] **Full automated QC** — All clips currently auto-pass. QC evaluator prompt exists (`lib/prompts/qc-evaluator.ts`) but frame extraction needs FFmpeg (not available in Vercel Functions). Options: Vercel Sandbox, external frame API, or self-hosted worker.
 
-- [ ] **Smart vertical cropping** -- The current vertical (9:16) version is a simple center crop of the horizontal. Use the photo analysis (subject position, key features) to offset the crop toward the main subject of each clip.
+- [ ] **Additional providers** — Pika, Seadance when APIs are accessible. Higgsfield is deferred — see `docs/HIGGSFIELD-INTEGRATION.md`.
 
-- [ ] **Brokerage branding templates** -- Allow brokerages to upload their logo, select brand colors, and choose a standard intro/outro template that gets applied to all their videos.
+- [ ] **Beat detection for music sync** — Align clip transitions to beats in the selected music track.
 
-- [ ] **Billing and usage tracking per brokerage** -- Track API costs per brokerage for billing purposes. Currently costs are tracked per property but not aggregated per brokerage.
+- [ ] **Smart vertical cropping** — Use photo analysis (subject position) to offset the 9:16 crop toward the main subject instead of a center crop.
 
-- [ ] **Auth system** -- No authentication currently exists. The dashboard and API are publicly accessible. Need auth for:
-  - Agent accounts (can upload, view their own properties)
-  - Operator accounts (full dashboard access)
-  - API keys for programmatic access
+- [ ] **Brokerage branding templates** — Logo upload, brand colors, standard intro/outro per brokerage.
 
-## Lovable Cleanup (Done)
-
-- [x] Removed `lovable-tagger` from `vite.config.ts`
-- [x] Removed `lovable-tagger` from `package.json`
-- [x] Removed all mock data (`src/lib/mock-data.ts` deleted)
-- [x] All dashboard pages wired to real API
-
-**Still remaining:**
-- [ ] `index.html` still has Lovable meta tags (`og:image` pointing to `lovable.dev`, `twitter:site` set to `@Lovable`). Update with ReelReady branding.
-- [ ] `index.html` title says "Key Frame" -- should say "ReelReady".
+- [ ] **Auth** — No authentication today. Need agent accounts, operator accounts, and API keys.
