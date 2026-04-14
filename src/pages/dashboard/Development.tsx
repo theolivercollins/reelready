@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight } from "lucide-react";
+import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight, GitPullRequest } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -87,7 +87,7 @@ const Development = () => {
         </Link>
         <Link
           to="/dashboard/development/prompt-lab/recipes"
-          className="group border border-border bg-background p-6 transition hover:border-foreground md:col-span-2"
+          className="group border border-border bg-background p-6 transition hover:border-foreground"
         >
           <div className="flex items-center gap-3">
             <FlaskConical className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
@@ -96,6 +96,19 @@ const Development = () => {
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
             Validated director prompts keyed by archetype. Promoted from 5★ Lab iterations. When a new photo matches a recipe within distance threshold, the director is told to use the recipe verbatim.
+          </p>
+        </Link>
+        <Link
+          to="/dashboard/development/proposals"
+          className="group border border-border bg-background p-6 transition hover:border-foreground"
+        >
+          <div className="flex items-center gap-3">
+            <GitPullRequest className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+            <div className="label text-muted-foreground group-hover:text-foreground">Prompt proposals</div>
+            <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Rule mining across rated Lab iterations. Claude proposes specific edits to the DIRECTOR_SYSTEM grounded in winner/loser patterns. Admin approves per-change. Applied proposals become active lab_prompt_overrides (production unaffected).
           </p>
         </Link>
       </div>

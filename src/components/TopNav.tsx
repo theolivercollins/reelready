@@ -24,6 +24,7 @@ import {
   FlaskConical,
   Code2,
   ChevronDown,
+  GitPullRequest,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
@@ -73,6 +74,11 @@ function DevelopmentNav() {
         <DropdownMenuItem asChild>
           <Link to="/dashboard/development/prompt-lab/recipes" className="cursor-pointer">
             <FlaskConical className="mr-2 h-3.5 w-3.5" /> Recipes
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/development/proposals" className="cursor-pointer">
+            <GitPullRequest className="mr-2 h-3.5 w-3.5" /> Proposals
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

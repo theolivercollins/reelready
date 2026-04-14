@@ -17,6 +17,8 @@
     { "src": "/api/scenes/([^/]+)", "dest": "/api/scenes/[id]?id=$1" },
     { "src": "/api/pipeline/([^/]+)", "dest": "/api/pipeline/[propertyId]?propertyId=$1" },
     { "src": "/api/admin/prompt-lab/recipes", "dest": "/api/admin/prompt-lab/recipes" },
+    { "src": "/api/admin/prompt-lab/mine", "dest": "/api/admin/prompt-lab/mine" },
+    { "src": "/api/admin/prompt-lab/proposals", "dest": "/api/admin/prompt-lab/proposals" },
     { "src": "/api/admin/prompt-lab/([^/]+)", "dest": "/api/admin/prompt-lab/[sessionId]?sessionId=$1" },
     { "src": "/api/account/(.*)", "dest": "/api/account/$1" },
     { "src": "/api/(.*)", "dest": "/api/$1" },

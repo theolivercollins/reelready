@@ -66,6 +66,26 @@ function hash32(s: string): string {
 export const ANALYSIS_PROMPT_HASH = hash32(PHOTO_ANALYSIS_SYSTEM);
 export const DIRECTOR_PROMPT_HASH = hash32(DIRECTOR_SYSTEM);
 
+// Resolve the effective DIRECTOR_SYSTEM for Lab calls — if an active
+// lab_prompt_overrides row exists for prompt_name='director', use that body;
+// otherwise fall back to the main DIRECTOR_SYSTEM. Production pipeline does
+// NOT call this — it uses DIRECTOR_SYSTEM directly, so Lab overrides stay
+// Lab-scoped.
+async function resolveDirectorSystem(): Promise<{ body: string; hash: string }> {
+  try {
+    const { getSupabase } = await import("./client.js");
+    const supabase = getSupabase();
+    const { data } = await supabase
+      .from("lab_prompt_overrides")
+      .select("body, body_hash")
+      .eq("prompt_name", "director")
+      .eq("is_active", true)
+      .maybeSingle();
+    if (data?.body) return { body: data.body as string, hash: (data.body_hash as string) ?? hash32(data.body as string) };
+  } catch { /* no-op */ }
+  return { body: DIRECTOR_SYSTEM, hash: DIRECTOR_PROMPT_HASH };
+}
+
 // ---- Fetch image as base64 for Claude vision ----
 
 async function fetchImageAsBase64(url: string): Promise<{
@@ -242,10 +262,11 @@ export async function directSinglePhoto(
     },
   ]);
   const userPrompt = basePrompt + renderExemplarBlock(exemplars) + renderRecipeBlock(recipes);
+  const { body: directorSystem } = await resolveDirectorSystem();
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 2048,
-    system: DIRECTOR_SYSTEM,
+    system: directorSystem,
     messages: [{ role: "user", content: userPrompt }],
   });
   const text = response.content[0].type === "text" ? response.content[0].text : "";
@@ -309,7 +330,7 @@ ${renderExemplarBlock(params.exemplars ?? [])}
 Remember: the revised output must comply with the full DIRECTOR_SYSTEM rules (below for reference).
 
 ---
-${DIRECTOR_SYSTEM}`;
+${(await resolveDirectorSystem()).body}`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
