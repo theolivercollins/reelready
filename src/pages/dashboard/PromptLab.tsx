@@ -75,6 +75,18 @@ function SessionList() {
     reload();
   }, []);
 
+  // Auto-refresh every 15s while any session has an active render or a
+  // clip waiting to be rated. Only when the tab is visible.
+  useEffect(() => {
+    if (!sessions) return;
+    const anyActive = sessions.some((s) => s.pending_render || s.ready_for_approval);
+    if (!anyActive) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") reload();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [sessions]);
+
   async function handleUpload(files: FileList) {
     if (!files.length) return;
     setUploading(true);
@@ -475,9 +487,22 @@ function SessionCard({
     >
       <div className="relative aspect-video w-full overflow-hidden bg-muted">
         <img src={session.image_url} alt={session.label ?? "session"} className="h-full w-full object-cover pointer-events-none" />
+        {session.pending_render && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+            <div className="inline-flex items-center gap-2 rounded bg-amber-500/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-lg">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Rendering
+            </div>
+          </div>
+        )}
         {session.completed && (
           <div className="absolute top-2 right-2 inline-flex items-center gap-1 rounded bg-emerald-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-sm">
             ✓ Completed
+          </div>
+        )}
+        {!session.completed && !session.pending_render && session.ready_for_approval && (
+          <div className="absolute bottom-0 inset-x-0 bg-sky-500 px-2 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-white">
+            Ready for approval
           </div>
         )}
       </div>

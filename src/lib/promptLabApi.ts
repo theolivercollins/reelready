@@ -12,6 +12,8 @@ export interface LabSession {
   iteration_count?: number;
   best_rating?: number | null;
   completed?: boolean;
+  pending_render?: boolean;
+  ready_for_approval?: boolean;
 }
 
 export interface LabIteration {

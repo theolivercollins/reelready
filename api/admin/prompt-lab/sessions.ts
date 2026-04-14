@@ -23,20 +23,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Also grab iteration counts + best rating per session in one pass,
     // plus which sessions have had an iteration promoted to a recipe.
     const ids = (data ?? []).map((s) => s.id);
-    const summaries: Record<string, { iteration_count: number; best_rating: number | null; completed: boolean }> = {};
+    const summaries: Record<string, {
+      iteration_count: number;
+      best_rating: number | null;
+      completed: boolean;
+      pending_render: boolean;
+      ready_for_approval: boolean;
+    }> = {};
     if (ids.length > 0) {
       const { data: its } = await supabase
         .from("prompt_lab_iterations")
-        .select("id, session_id, rating")
+        .select("id, session_id, rating, clip_url, provider_task_id, render_error")
         .in("session_id", ids);
       const iterationIdToSession = new Map<string, string>();
       for (const it of its ?? []) {
         iterationIdToSession.set(it.id, it.session_id);
-        const row = (summaries[it.session_id] ??= { iteration_count: 0, best_rating: null, completed: false });
+        const row = (summaries[it.session_id] ??= {
+          iteration_count: 0,
+          best_rating: null,
+          completed: false,
+          pending_render: false,
+          ready_for_approval: false,
+        });
         row.iteration_count += 1;
         if (typeof it.rating === "number") {
           row.best_rating = Math.max(row.best_rating ?? 0, it.rating);
         }
+        if (it.provider_task_id && !it.clip_url && !it.render_error) row.pending_render = true;
+        if (it.clip_url && it.rating == null) row.ready_for_approval = true;
       }
 
       const iterationIds = Array.from(iterationIdToSession.keys());
@@ -55,7 +69,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       sessions: (data ?? []).map((s) => ({
         ...s,
-        ...(summaries[s.id] ?? { iteration_count: 0, best_rating: null, completed: false }),
+        ...(summaries[s.id] ?? {
+          iteration_count: 0,
+          best_rating: null,
+          completed: false,
+          pending_render: false,
+          ready_for_approval: false,
+        }),
       })),
     });
   }
