@@ -79,6 +79,15 @@ async function snapshotPromptRevisions(): Promise<void> {
 
 export async function runPipeline(propertyId: string): Promise<void> {
   try {
+    // Stamp the run start so downstream processing_time_ms calculations
+    // measure this RUN, not the property's original creation date. Without
+    // this, rerun properties show bogus "737 minutes processing" numbers
+    // because the cron was computing Date.now() - property.created_at.
+    await getSupabase()
+      .from("properties")
+      .update({ pipeline_started_at: new Date().toISOString() })
+      .eq("id", propertyId);
+
     await log(propertyId, "intake", "info", "Pipeline started");
     // Best-effort prompt changelog snapshot (no-op if unchanged).
     snapshotPromptRevisions();
@@ -104,11 +113,26 @@ export async function runPipeline(propertyId: string): Promise<void> {
     // Stage 3: Script
     await runScripting(propertyId);
 
-    // Stage 3.5: Pre-flight prompt QA (non-blocking revision pass)
-    await runPreflightQA(propertyId);
+    // Stage 3.5 (Pre-flight prompt QA) REMOVED. It was burning ~95s of the
+    // 300s function budget on 12 sequential Claude vision calls AND
+    // silently rewriting the director's short crisp prompts into long
+    // narrative paragraphs that regressed output quality. The director
+    // + video_viable filter + Oliver's per-room feature vocab + the
+    // rating-based learning loop are the real quality levers. QA was
+    // adding more bugs than it prevented.
 
-    // Stage 4 + 5: Generate + QC (per clip, with retries)
-    await runGenerationWithQC(propertyId);
+    // Stage 4: Generate — fire-and-forget submission only. The cron
+    // backstop at api/cron/poll-scenes.ts handles ALL polling and
+    // clip collection, so this function can exit in ~60s instead of
+    // hitting the 300s maxDuration with half the scenes never submitted.
+    await runGenerationSubmit(propertyId);
+
+    // Assembly used to run inline here. It now runs in the cron once
+    // all scenes have settled — see api/cron/poll-scenes.ts finalize
+    // block. Exiting immediately lets the main function budget survive.
+    await log(propertyId, "generation", "info",
+      "All scenes submitted to providers. Cron backstop will collect clips + finalize.");
+    return;
 
     // Stage 6: Assembly
     await runAssembly(propertyId);
@@ -618,169 +642,103 @@ async function runPreflightQA(propertyId: string): Promise<void> {
     `Pre-flight QA done: ${revisedCount}/${scenes.length} prompts revised`);
 }
 
-// ─── STAGE 4+5: GENERATE + QC ─────────────────────────────────
+// ─── STAGE 4: GENERATE — SUBMIT ONLY ─────────────────────────
+//
+// This function ONLY submits each scene to its provider and persists
+// the returned task_id. It does NOT poll, download, or assemble.
+// The Vercel Cron at api/cron/poll-scenes.ts runs every minute,
+// picks up scenes with a persisted provider_task_id but no clip_url,
+// downloads completed clips, records costs, and finalizes the
+// property when all scenes have settled.
+//
+// Why: with the old inline-poll design, a 12-scene run would spend
+// ~95s on preflight QA + ~140s on analysis + the function would hit
+// Vercel's 300s maxDuration before half the scenes were submitted.
+// Splitting submit from collect makes the main function exit in
+// ~30-60s regardless of clip count.
 
-async function runGenerationWithQC(propertyId: string): Promise<void> {
+async function runGenerationSubmit(propertyId: string): Promise<void> {
   await updatePropertyStatus(propertyId, "generating");
   const scenes = await getScenesForProperty(propertyId);
-  const maxRetries = parseInt(process.env.MAX_RETRIES_PER_CLIP ?? "2", 10);
   const supabase = getSupabase();
 
-  // Bound concurrent generation to respect provider parallel-task limits
-  // (Kling returns 1303 "parallel task over resource pack limit" when too many
-  // tasks fire at once). 4 is conservative and fits inside the default Kling plan.
   const GENERATION_CONCURRENCY = parseInt(process.env.GENERATION_CONCURRENCY ?? "4", 10);
-  await log(propertyId, "generation", "info", `Generating ${scenes.length} clips, up to ${GENERATION_CONCURRENCY} in parallel`);
+  await log(propertyId, "generation", "info",
+    `Submitting ${scenes.length} clips, up to ${GENERATION_CONCURRENCY} in parallel`);
 
-  const runScene = async (scene: typeof scenes[number]) => {
-      let lastError = "";
-      // Providers that have already failed for this scene — excluded on subsequent attempts
-      // so a broken provider (out of credit, outage) fails over instead of burning all retries.
-      const excludeProviders: VideoProvider[] = [];
-      let currentProvider: VideoProvider | null = null;
+  const submitScene = async (scene: typeof scenes[number]) => {
+    try {
+      // Get the source photo
+      const { data: photo } = await supabase
+        .from("photos")
+        .select("file_url, room_type")
+        .eq("id", scene.photo_id)
+        .single();
+      if (!photo) throw new Error("Source photo not found");
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          await updateSceneStatus(scene.id, "generating", { attempt_count: attempt + 1 });
+      const photoResponse = await fetch(photo.file_url);
+      const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
 
-          // Get the source photo
-          const { data: photo } = await supabase
-            .from("photos")
-            .select("file_url, room_type")
-            .eq("id", scene.photo_id)
-            .single();
+      const provider = selectProvider(
+        (photo.room_type as RoomType) ?? "other",
+        scene.camera_movement as CameraMovement | null,
+        scene.provider as VideoProvider | null,
+        [],
+      );
 
-          if (!photo) throw new Error("Source photo not found");
+      const genJob = await provider.generateClip({
+        sourceImage,
+        prompt: scene.prompt,
+        durationSeconds: scene.duration_seconds,
+        aspectRatio: "16:9",
+      });
 
-          const photoResponse = await fetch(photo.file_url);
-          const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
+      // Persist the task_id so the cron can pick it up.
+      await supabase
+        .from("scenes")
+        .update({
+          provider: provider.name,
+          provider_task_id: genJob.jobId,
+          submitted_at: new Date().toISOString(),
+          status: "generating",
+          attempt_count: 1,
+        })
+        .eq("id", scene.id);
 
-          const provider = selectProvider(
-            (photo.room_type as RoomType) ?? "other",
-            scene.camera_movement as CameraMovement | null,
-            scene.provider as VideoProvider | null,
-            excludeProviders,
-          );
-          currentProvider = provider.name;
-
-          const startTime = Date.now();
-
-          // Generate clip
-          const genJob = await provider.generateClip({
-            sourceImage,
-            prompt: scene.prompt,
-            durationSeconds: scene.duration_seconds,
-            aspectRatio: "16:9",
-          });
-
-          // Persist the provider task ID IMMEDIATELY so the cron backstop can
-          // pick this scene up if the pipeline function is killed mid-poll.
-          // See api/cron/poll-scenes.ts.
-          await supabase
-            .from("scenes")
-            .update({
-              provider: provider.name,
-              provider_task_id: genJob.jobId,
-              submitted_at: new Date().toISOString(),
-              attempt_count: attempt + 1,
-            })
-            .eq("id", scene.id);
-
-          await log(propertyId, "generation", "info",
-            `Scene ${scene.scene_number}: submitted to ${provider.name}`, { jobId: genJob.jobId }, scene.id);
-
-          // Poll until done
-          const result = await pollUntilComplete(provider, genJob.jobId);
-          if (result.status === "failed") throw new Error(result.error ?? "Generation failed");
-
-          // Download and store clip
-          const clipBuffer = await provider.downloadClip(result.videoUrl!);
-          const clipPath = `${propertyId}/clips/scene_${scene.scene_number}_v${attempt + 1}.mp4`;
-
-          await supabase.storage.from("property-videos").upload(clipPath, clipBuffer, {
-            contentType: "video/mp4",
-            upsert: true,
-          });
-
-          const { data: urlData } = supabase.storage.from("property-videos").getPublicUrl(clipPath);
-          const costCents = result.costCents ?? 0;
-          const genTimeMs = Date.now() - startTime;
-
-          await updateSceneStatus(scene.id, "qc_pass", {
-            clip_url: urlData.publicUrl,
-            provider: provider.name,
-            generation_cost_cents: costCents,
-            generation_time_ms: genTimeMs,
-          });
-
-          await recordCostEvent({
-            propertyId,
-            sceneId: scene.id,
-            stage: "generation",
-            provider: provider.name,
-            unitsConsumed: result.providerUnits,
-            unitType: result.providerUnitType ?? null,
-            costCents,
-            metadata: {
-              scene_number: scene.scene_number,
-              duration_seconds: scene.duration_seconds,
-              generation_time_ms: genTimeMs,
-              attempt: attempt + 1,
-            },
-          });
-          await log(propertyId, "generation", "info",
-            `Scene ${scene.scene_number}: done in ${(genTimeMs / 1000).toFixed(1)}s via ${provider.name}`,
-            { costCents, providerUnits: result.providerUnits }, scene.id);
-
-          // Run QC
-          const qcPassed = await runQCForScene(propertyId, scene.id, urlData.publicUrl, scene);
-          if (qcPassed) return;
-
-          // QC failed — loop will retry
-          lastError = "QC rejected";
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err);
-          await log(propertyId, "generation", "warn",
-            `Scene ${scene.scene_number} attempt ${attempt + 1} failed${currentProvider ? ` (${currentProvider})` : ""}: ${lastError}`, undefined, scene.id);
-          if (currentProvider && !excludeProviders.includes(currentProvider)) {
-            excludeProviders.push(currentProvider);
-          }
-          currentProvider = null;
-        }
-      }
-
-      // All retries exhausted
+      await log(propertyId, "generation", "info",
+        `Scene ${scene.scene_number}: submitted to ${provider.name}`,
+        { jobId: genJob.jobId }, scene.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Mark this scene as needs_review so the cron finalization pass
+      // doesn't wait on it forever. Cron retry logic (out of scope for
+      // this commit) could try alternate providers.
       await updateSceneStatus(scene.id, "needs_review");
       await log(propertyId, "generation", "error",
-        `Scene ${scene.scene_number} failed after ${maxRetries + 1} attempts: ${lastError}`, undefined, scene.id);
+        `Scene ${scene.scene_number}: submit failed: ${msg}`, undefined, scene.id);
+    }
   };
 
-  // Pull-based worker pool: spawn N workers, each drains scenes from a shared queue.
+  // Pull-based worker pool so we don't burst past Kling's 5-concurrent
+  // task limit on the provider side. Each worker does ONE submit and
+  // moves on — no polling.
   const queue = [...scenes];
   const worker = async () => {
     while (queue.length > 0) {
       const next = queue.shift();
       if (!next) return;
-      try { await runScene(next); } catch (_) { /* runScene already logs */ }
+      await submitScene(next);
     }
   };
   await Promise.all(
     Array.from({ length: Math.min(GENERATION_CONCURRENCY, scenes.length) }, () => worker()),
   );
 
-  // Check results
-  const updatedScenes = await getScenesForProperty(propertyId);
-  const passed = updatedScenes.filter((s) => s.status === "qc_pass").length;
-  const needsReview = updatedScenes.filter((s) => s.status === "needs_review").length;
-
-  if (needsReview > 0 && passed < 6) {
-    await updatePropertyStatus(propertyId, "needs_review");
-    await log(propertyId, "generation", "warn",
-      `${needsReview} clips need review, only ${passed} passed. Pausing for HITL.`);
-    return;
-  }
-
-  await log(propertyId, "generation", "info", `${passed}/${updatedScenes.length} clips ready`);
+  const submittedScenes = await getScenesForProperty(propertyId);
+  const submitted = submittedScenes.filter(s => s.provider_task_id).length;
+  const failed = submittedScenes.filter(s => s.status === "needs_review" && !s.provider_task_id).length;
+  await log(propertyId, "generation", "info",
+    `Submission complete: ${submitted}/${scenes.length} submitted, ${failed} failed at submit`);
 }
 
 async function runQCForScene(

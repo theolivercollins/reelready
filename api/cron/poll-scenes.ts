@@ -138,8 +138,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq('property_id', propertyId);
 
       if (!scenes) continue;
-      const stillPending = scenes.some(s => s.provider_task_id && !s.clip_url && s.status !== 'needs_review');
-      if (stillPending) continue;
+
+      // A scene is "still pending" if it has a task_id in flight (waiting
+      // on the provider) OR if it's still in 'pending' status without a
+      // task_id at all (pipeline submit failed to dispatch it). In either
+      // case we must NOT finalize the property.
+      const stillPendingTasks = scenes.some(
+        s => s.provider_task_id && !s.clip_url && s.status !== 'needs_review',
+      );
+      const neverSubmitted = scenes.some(
+        s => !s.provider_task_id && s.status === 'pending',
+      );
+      if (stillPendingTasks || neverSubmitted) continue;
 
       const passed = scenes.filter(s => s.status === 'qc_pass').length;
       const needsReview = scenes.filter(s => s.status === 'needs_review').length;
@@ -149,14 +159,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // clobber an already-completed property.
       const { data: prop } = await supabase
         .from('properties')
-        .select('status, created_at')
+        .select('status, created_at, pipeline_started_at')
         .eq('id', propertyId)
         .single();
       if (!prop) continue;
       const terminal = prop.status === 'complete' || prop.status === 'failed';
       if (terminal) continue;
 
-      const processingTimeMs = Date.now() - new Date(prop.created_at).getTime();
+      // Processing time measures THIS RUN, not the property's original
+      // creation date. pipeline_started_at is stamped at the top of
+      // runPipeline by lib/pipeline.ts. Fall back to created_at only if
+      // it's missing (legacy properties from before this column existed).
+      const startTs = (prop as { pipeline_started_at?: string | null }).pipeline_started_at
+        ?? prop.created_at;
+      const processingTimeMs = Date.now() - new Date(startTs).getTime();
       await updatePropertyStatus(propertyId, finalStatus, {
         processing_time_ms: processingTimeMs,
         thumbnail_url: scenes.find(s => s.clip_url)?.clip_url ?? null,

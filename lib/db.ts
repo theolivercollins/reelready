@@ -166,27 +166,65 @@ export async function fetchRatedExamples(params: {
   const sinceDays = params.sinceDays ?? 30;
   const sinceIso = new Date(Date.now() - sinceDays * 86400000).toISOString();
   const supabase = getSupabase();
-  let query = supabase
+
+  // Fetch ratings first, then look up scene + photo details in a second
+  // query so we avoid fragile nested PostgREST joins across multiple
+  // relationships. Keeps the code defensive against schema drift and
+  // lets us tolerate scenes that were deleted since the rating was made.
+  let ratingsQuery = supabase
     .from("scene_ratings")
-    .select("rating, comment, tags, scenes!inner(room_type, camera_movement, prompt, provider)")
+    .select("rating, comment, tags, scene_id, created_at")
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
     .limit(params.limit ?? 20);
-  if (params.minRating !== undefined) query = query.gte("rating", params.minRating);
-  if (params.maxRating !== undefined) query = query.lte("rating", params.maxRating);
-  const { data, error } = await query;
-  if (error) throw error;
-  return ((data ?? []) as unknown as Array<{
+  if (params.minRating !== undefined) ratingsQuery = ratingsQuery.gte("rating", params.minRating);
+  if (params.maxRating !== undefined) ratingsQuery = ratingsQuery.lte("rating", params.maxRating);
+  const { data: ratingRows, error: ratingsErr } = await ratingsQuery;
+  if (ratingsErr) throw ratingsErr;
+  const ratings = (ratingRows ?? []) as Array<{
     rating: number;
     comment: string | null;
     tags: string[] | null;
-    scenes: { room_type: string; camera_movement: string; prompt: string; provider: string | null };
-  }>).map(r => ({
-    rating: r.rating,
-    comment: r.comment,
-    tags: r.tags,
-    scene: r.scenes,
-  }));
+    scene_id: string;
+    created_at: string;
+  }>;
+  if (ratings.length === 0) return [];
+
+  // Fetch the scene rows (prompt, camera_movement, provider, photo_id).
+  const sceneIds = ratings.map(r => r.scene_id);
+  const { data: sceneRows } = await supabase
+    .from("scenes")
+    .select("id, camera_movement, prompt, provider, photo_id")
+    .in("id", sceneIds);
+  const sceneMap = new Map((sceneRows ?? []).map((s: { id: string } & Record<string, unknown>) => [s.id, s]));
+
+  // Fetch the photo room_types for those scenes.
+  const photoIds = Array.from(new Set((sceneRows ?? []).map((s: { photo_id: string }) => s.photo_id).filter(Boolean)));
+  const { data: photoRows } = photoIds.length
+    ? await supabase.from("photos").select("id, room_type").in("id", photoIds)
+    : { data: [] as Array<{ id: string; room_type: string }> };
+  const photoMap = new Map((photoRows ?? []).map((p: { id: string; room_type: string }) => [p.id, p.room_type]));
+
+  return ratings.flatMap(r => {
+    const scene = sceneMap.get(r.scene_id) as undefined | {
+      camera_movement: string;
+      prompt: string;
+      provider: string | null;
+      photo_id: string;
+    };
+    if (!scene) return []; // scene deleted — skip
+    return [{
+      rating: r.rating,
+      comment: r.comment,
+      tags: r.tags,
+      scene: {
+        room_type: photoMap.get(scene.photo_id) ?? "other",
+        camera_movement: scene.camera_movement,
+        prompt: scene.prompt,
+        provider: scene.provider,
+      },
+    }];
+  });
 }
 
 // ── Prompt revisions (changelog) ──
