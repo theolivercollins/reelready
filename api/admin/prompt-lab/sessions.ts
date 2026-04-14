@@ -20,24 +20,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(200);
     if (error) return res.status(500).json({ error: error.message });
 
-    // Also grab iteration counts + best rating per session in one pass.
+    // Also grab iteration counts + best rating per session in one pass,
+    // plus which sessions have had an iteration promoted to a recipe.
     const ids = (data ?? []).map((s) => s.id);
-    let summaries: Record<string, { iteration_count: number; best_rating: number | null }> = {};
+    const summaries: Record<string, { iteration_count: number; best_rating: number | null; completed: boolean }> = {};
     if (ids.length > 0) {
       const { data: its } = await supabase
         .from("prompt_lab_iterations")
-        .select("session_id, rating")
+        .select("id, session_id, rating")
         .in("session_id", ids);
+      const iterationIdToSession = new Map<string, string>();
       for (const it of its ?? []) {
-        const row = (summaries[it.session_id] ??= { iteration_count: 0, best_rating: null });
+        iterationIdToSession.set(it.id, it.session_id);
+        const row = (summaries[it.session_id] ??= { iteration_count: 0, best_rating: null, completed: false });
         row.iteration_count += 1;
         if (typeof it.rating === "number") {
           row.best_rating = Math.max(row.best_rating ?? 0, it.rating);
         }
       }
+
+      const iterationIds = Array.from(iterationIdToSession.keys());
+      if (iterationIds.length > 0) {
+        const { data: recipes } = await supabase
+          .from("prompt_lab_recipes")
+          .select("source_iteration_id")
+          .eq("status", "active")
+          .in("source_iteration_id", iterationIds);
+        for (const r of recipes ?? []) {
+          const sid = iterationIdToSession.get(r.source_iteration_id as string);
+          if (sid && summaries[sid]) summaries[sid].completed = true;
+        }
+      }
     }
     return res.status(200).json({
-      sessions: (data ?? []).map((s) => ({ ...s, ...(summaries[s.id] ?? { iteration_count: 0, best_rating: null }) })),
+      sessions: (data ?? []).map((s) => ({
+        ...s,
+        ...(summaries[s.id] ?? { iteration_count: 0, best_rating: null, completed: false }),
+      })),
     });
   }
 

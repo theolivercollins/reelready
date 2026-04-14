@@ -11,6 +11,7 @@ export interface LabSession {
   created_at: string;
   iteration_count?: number;
   best_rating?: number | null;
+  completed?: boolean;
 }
 
 export interface LabIteration {

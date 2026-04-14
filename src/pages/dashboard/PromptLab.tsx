@@ -242,9 +242,18 @@ function FileDropZone({
 
 // ─── Batch groups with drag-drop + rename ───
 
+type ShotStatus = "not_started" | "in_progress" | "completed";
+
+function statusOf(s: LabSession): ShotStatus {
+  if (s.completed) return "completed";
+  if ((s.iteration_count ?? 0) === 0) return "not_started";
+  return "in_progress";
+}
+
 function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload: () => void }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Record<string, "all" | ShotStatus>>({});
 
   const groups = new Map<string, LabSession[]>();
   for (const s of sessions) {
@@ -293,6 +302,16 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
         const rated = items.filter((i) => typeof i.best_rating === "number");
         const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.best_rating ?? 0), 0) / rated.length : null;
         const isTarget = dropTarget === batch;
+
+        const counts = {
+          all: items.length,
+          not_started: items.filter((i) => statusOf(i) === "not_started").length,
+          in_progress: items.filter((i) => statusOf(i) === "in_progress").length,
+          completed: items.filter((i) => statusOf(i) === "completed").length,
+        };
+        const filter = filters[batch] ?? "all";
+        const visible = filter === "all" ? items : items.filter((i) => statusOf(i) === filter);
+
         return (
           <div
             key={batch}
@@ -314,27 +333,55 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
               }
             }}
           >
-            <div className="mb-3 flex items-baseline justify-between">
+            <div className="mb-3 flex items-baseline justify-between gap-4">
               <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
-              <span className="text-xs text-muted-foreground">
-                {items.length} session{items.length === 1 ? "" : "s"}
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {counts.completed}/{counts.all} completed
                 {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
               </span>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {items.map((s) => (
-                <SessionCard
-                  key={s.id}
-                  session={s}
-                  isDragging={draggingId === s.id}
-                  onDragStart={() => setDraggingId(s.id)}
-                  onDragEnd={() => {
-                    setDraggingId(null);
-                    setDropTarget(null);
-                  }}
-                />
+
+            <div className="mb-3 flex flex-wrap gap-1">
+              {(
+                [
+                  ["all", `All (${counts.all})`],
+                  ["not_started", `Need to start (${counts.not_started})`],
+                  ["in_progress", `In progress (${counts.in_progress})`],
+                  ["completed", `Completed (${counts.completed})`],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setFilters((prev) => ({ ...prev, [batch]: key }))}
+                  className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-wider transition ${
+                    filter === key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
             </div>
+
+            {visible.length === 0 ? (
+              <div className="rounded border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                No sessions in this filter.
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {visible.map((s) => (
+                  <SessionCard
+                    key={s.id}
+                    session={s}
+                    isDragging={draggingId === s.id}
+                    onDragStart={() => setDraggingId(s.id)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropTarget(null);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
@@ -424,10 +471,15 @@ function SessionCard({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className={`border border-border bg-background transition hover:border-foreground ${isDragging ? "opacity-40" : ""}`}
+      className={`relative border border-border bg-background transition hover:border-foreground ${isDragging ? "opacity-40" : ""} ${session.completed ? "border-emerald-500/50" : ""}`}
     >
-      <div className="aspect-video w-full overflow-hidden bg-muted">
+      <div className="relative aspect-video w-full overflow-hidden bg-muted">
         <img src={session.image_url} alt={session.label ?? "session"} className="h-full w-full object-cover pointer-events-none" />
+        {session.completed && (
+          <div className="absolute top-2 right-2 inline-flex items-center gap-1 rounded bg-emerald-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-sm">
+            ✓ Completed
+          </div>
+        )}
       </div>
       <div className="p-3">
         <div className="text-xs font-medium truncate">{session.label || session.archetype || "Untitled"}</div>
