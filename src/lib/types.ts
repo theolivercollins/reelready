@@ -138,6 +138,38 @@ export interface CostEvent {
   created_at: string;
 }
 
+export type TokenProvider = "runway" | "kling" | "luma" | "anthropic" | "openai" | "other";
+
+export interface TokenPurchase {
+  id: string;
+  created_at: string;
+  purchased_at: string;
+  provider: TokenProvider;
+  amount_cents: number;
+  units: number;
+  unit_type: string | null;
+  note: string | null;
+}
+
+export interface Expense {
+  id: string;
+  created_at: string;
+  incurred_at: string;
+  category: string;
+  description: string | null;
+  amount_cents: number;
+}
+
+export interface RevenueEntry {
+  id: string;
+  created_at: string;
+  received_at: string;
+  source: string;
+  property_id: string | null;
+  amount_cents: number;
+  note: string | null;
+}
+
 export interface DailyStat {
   id: string;
   date: string;

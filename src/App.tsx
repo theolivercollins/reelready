@@ -23,6 +23,7 @@ import DashboardPipeline from "./pages/dashboard/Pipeline";
 import DashboardProperties from "./pages/dashboard/Properties";
 import PropertyDetail from "./pages/dashboard/PropertyDetail";
 import DashboardLogs from "./pages/dashboard/Logs";
+import DashboardFinances from "./pages/dashboard/Finances";
 import DashboardSettings from "./pages/dashboard/Settings";
 import DashboardLearning from "./pages/dashboard/Learning";
 import NotFound from "./pages/NotFound";
@@ -66,6 +67,7 @@ const App = () => (
                   <Route path="properties/:id" element={<PropertyDetail />} />
                   <Route path="logs" element={<DashboardLogs />} />
                   <Route path="learning" element={<DashboardLearning />} />
+                  <Route path="finances" element={<DashboardFinances />} />
                   <Route path="settings" element={<DashboardSettings />} />
                 </Route>
               </Route>
