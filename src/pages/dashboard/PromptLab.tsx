@@ -466,6 +466,19 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     reload();
   }, [reload]);
 
+  // Auto-refresh every 10s while any iteration has an in-flight render.
+  useEffect(() => {
+    if (!data) return;
+    const anyPending = data.iterations.some(
+      (it) => it.provider_task_id && !it.clip_url && !it.render_error
+    );
+    if (!anyPending) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") reload();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [data, reload]);
+
   async function handleAnalyze() {
     setBusy("analyze");
     setError(null);
@@ -894,6 +907,30 @@ function IterationCard({
         </div>
       )}
 
+      {/* Pending render indicator */}
+      {!iteration.clip_url && iteration.provider_task_id && !iteration.render_error && (
+        <div className="mt-5 inline-flex items-center gap-2 rounded bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Rendering on {iteration.provider}
+          {iteration.render_submitted_at && (
+            <span className="text-amber-700/70 dark:text-amber-400/70">
+              · submitted {new Date(iteration.render_submitted_at).toLocaleTimeString()}
+            </span>
+          )}
+          <span className="text-amber-700/70 dark:text-amber-400/70">
+            · cron finalizes (safe to leave this page)
+          </span>
+        </div>
+      )}
+
+      {/* Render error */}
+      {iteration.render_error && !iteration.clip_url && (
+        <div className="mt-5 rounded bg-destructive/10 p-3 text-xs text-destructive">
+          <div className="font-medium">Render failed</div>
+          <div className="mt-1 text-destructive/80">{iteration.render_error}</div>
+        </div>
+      )}
+
       {/* Clip player */}
       {iteration.clip_url && (
         <div className="mt-5 space-y-2">
@@ -921,8 +958,8 @@ function IterationCard({
         <PromoteRecipeControl iteration={iteration} director={director} />
       )}
 
-      {/* Render controls (latest only) */}
-      {isLatest && !iteration.clip_url && director && (
+      {/* Render controls (latest only, not currently rendering) */}
+      {isLatest && !iteration.clip_url && !iteration.provider_task_id && director && (
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <input

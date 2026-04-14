@@ -3,7 +3,8 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "crons": [
-    { "path": "/api/cron/poll-scenes", "schedule": "* * * * *" }
+    { "path": "/api/cron/poll-scenes", "schedule": "* * * * *" },
+    { "path": "/api/cron/poll-lab-renders", "schedule": "* * * * *" }
   ],
   "routes": [
     { "handle": "filesystem" },

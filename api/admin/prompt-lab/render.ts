@@ -1,15 +1,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase } from "../../../lib/client.js";
-import { renderLabClip } from "../../../lib/prompt-lab.js";
+import { submitLabRender } from "../../../lib/prompt-lab.js";
 
 // POST /api/admin/prompt-lab/render
-//   body: { iteration_id }
-// Actually spends credits: calls Kling/Runway with the iteration's director
-// prompt and stores the resulting clip_url on the iteration row.
+//   body: { iteration_id, provider? }
+// Submits a clip generation job to the provider and records the task_id.
+// Does NOT poll — the cron at /api/cron/poll-lab-renders finalizes.
+// Returns immediately so client can navigate away safely.
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -38,38 +39,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (iteration.clip_url) {
     return res.status(200).json({ ...iteration, alreadyRendered: true });
   }
+  if (iteration.provider_task_id) {
+    return res.status(200).json({ ...iteration, alreadySubmitted: true });
+  }
 
   const imageUrl = (iteration.prompt_lab_sessions as { image_url: string })?.image_url;
   if (!imageUrl) return res.status(400).json({ error: "session image url missing" });
 
   try {
-    const result = await renderLabClip({
+    const { jobId, provider } = await submitLabRender({
       imageUrl,
       scene: iteration.director_output_json,
       roomType: iteration.analysis_json?.room_type ?? "other",
       providerOverride: providerOverride === "kling" || providerOverride === "runway" ? providerOverride : null,
-      sessionId: iteration.session_id,
-      iterationId: iteration_id,
     });
 
     const { data: updated, error: uErr } = await supabase
       .from("prompt_lab_iterations")
       .update({
-        clip_url: result.clipUrl,
-        provider: result.provider,
-        cost_cents: Math.round((iteration.cost_cents ?? 0) + result.costCents),
+        provider,
+        provider_task_id: jobId,
+        render_submitted_at: new Date().toISOString(),
+        render_error: null,
       })
       .eq("id", iteration_id)
       .select()
       .single();
     if (uErr) return res.status(500).json({ error: uErr.message });
 
-    if (result.error) {
-      return res.status(502).json({ ...updated, renderError: result.error });
-    }
     return res.status(200).json(updated);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: "render failed", detail: msg });
+    await supabase
+      .from("prompt_lab_iterations")
+      .update({ render_error: msg })
+      .eq("id", iteration_id);
+    return res.status(500).json({ error: "render submit failed", detail: msg });
   }
 }

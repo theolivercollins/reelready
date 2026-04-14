@@ -360,53 +360,56 @@ ${(await resolveDirectorSystem()).body}`;
   return { scene, rationale: parsed.rationale ?? "", costCents: Math.round(usageCost.costCents) };
 }
 
-// ---- Actually render a clip via Kling/Runway ----
+// ---- Render submission (fire-and-forget) + cron finalization ----
 
-export async function renderLabClip(params: {
+function getProviderByName(name: "kling" | "runway"): IVideoProvider {
+  return name === "kling" ? new KlingProvider() : new RunwayProvider();
+}
+
+export async function submitLabRender(params: {
   imageUrl: string;
   scene: DirectorSceneOutput;
   roomType: RoomType;
   providerOverride?: "kling" | "runway" | null;
-  sessionId?: string;
-  iterationId?: string;
-}): Promise<{
-  clipUrl: string | null;
-  provider: string;
-  costCents: number;
-  error: string | null;
-}> {
+}): Promise<{ jobId: string; provider: string }> {
   let provider: IVideoProvider;
-  if (params.providerOverride === "kling") provider = new KlingProvider();
-  else if (params.providerOverride === "runway") provider = new RunwayProvider();
-  else provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
+  if (params.providerOverride === "kling" || params.providerOverride === "runway") {
+    provider = getProviderByName(params.providerOverride);
+  } else {
+    provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
+  }
   const img = await fetch(params.imageUrl);
   if (!img.ok) throw new Error(`Failed to fetch source image: ${img.status}`);
   const sourceImage = Buffer.from(await img.arrayBuffer());
-
   const job = await provider.generateClip({
     sourceImage,
     prompt: params.scene.prompt,
     durationSeconds: params.scene.duration_seconds >= 7 ? 10 : 5,
     aspectRatio: "16:9",
   });
-  const result = await pollUntilComplete(provider, job.jobId, 180_000, 5_000);
-  if (result.status !== "complete" || !result.videoUrl) {
-    return {
-      clipUrl: null,
-      provider: provider.name,
-      costCents: Math.round(result.costCents ?? 0),
-      error: result.error ?? "render failed",
-    };
+  return { jobId: job.jobId, provider: provider.name };
+}
+
+export async function finalizeLabRender(params: {
+  iterationId: string;
+  sessionId: string;
+  provider: "kling" | "runway";
+  providerTaskId: string;
+}): Promise<{ done: boolean; clipUrl?: string; costCents?: number; error?: string }> {
+  const providerImpl = getProviderByName(params.provider);
+  const result = await providerImpl.checkStatus(params.providerTaskId);
+  if (result.status === "processing") return { done: false };
+  if (result.status === "failed" || !result.videoUrl) {
+    return { done: true, error: result.error ?? "render failed" };
   }
 
-  // Download and re-upload to Supabase Storage so the URL is permanent and
-  // CORS-friendly. Provider CDN URLs (Kling especially) expire in ~30 min.
+  // Persist the clip to Supabase Storage (provider CDNs expire).
   let persistedUrl = result.videoUrl;
   try {
-    const buffer = await provider.downloadClip(result.videoUrl);
+    const buffer = await providerImpl.downloadClip(result.videoUrl);
     const { getSupabase } = await import("./client.js");
     const supabase = getSupabase();
-    const path = `prompt-lab/${params.sessionId ?? "unknown"}/${params.iterationId ?? Date.now()}.mp4`;
+    const path = `prompt-lab/${params.sessionId}/${params.iterationId}.mp4`;
     const { error: upErr } = await supabase.storage
       .from("property-videos")
       .upload(path, buffer, { contentType: "video/mp4", upsert: true });
@@ -417,10 +420,9 @@ export async function renderLabClip(params: {
   } catch { /* fall back to provider URL */ }
 
   return {
+    done: true,
     clipUrl: persistedUrl,
-    provider: provider.name,
     costCents: Math.round(result.costCents ?? 0),
-    error: null,
   };
 }
 
