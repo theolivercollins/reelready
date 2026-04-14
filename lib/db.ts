@@ -150,6 +150,9 @@ export async function updatePhotoAnalysis(
     key_features: string[];
     selected: boolean;
     discard_reason: string | null;
+    video_viable?: boolean | null;
+    suggested_motion?: string | null;
+    motion_rationale?: string | null;
   }
 ): Promise<void> {
   const { error } = await getSupabase().from("photos").update(analysis).eq("id", id);

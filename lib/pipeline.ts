@@ -185,11 +185,16 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
     }
   }
 
-  // Selection algorithm
+  // Selection algorithm — only video-viable photos are eligible
   const selected = selectPhotos(allResults);
 
   for (const { photo, analysis } of allResults) {
     const isSelected = selected.some((s) => s.photo.id === photo.id);
+    // If Claude marked the photo non-viable for video, surface that as the
+    // discard reason in the UI so Oliver can see WHY it wasn't picked.
+    const notViableReason = analysis.video_viable === false
+      ? `Not usable as video starting frame: ${analysis.motion_rationale ?? "no clean motion path"}`
+      : null;
     await updatePhotoAnalysis(photo.id, {
       room_type: analysis.room_type,
       quality_score: analysis.quality_score,
@@ -199,7 +204,10 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
       selected: isSelected,
       discard_reason: analysis.suggested_discard
         ? analysis.discard_reason
-        : isSelected ? null : "Not selected",
+        : notViableReason ?? (isSelected ? null : "Not selected"),
+      video_viable: analysis.video_viable ?? null,
+      suggested_motion: analysis.suggested_motion ?? null,
+      motion_rationale: analysis.motion_rationale ?? null,
     });
   }
 
@@ -208,13 +216,20 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
     .update({ selected_photo_count: selected.length })
     .eq("id", propertyId);
 
-  await log(propertyId, "analysis", "info", `Analysis done: ${selected.length} selected from ${allResults.length}`);
+  const nonViableCount = allResults.filter(r => r.analysis.video_viable === false).length;
+  await log(propertyId, "analysis", "info",
+    `Analysis done: ${selected.length} selected from ${allResults.length} (${nonViableCount} photos marked non-viable for video)`);
 }
 
 function selectPhotos(
   results: Array<{ photo: Photo; analysis: PhotoAnalysisResult }>
 ): Array<{ photo: Photo; analysis: PhotoAnalysisResult }> {
-  const candidates = results.filter((r) => !r.analysis.suggested_discard);
+  // Eligible candidates must (a) not be globally discarded AND (b) be
+  // viable as a video starting frame. Claude's new video_viable flag
+  // catches pretty-but-unusable photos that aesthetic_score can't.
+  const candidates = results.filter(
+    (r) => !r.analysis.suggested_discard && r.analysis.video_viable !== false,
+  );
   const byRoom = new Map<RoomType, typeof candidates>();
   for (const c of candidates) {
     const existing = byRoom.get(c.analysis.room_type) ?? [];
@@ -363,13 +378,18 @@ async function runScripting(propertyId: string): Promise<void> {
   }
 
   const client = new Anthropic();
-  const photoData = photos.map((p) => ({
+  const photoData = photos.map((p: Photo & { suggested_motion?: string | null; motion_rationale?: string | null }) => ({
     id: p.id,
     file_name: p.file_name ?? "unknown.jpg",
     room_type: p.room_type ?? "other",
     aesthetic_score: p.aesthetic_score ?? 5,
     depth_rating: p.depth_rating ?? "medium",
     key_features: p.key_features ?? [],
+    // Claude's per-photo video-viability hints — the director should use
+    // suggested_motion as its camera_movement unless there's a strong
+    // diversity reason to override.
+    suggested_motion: p.suggested_motion ?? null,
+    motion_rationale: p.motion_rationale ?? null,
   }));
 
   // Pull the style guide from the property row (built in Stage 2.5) and
@@ -753,7 +773,9 @@ async function runAssembly(propertyId: string): Promise<void> {
 
   const property = await getProperty(propertyId);
   const scenes = await getScenesForProperty(propertyId);
-  const passedScenes = scenes.filter((s) => s.status === "qc_pass" && s.clip_url);
+  const passedScenes = scenes
+    .filter((s) => s.status === "qc_pass" && s.clip_url)
+    .sort((a, b) => a.scene_number - b.scene_number);
 
   if (passedScenes.length === 0) {
     await updatePropertyStatus(propertyId, "failed");
@@ -761,28 +783,129 @@ async function runAssembly(propertyId: string): Promise<void> {
     return;
   }
 
-  // For Vercel deployment, assembly (FFmpeg stitching) needs to happen
-  // via an external service or Vercel Sandbox since Vercel Functions
-  // don't have FFmpeg binaries.
-  //
-  // For launch: store individual clips and mark complete.
-  // The Lovable dashboard shows all clips in order — the editor
-  // (or a future FFmpeg service) handles final stitching.
-  //
-  // TODO: Add Vercel Sandbox or external FFmpeg service for automated stitching
+  const totalProcessingMsBase = Date.now() - new Date(property.created_at).getTime();
 
-  const totalProcessingMs = Date.now() - new Date(property.created_at).getTime();
+  // Attempt Shotstack assembly (stitch + text overlays). If SHOTSTACK_API_KEY
+  // is not configured, or Shotstack fails, fall back to marking the property
+  // complete with individual clip URLs only (legacy behavior).
+  let horizontalUrl: string | null = null;
+  let verticalUrl: string | null = null;
+  let assemblyErrored = false;
 
-  // Use first clip as thumbnail
+  const shotstackEnabled = Boolean(
+    process.env.SHOTSTACK_API_KEY || process.env.SHOTSTACK_API_KEY_STAGE
+  );
+
+  if (shotstackEnabled) {
+    try {
+      const { ShotstackProvider, pollAssemblyUntilComplete } = await import(
+        "./providers/shotstack.js"
+      );
+      const provider = new ShotstackProvider();
+
+      const clipInputs = passedScenes.map((s) => ({
+        url: s.clip_url as string,
+        durationSeconds: s.duration_seconds,
+      }));
+
+      const overlays = {
+        address: property.address,
+        price: formatPrice(property.price),
+        details: `${property.bedrooms} BD | ${formatBaths(property.bathrooms)} BA`,
+        agent: property.listing_agent,
+        brokerage: property.brokerage ?? null,
+      };
+
+      await log(propertyId, "assembly", "info",
+        `Submitting Shotstack render (${clipInputs.length} clips)`,
+        { clipCount: clipInputs.length }
+      );
+
+      // Render both aspect ratios sequentially. Each render typically takes
+      // 30–90s. Kept sequential to stay under the 300s function budget when
+      // upstream generation already consumed most of the wall clock.
+      const horizontalJob = await provider.assemble({
+        clips: clipInputs,
+        overlays,
+        aspectRatio: "16:9",
+      });
+      await log(propertyId, "assembly", "info",
+        `Shotstack horizontal job queued: ${horizontalJob.jobId}`);
+      const horizontalResult = await pollAssemblyUntilComplete(provider, horizontalJob);
+      if (horizontalResult.status !== "complete" || !horizontalResult.videoUrl) {
+        throw new Error(`Horizontal render failed: ${horizontalResult.error ?? "unknown"}`);
+      }
+      horizontalUrl = horizontalResult.videoUrl;
+
+      const verticalJob = await provider.assemble({
+        clips: clipInputs,
+        overlays,
+        aspectRatio: "9:16",
+      });
+      await log(propertyId, "assembly", "info",
+        `Shotstack vertical job queued: ${verticalJob.jobId}`);
+      const verticalResult = await pollAssemblyUntilComplete(provider, verticalJob);
+      if (verticalResult.status !== "complete" || !verticalResult.videoUrl) {
+        throw new Error(`Vertical render failed: ${verticalResult.error ?? "unknown"}`);
+      }
+      verticalUrl = verticalResult.videoUrl;
+
+      await log(propertyId, "assembly", "info",
+        `Shotstack renders complete`,
+        {
+          horizontalUrl,
+          verticalUrl,
+          horizontalRenderMs: horizontalResult.renderTimeMs,
+          verticalRenderMs: verticalResult.renderTimeMs,
+        }
+      );
+    } catch (err) {
+      assemblyErrored = true;
+      const msg = err instanceof Error ? err.message : String(err);
+      await log(propertyId, "assembly", "warn",
+        `Shotstack assembly failed, falling back to clip-only delivery: ${msg}`
+      );
+    }
+  } else {
+    await log(propertyId, "assembly", "info",
+      "SHOTSTACK_API_KEY not set — skipping assembly, delivering clips only"
+    );
+  }
+
   const thumbnailUrl = passedScenes[0]?.clip_url ?? null;
+  const totalProcessingMs = Date.now() - new Date(property.created_at).getTime();
 
   await updatePropertyStatus(propertyId, "complete", {
     thumbnail_url: thumbnailUrl,
     processing_time_ms: totalProcessingMs,
+    ...(horizontalUrl ? { horizontal_video_url: horizontalUrl } : {}),
+    ...(verticalUrl ? { vertical_video_url: verticalUrl } : {}),
   });
 
+  const assemblyNote = horizontalUrl && verticalUrl
+    ? "Stitched video delivered (Shotstack)"
+    : assemblyErrored
+    ? "Assembly failed, delivered individual clips as fallback"
+    : "Delivered individual clips (Shotstack not configured)";
+
   await log(propertyId, "assembly", "info",
-    `Complete! ${passedScenes.length} clips generated in ${(totalProcessingMs / 1000).toFixed(1)}s. Total cost: $${((property.total_cost_cents) / 100).toFixed(2)}`,
-    { clipCount: passedScenes.length, totalProcessingMs, totalCostCents: property.total_cost_cents }
+    `Complete! ${passedScenes.length} clips in ${(totalProcessingMs / 1000).toFixed(1)}s. Total cost: $${((property.total_cost_cents) / 100).toFixed(2)}. ${assemblyNote}`,
+    {
+      clipCount: passedScenes.length,
+      totalProcessingMs,
+      totalCostCents: property.total_cost_cents,
+      horizontalUrl,
+      verticalUrl,
+    }
   );
+  // Silence unused baseline var (kept for potential future delta logging)
+  void totalProcessingMsBase;
+}
+
+function formatPrice(price: number): string {
+  return `$${price.toLocaleString("en-US")}`;
+}
+
+function formatBaths(baths: number): string {
+  return Number.isInteger(baths) ? String(baths) : baths.toFixed(1);
 }

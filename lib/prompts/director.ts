@@ -92,11 +92,26 @@ Within a 1-2 range, pick 2 if the room has depth_rating "high" OR aesthetic_scor
 Final scene count lands between 10 and 16. Total duration 30-60 seconds. Skip room types that aren't present. Do not pad with filler.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PER-PHOTO SUGGESTED MOTION (STRONG DEFAULT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each photo in the input list includes a "suggested_motion" field. This is
+the camera movement Claude's photo analyst picked for that specific photo
+based on the actual angle and composition. Respect it by default. Only
+override if a diversity constraint forces it (two consecutive scenes
+would otherwise have the same movement).
+
+If a photo has suggested_motion=null, that photo was marked non-viable for
+video and should not be in your input list at all.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA MOVEMENT DIVERSITY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Consecutive scenes MUST use different camera_movement values.
 - Use at least 5 different movements across the shot list.
 - slow_pan is the weakest choice — use it sparingly.
+- Diversity comes second to per-photo suggested_motion. Rearrange the
+  scene order to break up same-motion clusters rather than swapping
+  motions away from what the photo analysis recommended.
 
 Preferred assignments (not rigid):
 - exterior_front / exterior_back: orbital_slow or pull_out then push_in
@@ -135,12 +150,18 @@ export function buildDirectorUserPrompt(
     aesthetic_score: number;
     depth_rating: string;
     key_features: string[];
+    suggested_motion?: string | null;
+    motion_rationale?: string | null;
   }>
 ): string {
   const photoList = photos
     .map(
-      (p) =>
-        `- ID: ${p.id} | File: ${p.file_name} | Room: ${p.room_type} | Aesthetic: ${p.aesthetic_score} | Depth: ${p.depth_rating} | Features: ${p.key_features.join(", ")}`
+      (p) => {
+        const motionHint = p.suggested_motion
+          ? ` | suggested_motion: ${p.suggested_motion} (${p.motion_rationale ?? "no rationale"})`
+          : "";
+        return `- ID: ${p.id} | File: ${p.file_name} | Room: ${p.room_type} | Aesthetic: ${p.aesthetic_score} | Depth: ${p.depth_rating} | Features: ${p.key_features.join(", ")}${motionHint}`;
+      }
     )
     .join("\n");
 

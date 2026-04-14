@@ -37,6 +37,9 @@ export interface Photo {
   key_features: string[] | null;
   selected: boolean;
   discard_reason: string | null;
+  video_viable: boolean | null;
+  suggested_motion: CameraMovement | null;
+  motion_rationale: string | null;
 }
 
 export interface Scene {

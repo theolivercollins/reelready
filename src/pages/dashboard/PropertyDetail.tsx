@@ -263,7 +263,19 @@ const PropertyDetail = () => {
                     <div className="tabular flex gap-3 text-[10px] text-muted-foreground">
                       <span>Q {photo.quality_score ?? "—"}</span>
                       <span>A {photo.aesthetic_score ?? "—"}</span>
+                      {photo.video_viable === true && (
+                        <span className="text-foreground">✓ video</span>
+                      )}
+                      {photo.video_viable === false && (
+                        <span className="text-destructive">✕ video</span>
+                      )}
                     </div>
+                    {photo.video_viable && photo.suggested_motion && (
+                      <p className="text-[10px] leading-tight text-muted-foreground">
+                        <span className="tabular text-foreground">{photo.suggested_motion.replace(/_/g, " ")}</span>
+                        {photo.motion_rationale && <span> · {photo.motion_rationale}</span>}
+                      </p>
+                    )}
                     {photo.key_features && photo.key_features.length > 0 && (
                       <p className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">
                         {photo.key_features.join(" · ")}
