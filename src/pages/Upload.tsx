@@ -1,12 +1,31 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { X, CheckCircle2, Loader2, Check, Mic, Bookmark, BookmarkCheck, RotateCcw, ArrowRight, Camera, Sparkles, ArrowLeft } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  ArrowRight,
+  ArrowLeft,
+  Bookmark,
+  CheckCircle2,
+  Loader2,
+  Mic,
+  RotateCcw,
+  Sparkles,
+  X,
+  Home,
+  Flame,
+  Trophy,
+  Layers,
+  RectangleVertical,
+  RectangleHorizontal,
+  Square,
+  Camera,
+  Check,
+} from "lucide-react";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { getPresets, savePreset, Preset } from "@/lib/presets";
+import { getPresets, savePreset, type Preset } from "@/lib/presets";
 import { createProperty } from "@/lib/api";
 
 interface UploadedFile {
@@ -15,9 +34,20 @@ interface UploadedFile {
   id: string;
 }
 
-// Photos are uploaded directly to Supabase Storage (no base64 conversion needed)
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const stepFade: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
+  exit: { opacity: 0, y: -24, transition: { duration: 0.4, ease: EASE } },
+};
+
+const STEPS = ["Style", "Add-ons", "Property", "Photos"] as const;
+type StepId = 0 | 1 | 2 | 3;
 
 const Upload = () => {
+  // ─── form state ───
+  const [step, setStep] = useState<StepId>(0);
   const [address, setAddress] = useState("");
   const [price, setPrice] = useState("");
   const [bedrooms, setBedrooms] = useState("");
@@ -29,25 +59,29 @@ const Upload = () => {
   const [selectedDuration, setSelectedDuration] = useState<string | null>(null);
   const [selectedOrientation, setSelectedOrientation] = useState<string | null>(null);
   const [addVoiceover, setAddVoiceover] = useState(false);
+  const [addVoiceClone, setAddVoiceClone] = useState(false);
   const [addCustomRequest, setAddCustomRequest] = useState(false);
   const [customRequestText, setCustomRequestText] = useState("");
-  const [addVoiceClone, setAddVoiceClone] = useState(false);
   const [files, setFiles] = useState<UploadedFile[]>([]);
+
+  // ─── flow state ───
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [trackingId, setTrackingId] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ uploaded: number; total: number } | null>(null);
+
+  // ─── presets ───
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetSaved, setPresetSaved] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ uploaded: number; total: number } | null>(null);
+  const [hasPresets, setHasPresets] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
-  const [hasPresets, setHasPresets] = useState(false);
 
   const applyPreset = (preset: Preset) => {
     setSelectedPackage(preset.selectedPackage);
@@ -62,12 +96,12 @@ const Upload = () => {
   useEffect(() => {
     const presetId = searchParams.get("preset");
     if (presetId) {
-      getPresets().then(presets => {
-        const preset = presets.find(p => p.id === presetId);
+      getPresets().then((presets) => {
+        const preset = presets.find((p) => p.id === presetId);
         if (preset) applyPreset(preset);
       });
     }
-    getPresets().then(presets => setHasPresets(presets.length > 0));
+    getPresets().then((presets) => setHasPresets(presets.length > 0));
   }, [searchParams]);
 
   const handleUseLastPreset = async () => {
@@ -88,32 +122,37 @@ const Upload = () => {
       customRequestText,
     });
     setPresetSaved(true);
-    setTimeout(() => { setShowSavePreset(false); setPresetName(""); setPresetSaved(false); }, 1200);
+    setTimeout(() => {
+      setShowSavePreset(false);
+      setPresetName("");
+      setPresetSaved(false);
+    }, 1200);
   };
 
+  // ─── catalog ───
   const packages = [
-    { id: "just_listed", name: "Just Listed", icon: "🏠", desc: "New listing showcase" },
-    { id: "just_pended", name: "Just Pended", icon: "🔥", desc: "Under contract" },
-    { id: "just_closed", name: "Just Closed", icon: "🎉", desc: "Successful close" },
-    { id: "life_cycle", name: "Life Cycle", icon: "✨", desc: "All 3 videos", badge: "Best Value" },
+    { id: "just_listed", name: "Just Listed", desc: "New to market", icon: Home },
+    { id: "just_pended", name: "Just Pended", desc: "Under contract", icon: Flame },
+    { id: "just_closed", name: "Just Closed", desc: "Successful close", icon: Trophy },
+    { id: "life_cycle", name: "Life Cycle", desc: "Three-video series", icon: Layers, badge: "Best value" },
   ];
 
   const durations = [
-    { id: "15s", label: "15s", price: 75, lifeCyclePrice: 90 },
-    { id: "30s", label: "30s", price: 125, lifeCyclePrice: 140 },
-    { id: "60s", label: "60s", price: 175, lifeCyclePrice: 190 },
+    { id: "15s", label: "15", price: 75, lifeCyclePrice: 90 },
+    { id: "30s", label: "30", price: 125, lifeCyclePrice: 140 },
+    { id: "60s", label: "60", price: 175, lifeCyclePrice: 190 },
   ];
 
   const orientations = [
-    { id: "vertical", label: "Vertical", ratio: "9:16", extra: 0 },
-    { id: "horizontal", label: "Horizontal", ratio: "16:9", extra: 0 },
-    { id: "both", label: "Both", ratio: "9:16 + 16:9", extra: 10 },
+    { id: "vertical", label: "Vertical", ratio: "9:16", icon: RectangleVertical, extra: 0 },
+    { id: "horizontal", label: "Horizontal", ratio: "16:9", icon: RectangleHorizontal, extra: 0 },
+    { id: "both", label: "Both", ratio: "9:16 + 16:9", icon: Square, extra: 10 },
   ];
 
-  const selectedDur = durations.find(d => d.id === selectedDuration);
+  const selectedDur = durations.find((d) => d.id === selectedDuration);
   const isLifeCycle = selectedPackage === "life_cycle";
   const basePrice = selectedDur ? (isLifeCycle ? selectedDur.lifeCyclePrice : selectedDur.price) : 0;
-  const orientationExtra = isLifeCycle ? 0 : (orientations.find(o => o.id === selectedOrientation)?.extra || 0);
+  const orientationExtra = isLifeCycle ? 0 : (orientations.find((o) => o.id === selectedOrientation)?.extra || 0);
   const voiceoverExtra = addVoiceover ? 15 : 0;
   const customExtra = addCustomRequest ? 15 : 0;
   const voiceCloneExtra = addVoiceClone ? 15 : 0;
@@ -121,30 +160,51 @@ const Upload = () => {
 
   const needsDaysOnMarket = selectedPackage === "just_pended" || selectedPackage === "just_closed";
   const needsSoldPrice = selectedPackage === "just_closed";
-  const hasPhotos = files.length >= 10;
-  const isValid = address && price && bedrooms && bathrooms && agent && selectedPackage && selectedDuration && selectedOrientation && hasPhotos
-    && (!needsDaysOnMarket || daysOnMarket)
-    && (!needsSoldPrice || soldPrice);
 
-  const handleFiles = useCallback((newFiles: FileList | File[]) => {
-    const accepted = Array.from(newFiles).filter(f => /\.(jpg|jpeg|png|heic|webp)$/i.test(f.name));
-    const remaining = 60 - files.length;
-    const toAdd = accepted.slice(0, remaining);
-    const mapped = toAdd.map(f => ({ file: f, preview: URL.createObjectURL(f), id: crypto.randomUUID() }));
-    setFiles(prev => [...prev, ...mapped]);
-  }, [files.length]);
+  // ─── per-step validity ───
+  const step0Valid = !!(selectedPackage && selectedDuration && selectedOrientation);
+  const step1Valid = !addCustomRequest || customRequestText.trim().length > 0;
+  const step2Valid = !!(
+    address &&
+    price &&
+    bedrooms &&
+    bathrooms &&
+    agent &&
+    (!needsDaysOnMarket || daysOnMarket) &&
+    (!needsSoldPrice || soldPrice)
+  );
+  const step3Valid = files.length >= 10;
+  const stepValidity = [step0Valid, step1Valid, step2Valid, step3Valid] as const;
+  const canAdvance = stepValidity[step];
+  const canSubmit = stepValidity.every(Boolean);
+
+  // ─── files ───
+  const handleFiles = useCallback(
+    (newFiles: FileList | File[]) => {
+      const accepted = Array.from(newFiles).filter((f) => /\.(jpg|jpeg|png|heic|webp)$/i.test(f.name));
+      const remaining = 60 - files.length;
+      const toAdd = accepted.slice(0, remaining);
+      const mapped = toAdd.map((f) => ({ file: f, preview: URL.createObjectURL(f), id: crypto.randomUUID() }));
+      setFiles((prev) => [...prev, ...mapped]);
+    },
+    [files.length],
+  );
 
   const removeFile = (id: string) => {
-    setFiles(prev => {
-      const removed = prev.find(f => f.id === id);
+    setFiles((prev) => {
+      const removed = prev.find((f) => f.id === id);
       if (removed) URL.revokeObjectURL(removed.preview);
-      return prev.filter(f => f.id !== id);
+      return prev.filter((f) => f.id !== id);
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isValid) return;
+  const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
+  const formatSize = (bytes: number) =>
+    bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+  // ─── submit ───
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -156,405 +216,692 @@ const Upload = () => {
           bathrooms: Number(bathrooms),
           listing_agent: agent,
           brokerage: "",
-          photos: files.map(f => f.file),
+          photos: files.map((f) => f.file),
         },
         (uploaded, total) => setUploadProgress({ uploaded, total }),
       );
       setTrackingId(result.id);
       setSubmitted(true);
-    } catch (err: any) {
-      setSubmitError(err.message || "Failed to submit property");
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to submit property");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
-  const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  // ─── nav ───
+  const next = () => {
+    if (step < 3 && canAdvance) setStep((s) => (s + 1) as StepId);
+  };
+  const back = () => {
+    if (step > 0) setStep((s) => (s - 1) as StepId);
+  };
 
-  // Success state
+  // ─── success ───
   if (submitted) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <div className="flex-1 flex items-center justify-center p-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md w-full text-center space-y-8">
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 200 }}>
-              <div className="h-20 w-20 rounded-full bg-accent/10 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="h-10 w-10 text-accent" />
-              </div>
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <div className="flex flex-1 items-center justify-center px-6 py-24">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.9, ease: EASE }}
+            className="w-full max-w-md text-center"
+          >
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.15, duration: 0.8, ease: EASE }}
+              className="mx-auto mb-10 flex h-20 w-20 items-center justify-center border border-accent/40 bg-accent/10 text-accent"
+            >
+              <CheckCircle2 className="h-9 w-9" strokeWidth={1.5} />
             </motion.div>
-            <div>
-              <h2 className="font-display text-3xl font-semibold text-foreground">Video in Production</h2>
-              <p className="text-muted-foreground mt-2 text-sm">{files.length} photos submitted • Est. 72 hour delivery</p>
-            </div>
-            <div className="border border-border p-5 space-y-3 text-left">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Tracking ID</span>
-                <span className="font-mono font-semibold text-accent">{trackingId}</span>
+            <span className="label text-muted-foreground">— In production</span>
+            <h1 className="display-md mt-5">
+              Your video
+              <br />
+              is in motion.
+            </h1>
+            <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
+              {files.length} photos received. Estimated delivery in 72 hours. We'll email you when it's ready.
+            </p>
+            <div className="mt-12 border border-border">
+              <div className="flex items-center justify-between border-b border-border px-6 py-4">
+                <span className="label text-muted-foreground">Tracking</span>
+                <span className="tabular text-xs font-semibold text-foreground">{trackingId.slice(0, 8)}</span>
               </div>
-              <div className="h-px bg-border" />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total</span>
-                <span className="font-mono font-semibold">${totalPrice}</span>
+              <div className="flex items-center justify-between px-6 py-4">
+                <span className="label text-muted-foreground">Total</span>
+                <span className="tabular text-base font-semibold text-foreground">${totalPrice}</span>
               </div>
             </div>
-            <Button variant="outline" className="w-full rounded-none h-11 tracking-[0.15em] uppercase text-[11px]" onClick={() => navigate(`/status/${trackingId}`)}>
-              Track Your Order <ArrowRight className="ml-2 h-3.5 w-3.5" />
+            <Button size="lg" className="mt-8 w-full" onClick={() => navigate(`/status/${trackingId}`)}>
+              Track production
+              <ArrowRight className="h-4 w-4" />
             </Button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+            >
+              Submit another listing
+            </button>
           </motion.div>
         </div>
       </div>
     );
   }
 
+  // ─── main ───
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Page sub-header */}
-      <div className="border-b border-border px-8 md:px-16 py-4 flex items-center justify-between">
-        <span className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium">New Video</span>
-        <div className="flex items-center gap-3">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* Step header */}
+      <div className="border-b border-border">
+        <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-6 px-8 py-8 md:px-12">
+          <div>
+            <span className="label text-muted-foreground">— New listing</span>
+            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em] md:text-3xl">
+              {step === 0 && "Define the cut."}
+              {step === 1 && "Refine with add-ons."}
+              {step === 2 && "Tell us about the property."}
+              {step === 3 && "Upload your photography."}
+            </h1>
+          </div>
           {hasPresets && (
-            <Button variant="ghost" size="sm" onClick={handleUseLastPreset} className="text-muted-foreground hover:text-foreground tracking-[0.1em] uppercase text-[10px]">
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Last Preset
-            </Button>
+            <button
+              type="button"
+              onClick={handleUseLastPreset}
+              className="hidden items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground md:flex"
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Use last preset
+            </button>
           )}
-          <Link to="/presets" className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 font-medium">
-            <BookmarkCheck className="h-3.5 w-3.5" /> Presets
-          </Link>
+        </div>
+
+        {/* Step rail */}
+        <div className="mx-auto max-w-[1080px] px-8 pb-6 md:px-12">
+          <div className="flex items-center gap-3">
+            {STEPS.map((label, i) => {
+              const active = i === step;
+              const done = i < step;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => {
+                    if (i < step || (i === step + 1 && canAdvance)) setStep(i as StepId);
+                  }}
+                  className="group flex flex-1 flex-col items-start gap-2 text-left"
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`tabular text-[10px] font-medium ${
+                        active || done ? "text-foreground" : "text-muted-foreground/50"
+                      }`}
+                    >
+                      0{i + 1}
+                    </span>
+                    <span
+                      className={`text-[11px] font-medium uppercase tracking-[0.18em] transition-colors ${
+                        active ? "text-foreground" : done ? "text-foreground/60" : "text-muted-foreground/50"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                    {done && <Check className="h-3 w-3 text-accent" />}
+                  </span>
+                  <span
+                    className={`h-px w-full transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                      active ? "bg-foreground" : done ? "bg-foreground/60" : "bg-border"
+                    }`}
+                  />
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 py-8 md:py-12 px-6">
-        <form onSubmit={handleSubmit} className="max-w-xl mx-auto space-y-8">
-
-          {/* Package selection — 2x2 grid */}
-          <section>
-            <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground mb-3 block">Video Type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {packages.map(pkg => (
-                <button
-                  key={pkg.id}
-                  type="button"
-                  onClick={() => setSelectedPackage(pkg.id)}
-                  className={`relative border p-4 text-left transition-all flex items-center gap-3 ${
-                    selectedPackage === pkg.id
-                      ? "border-foreground bg-foreground/[0.03]"
-                      : "border-border hover:border-foreground/30"
-                  }`}
-                >
-                  {pkg.badge && (
-                    <span className="absolute -top-2 right-3 bg-foreground text-background text-[8px] tracking-[0.1em] uppercase font-semibold px-2 py-px">
-                      {pkg.badge}
-                    </span>
-                  )}
-                  <span className="text-xl">{pkg.icon}</span>
-                  <div>
-                    <div className="text-sm font-semibold">{pkg.name}</div>
-                    <div className="text-[11px] text-muted-foreground">{pkg.desc}</div>
+      {/* Step body */}
+      <div className="flex-1 overflow-x-hidden">
+        <div className="mx-auto max-w-[1080px] px-8 py-16 md:px-12 md:py-24">
+          <AnimatePresence mode="wait">
+            {/* ─── Step 0 — Style ─── */}
+            {step === 0 && (
+              <motion.div key="step-0" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-16">
+                {/* Package */}
+                <section>
+                  <span className="label text-muted-foreground">— Package</span>
+                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Choose a story.</h2>
+                  <div className="mt-8 grid gap-px bg-border md:grid-cols-2">
+                    {packages.map((pkg) => {
+                      const Icon = pkg.icon;
+                      const sel = selectedPackage === pkg.id;
+                      return (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => setSelectedPackage(pkg.id)}
+                          className={`group relative flex items-start gap-5 bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                            sel ? "bg-secondary" : "hover:bg-secondary/40"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-12 w-12 shrink-0 items-center justify-center border transition-colors duration-500 ${
+                              sel ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground group-hover:border-foreground/40"
+                            }`}
+                          >
+                            <Icon className="h-5 w-5" strokeWidth={1.5} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-3">
+                              <h3 className="text-base font-semibold tracking-[-0.01em]">{pkg.name}</h3>
+                              {pkg.badge && (
+                                <span className="label text-accent">— {pkg.badge}</span>
+                              )}
+                            </div>
+                            <p className="mt-1.5 text-xs text-muted-foreground">{pkg.desc}</p>
+                          </div>
+                          {sel && <Check className="h-4 w-4 text-foreground" />}
+                        </button>
+                      );
+                    })}
                   </div>
-                </button>
-              ))}
-            </div>
-          </section>
+                </section>
 
-          {/* Duration + Format — side by side, equal weight */}
-          <section className="grid grid-cols-2 gap-6">
-            <div>
-              <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground mb-3 block">Duration</Label>
-              <div className="space-y-2">
-                {durations.map(dur => (
-                  <button
-                    key={dur.id}
-                    type="button"
-                    onClick={() => setSelectedDuration(dur.id)}
-                    className={`w-full border p-3 text-left transition-all flex items-center justify-between ${
-                      selectedDuration === dur.id ? "border-foreground bg-foreground/[0.03]" : "border-border hover:border-foreground/30"
-                    }`}
-                  >
-                    <span className="font-mono text-sm font-bold">{dur.label}</span>
-                    <div className="text-right">
-                      <span className="font-mono text-sm font-semibold">${isLifeCycle ? dur.lifeCyclePrice : dur.price}</span>
-                      {isLifeCycle && (
-                        <div className="flex items-center gap-1 justify-end">
-                          <span className="text-[9px] line-through text-muted-foreground">${dur.lifeCyclePrice + 25}</span>
-                          <span className="text-[9px] bg-accent/20 text-accent px-1 py-px font-semibold">SAVE $25</span>
+                {/* Duration */}
+                <section>
+                  <span className="label text-muted-foreground">— Duration</span>
+                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Set the length.</h2>
+                  <div className="mt-8 grid gap-px bg-border md:grid-cols-3">
+                    {durations.map((d) => {
+                      const sel = selectedDuration === d.id;
+                      const p = isLifeCycle ? d.lifeCyclePrice : d.price;
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setSelectedDuration(d.id)}
+                          className={`group flex items-end justify-between bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                            sel ? "bg-secondary" : "hover:bg-secondary/40"
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-baseline gap-1">
+                              <span className="tabular text-4xl font-semibold tracking-[-0.03em]">{d.label}</span>
+                              <span className="text-xs text-muted-foreground">sec</span>
+                            </div>
+                            {isLifeCycle && (
+                              <span className="label mt-3 inline-block text-accent">— Bundle save $25</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="tabular text-base font-semibold">${p}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Orientation */}
+                <section>
+                  <span className="label text-muted-foreground">— Format</span>
+                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Pick your canvas.</h2>
+                  <div className="mt-8 grid gap-px bg-border md:grid-cols-3">
+                    {orientations.map((o) => {
+                      const Icon = o.icon;
+                      const sel = selectedOrientation === o.id;
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          onClick={() => setSelectedOrientation(o.id)}
+                          className={`group flex items-center justify-between bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                            sel ? "bg-secondary" : "hover:bg-secondary/40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-5">
+                            <span
+                              className={`flex h-12 w-12 items-center justify-center border ${
+                                sel ? "border-foreground text-foreground" : "border-border text-muted-foreground group-hover:border-foreground/40"
+                              }`}
+                            >
+                              <Icon className="h-5 w-5" strokeWidth={1.5} />
+                            </span>
+                            <div>
+                              <div className="text-base font-semibold tracking-[-0.01em]">{o.label}</div>
+                              <div className="tabular text-[11px] text-muted-foreground">{o.ratio}</div>
+                            </div>
+                          </div>
+                          {o.extra > 0 && !isLifeCycle && (
+                            <span className="tabular text-xs text-muted-foreground">+${o.extra}</span>
+                          )}
+                          {o.extra > 0 && isLifeCycle && (
+                            <span className="label text-accent">— Included</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </motion.div>
+            )}
+
+            {/* ─── Step 1 — Add-ons ─── */}
+            {step === 1 && (
+              <motion.div key="step-1" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-12">
+                <section>
+                  <span className="label text-muted-foreground">— Optional</span>
+                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Refine the experience.</h2>
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                    Each add-on is optional. Voice clone and AI voiceover are mutually exclusive — pick one or neither.
+                  </p>
+
+                  <div className="mt-10 grid gap-px bg-border">
+                    {[
+                      {
+                        active: addVoiceover,
+                        toggle: () => {
+                          setAddVoiceover(!addVoiceover);
+                          if (!addVoiceover) setAddVoiceClone(false);
+                        },
+                        icon: Mic,
+                        label: "AI voiceover",
+                        desc: "Studio-quality narration generated from a script tailored to the listing.",
+                      },
+                      {
+                        active: addVoiceClone,
+                        toggle: () => {
+                          setAddVoiceClone(!addVoiceClone);
+                          if (!addVoiceClone) setAddVoiceover(false);
+                        },
+                        icon: Mic,
+                        label: "Voice clone",
+                        desc: "Use a sample of your own voice. Setup happens after submission.",
+                      },
+                      {
+                        active: addCustomRequest,
+                        toggle: () => setAddCustomRequest(!addCustomRequest),
+                        icon: Sparkles,
+                        label: "Custom request",
+                        desc: "Specific shots, music, or pacing notes for the production team.",
+                      },
+                    ].map((addon) => {
+                      const Icon = addon.icon;
+                      return (
+                        <button
+                          key={addon.label}
+                          type="button"
+                          onClick={addon.toggle}
+                          className={`group flex items-start gap-6 bg-background p-6 text-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                            addon.active ? "bg-secondary" : "hover:bg-secondary/40"
+                          }`}
+                        >
+                          <span
+                            className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center border transition-colors duration-500 ${
+                              addon.active
+                                ? "border-foreground bg-foreground text-background"
+                                : "border-border text-muted-foreground group-hover:border-foreground/40"
+                            }`}
+                          >
+                            <Icon className="h-4 w-4" strokeWidth={1.5} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <h3 className="text-base font-semibold tracking-[-0.01em]">{addon.label}</h3>
+                              <span className="tabular text-xs text-muted-foreground">+ $15</span>
+                            </div>
+                            <p className="mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">{addon.desc}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <AnimatePresence>
+                    {addCustomRequest && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.5, ease: EASE }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-6">
+                          <Label className="label text-muted-foreground">Custom notes</Label>
+                          <textarea
+                            value={customRequestText}
+                            onChange={(e) => setCustomRequestText(e.target.value)}
+                            placeholder="Specific shots, music style, pacing preferences, brand language…"
+                            rows={5}
+                            className="mt-3 flex min-h-[120px] w-full rounded-none border border-border bg-transparent px-4 py-3 text-sm transition-colors placeholder:text-muted-foreground/60 focus-visible:border-accent focus-visible:outline-none"
+                          />
                         </div>
-                      )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </section>
+              </motion.div>
+            )}
+
+            {/* ─── Step 2 — Property ─── */}
+            {step === 2 && (
+              <motion.div key="step-2" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-12">
+                <section>
+                  <span className="label text-muted-foreground">— Property</span>
+                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Listing details.</h2>
+
+                  <div className="mt-10 space-y-8">
+                    <div>
+                      <Label className="label text-muted-foreground">Address</Label>
+                      <Input
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        placeholder="208 Berry Street, Brooklyn, NY"
+                        className="mt-3"
+                      />
                     </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground mb-3 block">Format</Label>
-              <div className="space-y-2">
-                {orientations.map(ori => (
-                  <button
-                    key={ori.id}
-                    type="button"
-                    onClick={() => setSelectedOrientation(ori.id)}
-                    className={`w-full border p-3 text-left transition-all flex items-center justify-between ${
-                      selectedOrientation === ori.id ? "border-foreground bg-foreground/[0.03]" : "border-border hover:border-foreground/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-end">
-                        {ori.id === "vertical" && <div className="w-3 h-5 border-2 border-current rounded-[1px]" />}
-                        {ori.id === "horizontal" && <div className="w-6 h-3.5 border-2 border-current rounded-[1px]" />}
-                        {ori.id === "both" && <div className="flex items-end gap-0.5"><div className="w-2.5 h-4 border-2 border-current rounded-[1px]" /><div className="w-5 h-3 border-2 border-current rounded-[1px]" /></div>}
+
+                    <div className="grid gap-6 md:grid-cols-3">
+                      <div>
+                        <Label className="label text-muted-foreground">Price</Label>
+                        <div className="relative mt-3">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            value={price}
+                            onChange={(e) => setPrice(e.target.value)}
+                            placeholder="2,400,000"
+                            className="tabular pl-7"
+                          />
+                        </div>
                       </div>
                       <div>
-                        <div className="text-sm font-semibold">{ori.label}</div>
-                        <div className="font-mono text-[10px] text-muted-foreground">{ori.ratio}</div>
+                        <Label className="label text-muted-foreground">Bedrooms</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={bedrooms}
+                          onChange={(e) => setBedrooms(e.target.value)}
+                          placeholder="3"
+                          className="tabular mt-3"
+                        />
+                      </div>
+                      <div>
+                        <Label className="label text-muted-foreground">Bathrooms</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.5}
+                          value={bathrooms}
+                          onChange={(e) => setBathrooms(e.target.value)}
+                          placeholder="2.5"
+                          className="tabular mt-3"
+                        />
                       </div>
                     </div>
-                    {ori.extra > 0 && !isLifeCycle && (
-                      <span className="font-mono text-xs text-foreground">+${ori.extra}</span>
+
+                    <div>
+                      <Label className="label text-muted-foreground">Listing agent</Label>
+                      <Input
+                        value={agent}
+                        onChange={(e) => setAgent(e.target.value)}
+                        placeholder="Jane Smith"
+                        className="mt-3"
+                      />
+                    </div>
+
+                    {needsDaysOnMarket && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, ease: EASE }}
+                        className="grid gap-6 md:grid-cols-2"
+                      >
+                        <div>
+                          <Label className="label text-muted-foreground">Days on market</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={daysOnMarket}
+                            onChange={(e) => setDaysOnMarket(e.target.value)}
+                            placeholder="14"
+                            className="tabular mt-3"
+                          />
+                        </div>
+                        {needsSoldPrice && (
+                          <div>
+                            <Label className="label text-muted-foreground">Sold price</Label>
+                            <div className="relative mt-3">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
+                                $
+                              </span>
+                              <Input
+                                type="number"
+                                value={soldPrice}
+                                onChange={(e) => setSoldPrice(e.target.value)}
+                                placeholder="2,500,000"
+                                className="tabular pl-7"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
                     )}
-                    {ori.extra > 0 && isLifeCycle && (
-                      <div className="font-mono text-[10px]">
-                        <span className="line-through text-muted-foreground mr-0.5">+${ori.extra}</span>
-                        <span className="text-accent font-semibold">FREE</span>
+                  </div>
+                </section>
+              </motion.div>
+            )}
+
+            {/* ─── Step 3 — Photos ─── */}
+            {step === 3 && (
+              <motion.div key="step-3" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-10">
+                <section>
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <span className="label text-muted-foreground">— Source material</span>
+                      <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Bring in the photos.</h2>
+                      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                        Drop or browse 10 to 60 high-resolution images. JPG, PNG, HEIC, or WebP.
+                      </p>
+                    </div>
+                    {files.length > 0 && (
+                      <div className="text-right">
+                        <span className="tabular block text-2xl font-semibold tracking-[-0.02em]">{files.length}</span>
+                        <span className="label text-muted-foreground">{formatSize(totalSize)}</span>
                       </div>
                     )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground mb-3 block">Add-ons</Label>
-            <div className="space-y-2">
-              {[
-                { active: addVoiceover, toggle: () => { setAddVoiceover(!addVoiceover); if (!addVoiceover) setAddVoiceClone(false); }, icon: <Mic className="h-4 w-4" />, label: "AI Voiceover", desc: "Professional narration", price: "+$15" },
-                { active: addVoiceClone, toggle: () => { setAddVoiceClone(!addVoiceClone); if (!addVoiceClone) setAddVoiceover(false); }, icon: <span className="text-sm">🎙️</span>, label: "Voice Clone", desc: "Use your own voice", price: "+$15" },
-                { active: addCustomRequest, toggle: () => setAddCustomRequest(!addCustomRequest), icon: <Sparkles className="h-4 w-4" />, label: "Custom Request", desc: "Special instructions", price: "+$15" },
-              ].map(addon => (
-                <button
-                  key={addon.label}
-                  type="button"
-                  onClick={addon.toggle}
-                  className={`w-full border p-3 text-left transition-all flex items-center gap-3 ${
-                    addon.active ? "border-foreground bg-foreground/[0.03]" : "border-border hover:border-foreground/30"
-                  }`}
-                >
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all ${addon.active ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}>
-                    {addon.icon}
                   </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold">{addon.label}</div>
-                    <div className="text-[11px] text-muted-foreground">{addon.desc}</div>
-                  </div>
-                  <span className="font-mono text-xs text-muted-foreground">{addon.price}</span>
-                </button>
-              ))}
-            </div>
-            <AnimatePresence>
-              {addCustomRequest && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <textarea
-                    value={customRequestText}
-                    onChange={e => setCustomRequestText(e.target.value)}
-                    placeholder="Describe your custom request..."
-                    className="w-full mt-2 min-h-[80px] bg-background border border-border p-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground resize-y"
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </section>
 
-          {/* Property Details */}
-          <section>
-            <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground mb-3 block">Property Details</Label>
-            <div className="space-y-3">
-              <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Property address *" className="rounded-none h-11" />
-              <div className="grid grid-cols-3 gap-3">
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                  <Input type="number" className="pl-7 font-mono rounded-none h-11" value={price} onChange={e => setPrice(e.target.value)} placeholder="Price *" />
-                </div>
-                <Input type="number" min={0} value={bedrooms} onChange={e => setBedrooms(e.target.value)} placeholder="Beds *" className="rounded-none h-11" />
-                <Input type="number" min={0} step={0.5} value={bathrooms} onChange={e => setBathrooms(e.target.value)} placeholder="Baths *" className="rounded-none h-11" />
-              </div>
-              <Input value={agent} onChange={e => setAgent(e.target.value)} placeholder="Listing agent *" className="rounded-none h-11" />
-              {needsDaysOnMarket && (
-                <div className="grid grid-cols-2 gap-3">
-                  <Input type="number" min={0} value={daysOnMarket} onChange={e => setDaysOnMarket(e.target.value)} placeholder="Days on market *" className="rounded-none h-11" />
-                  {needsSoldPrice && (
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-                      <Input type="number" className="pl-7 font-mono rounded-none h-11" value={soldPrice} onChange={e => setSoldPrice(e.target.value)} placeholder="Sold price *" />
+                  {/* Drop zone */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      handleFiles(e.dataTransfer.files);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`relative mt-10 flex aspect-[16/7] cursor-pointer items-center justify-center border-2 border-dashed text-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                      isDragging
+                        ? "border-accent bg-accent/5"
+                        : "border-border bg-secondary/30 hover:border-foreground/40 hover:bg-secondary/60"
+                    }`}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.heic,.webp"
+                      className="hidden"
+                      onChange={(e) => e.target.files && handleFiles(e.target.files)}
+                    />
+                    <input
+                      ref={folderInputRef}
+                      type="file"
+                      {...({ webkitdirectory: "", directory: "" } as React.HTMLAttributes<HTMLInputElement>)}
+                      className="hidden"
+                      onChange={(e) => e.target.files && handleFiles(e.target.files)}
+                    />
+                    <div>
+                      <Camera className="mx-auto h-8 w-8 text-muted-foreground" strokeWidth={1.5} />
+                      <p className="mt-5 text-base font-semibold tracking-[-0.01em]">Drop photos to upload</p>
+                      <p className="mt-1 text-xs text-muted-foreground">or click to browse files</p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          folderInputRef.current?.click();
+                        }}
+                        className="mt-6 text-[11px] font-medium uppercase tracking-[0.15em] text-accent underline underline-offset-4 hover:text-accent/80"
+                      >
+                        Or import an entire folder
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Progress */}
+                  {files.length > 0 && files.length < 10 && (
+                    <div className="mt-6 flex items-center gap-4">
+                      <div className="h-px flex-1 overflow-hidden bg-border">
+                        <motion.div
+                          className="h-full bg-foreground"
+                          animate={{ width: `${(files.length / 10) * 100}%` }}
+                          transition={{ duration: 0.5, ease: EASE }}
+                        />
+                      </div>
+                      <span className="tabular label text-accent">{10 - files.length} more required</span>
                     </div>
                   )}
-                </div>
-              )}
-            </div>
-          </section>
 
-          {/* Photos */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <Label className="text-[11px] tracking-[0.15em] uppercase font-medium text-muted-foreground">Photos</Label>
-              {files.length > 0 && (
-                <span className="text-[11px] text-muted-foreground font-mono">{files.length}/60 • {formatSize(totalSize)}</span>
-              )}
-            </div>
-
-            <div
-              className={`border-2 border-dashed rounded-none p-10 text-center cursor-pointer transition-all ${
-                isDragging ? "border-foreground bg-foreground/[0.03]" : "border-border hover:border-foreground/30"
-              }`}
-              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.heic,.webp" className="hidden" onChange={e => e.target.files && handleFiles(e.target.files)} />
-              <input ref={folderInputRef} type="file" {...{ webkitdirectory: "", directory: "" } as any} className="hidden" onChange={e => e.target.files && handleFiles(e.target.files)} />
-              <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm font-medium">Drop photos here or click to browse</p>
-              <p className="text-[11px] text-muted-foreground mt-1">JPG, PNG, HEIC, WebP • 10–60 photos</p>
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); folderInputRef.current?.click(); }}
-                className="mt-3 text-[11px] text-primary underline underline-offset-2 hover:text-primary/80"
-              >
-                Or select an entire folder
-              </button>
-            </div>
-
-            {files.length > 0 && (
-              <div className="mt-4 space-y-3">
-                {files.length < 10 && (
-                  <div className="flex items-center gap-2">
-                    <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
-                      <motion.div className="h-full bg-foreground" animate={{ width: `${(files.length / 10) * 100}%` }} />
+                  {/* Thumbnails */}
+                  {files.length > 0 && (
+                    <div className="mt-8 grid grid-cols-4 gap-1 sm:grid-cols-6 md:grid-cols-8">
+                      <AnimatePresence>
+                        {files.map((f) => (
+                          <motion.div
+                            key={f.id}
+                            initial={{ opacity: 0, scale: 0.85 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.85 }}
+                            transition={{ duration: 0.4, ease: EASE }}
+                            className="group relative aspect-square overflow-hidden bg-secondary"
+                          >
+                            <img src={f.preview} alt="" className="h-full w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFile(f.id);
+                              }}
+                              className="absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                              aria-label="Remove photo"
+                            >
+                              <X className="h-3.5 w-3.5 text-white" />
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
-                    <span className="text-[11px] text-accent font-mono font-medium">{10 - files.length} more</span>
+                  )}
+                </section>
+
+                {submitError && (
+                  <div className="border border-destructive/40 bg-destructive/10 p-5">
+                    <p className="text-xs text-destructive">{submitError}</p>
                   </div>
                 )}
-                <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 max-h-48 overflow-y-auto">
-                  <AnimatePresence>
-                    {files.map(f => (
-                      <motion.div
-                        key={f.id}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        className="relative group aspect-square overflow-hidden bg-muted"
-                      >
-                        <img src={f.preview} alt="" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={e => { e.stopPropagation(); removeFile(f.id); }}
-                          className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="h-3 w-3 text-white" />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </div>
+              </motion.div>
             )}
-          </section>
-
-          {/* Order Summary + Submit */}
-          <section className="border border-border p-6 space-y-3">
-            <h3 className="text-[11px] tracking-[0.25em] uppercase text-muted-foreground font-medium mb-3">Order Summary</h3>
-            {selectedPackage && selectedDur && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {packages.find(p => p.id === selectedPackage)?.name} — {selectedDur.label}
-                  {isLifeCycle && " (3 videos)"}
-                </span>
-                <span className="font-mono font-medium">${basePrice}</span>
-              </div>
-            )}
-            {isLifeCycle && selectedOrientation === "both" && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Both Formats</span>
-                <span className="font-mono text-accent font-medium">FREE</span>
-              </div>
-            )}
-            {orientationExtra > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Both Formats</span>
-                <span className="font-mono font-medium">+${orientationExtra}</span>
-              </div>
-            )}
-            {addVoiceover && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">AI Voiceover</span>
-                <span className="font-mono font-medium">+$15</span>
-              </div>
-            )}
-            {addVoiceClone && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Voice Clone</span>
-                <span className="font-mono font-medium">+$15</span>
-              </div>
-            )}
-            {addCustomRequest && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Custom Request</span>
-                <span className="font-mono font-medium">+$15</span>
-              </div>
-            )}
-            {totalPrice > 0 && (
-              <>
-                <div className="h-px bg-border" />
-                <div className="flex justify-between items-baseline">
-                  <span className="text-sm font-semibold">Total</span>
-                  <span className="font-mono text-xl font-bold">${totalPrice}</span>
-                </div>
-              </>
-            )}
-            {submitError && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 p-3 rounded">
-                {submitError}
-              </div>
-            )}
-            <div className="flex gap-3 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 px-5 rounded-none tracking-[0.1em] uppercase text-[11px]"
-                onClick={() => setShowSavePreset(true)}
-                disabled={!selectedPackage}
-              >
-                <Bookmark className="h-4 w-4 mr-1.5" /> Save
-              </Button>
-              <Button type="submit" className="flex-1 h-12 text-sm rounded-none tracking-[0.15em] uppercase font-medium" disabled={!isValid || submitting}>
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {submitting
-                  ? uploadProgress
-                    ? `Uploading ${uploadProgress.uploaded}/${uploadProgress.total} photos...`
-                    : "Submitting..."
-                  : "Generate Video"}
-                {!submitting && <ArrowRight className="ml-2 h-4 w-4" />}
-              </Button>
-            </div>
-          </section>
-        </form>
+          </AnimatePresence>
+        </div>
       </div>
 
-      {/* Save Preset Dialog */}
+      {/* Sticky footer */}
+      <div className="sticky bottom-0 z-30 border-t border-border bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-6 px-8 py-5 md:px-12">
+          <div className="flex items-center gap-8">
+            <div>
+              <span className="label text-muted-foreground">Total</span>
+              <div className="tabular text-2xl font-semibold tracking-[-0.02em]">${totalPrice}</div>
+            </div>
+            {step === 0 && step0Valid && (
+              <button
+                type="button"
+                onClick={() => setShowSavePreset(true)}
+                className="hidden items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground md:flex"
+              >
+                <Bookmark className="h-3.5 w-3.5" /> Save as preset
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {step > 0 && (
+              <Button type="button" variant="outline" onClick={back} disabled={submitting}>
+                <ArrowLeft className="h-4 w-4" /> Back
+              </Button>
+            )}
+            {step < 3 ? (
+              <Button type="button" onClick={next} disabled={!canAdvance}>
+                Continue
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting} size="lg">
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {uploadProgress
+                      ? `${uploadProgress.uploaded} / ${uploadProgress.total}`
+                      : "Submitting…"}
+                  </>
+                ) : (
+                  <>
+                    Generate video
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Save preset dialog */}
       <Dialog open={showSavePreset} onOpenChange={setShowSavePreset}>
         <DialogContent className="max-w-sm rounded-none">
           <DialogHeader>
-            <DialogTitle className="font-display">{presetSaved ? "Saved!" : "Save Preset"}</DialogTitle>
+            <DialogTitle className="text-lg font-semibold tracking-[-0.01em]">
+              {presetSaved ? "Saved." : "Save as preset"}
+            </DialogTitle>
           </DialogHeader>
           {presetSaved ? (
-            <div className="flex flex-col items-center py-4 gap-2">
-              <CheckCircle2 className="h-10 w-10 text-accent" />
+            <div className="flex flex-col items-center gap-4 py-6">
+              <div className="flex h-12 w-12 items-center justify-center border border-accent/40 bg-accent/10 text-accent">
+                <CheckCircle2 className="h-5 w-5" strokeWidth={1.5} />
+              </div>
             </div>
           ) : (
             <>
-              <Input value={presetName} onChange={e => setPresetName(e.target.value)} placeholder="Preset name" autoFocus onKeyDown={e => e.key === "Enter" && handleSavePreset()} className="rounded-none" />
+              <Input
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                placeholder="My weekday listings"
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
+              />
               <DialogFooter>
-                <Button onClick={handleSavePreset} disabled={!presetName.trim()} className="rounded-none tracking-[0.1em] uppercase text-[11px]">Save</Button>
+                <Button onClick={handleSavePreset} disabled={!presetName.trim()}>
+                  Save preset
+                </Button>
               </DialogFooter>
             </>
           )}
