@@ -1,117 +1,156 @@
-# Listing Elevate Redesign — Status & Handoff
+# Listing Elevate — Status & Handoff
 
-Final-pass snapshot. Pair with `REDESIGN-BRIEF.md` (decisions) and `REDESIGN-AUDIT.md` (findings).
-
----
-
-## Status: ✅ all 11 tasks complete
-
-Every page in scope has been redesigned, the production build is warning-free, and the latest preview is on Vercel awaiting your review.
-
-**Latest Vercel preview** — pulled from `vercel ls reelready` after the most recent push:
-> https://reelready-hz7sv0gwg-recasi.vercel.app *(building / will be ready momentarily)*
-
-Run `vercel ls reelready | grep Preview | head` from inside `~/real-estate-pipeline-ui` for the freshest URL.
+End-of-day snapshot (2026-04-14). Pair with `REDESIGN-BRIEF.md` (decisions) and `REDESIGN-AUDIT.md` (original findings).
 
 ---
 
-## Where work happened
+## Status
 
-**Isolated git worktree:** `~/real-estate-pipeline-ui`
-**Branch:** `ui-redesign` (pushed to `origin`)
-**Main clone:** `~/real-estate-pipeline` on `main` — untouched throughout. Safe for parallel Claude sessions.
-
-`node_modules` is a symlink from the worktree to the main clone to save disk. `.gitignore` now matches both `node_modules` and `node_modules/` so it never gets committed again. `.DS_Store` is also gitignored.
+All in-scope work shipped to `main`. Production deploys come from `main` automatically via Vercel. Every feature branch has been merged cleanly (with a few gnarly merge conflicts resolved along the way — notes in "gotchas" below).
 
 ---
 
-## Final commit history on `ui-redesign`
+## Where work happens
 
-```
-12cba99 Polish: replace bracket ease/duration with token-based ease-cinematic
-8319011 Redesign Dashboard: shell, Overview, Pipeline, Properties, Logs, PropertyDetail
-6fcc46d Redesign Account: shell + Listings, Billing, Brand
-09a4659 Redesign Presets and 404
-fd44e9c Redesign Login + AuthCallback with editorial split layout
-0510e5d Redesign Status page as cinematic vertical timeline
-00aac05 Gitignore: exclude .DS_Store
-a260cef Redesign Upload as 4-step cinematic wizard
-ecbfae5 Add redesign status/handoff doc for next session
-c219297 Gitignore: match node_modules as file or dir (worktree symlink fix)
-e460e7d Nav polish: liquid-glass header, hide TopNav on landing, brand mark + period
-0cf0bf8 Remove accidentally-tracked node_modules symlink
-928b348 Redesign Landing: editorial hero, process, showcase, pricing, CTA, FAQ
-3f15516 Design system foundation: Listing Elevate tokens, sharp corners, Inter-only
-2392886 (parallel session) Room quotas, plain-language motion prompts, pre-flight QA
-```
+**Main clone:** `~/real-estate-pipeline` — shared working copy; other Claude sessions and manual edits land here.
+
+**Worktrees (isolated, safe from cross-session collisions):**
+- `~/real-estate-pipeline-ui` → branch `ui-redesign` (fully merged into main, safe to archive)
+- `~/real-estate-pipeline-finances` → branch `finances-tab` (fully merged into main, safe to archive)
+
+Both worktrees symlink `node_modules` to the main clone. `.gitignore` excludes `node_modules` (both as directory and symlink) and `.DS_Store`.
 
 ---
 
-## What ships
+## Shipped on `main`
 
-### Foundation
-- **Color tokens** — black / white / deep navy / electric blue, light + dark with full parity. Removed all warm orange / emerald / gold legacy colors.
-- **Typography** — Inter only, semibold for headers, tabular numerics for prices/IDs/stats. Kills Playfair Display + JetBrains Mono.
-- **Radius 0** — every primitive (Button, Input, Card, Badge, Dialog, Tabs, Select, Textarea, Alert) uses `rounded-none`.
-- **Motion** — `ease-cinematic` (`cubic-bezier(0.16, 1, 0.3, 1)`) + `duration-cinematic` (`700ms`) tokens defined in `tailwind.config.ts`. Long, eased transitions throughout.
-- **Theme provider** — reads stored preference + `prefers-color-scheme`, defaults dark, sets `color-scheme` on `<html>`.
-- **Brand components** — `Wordmark` (custom stair SVG mark + `Listing.Elevate` with accent period) and `ThemeToggle` (sharp 36px square sun/moon button).
+### Design system
+- Color tokens: black / white / deep navy / electric blue, light + dark parity
+- Inter-only typography, semibold headers, tabular numerics
+- Radius 0 everywhere (every shadcn primitive refactored)
+- Cinematic ease token `ease-cinematic` (cubic-bezier 0.16/1/0.3/1) + `duration-cinematic`
+- Theme provider reads stored pref + `prefers-color-scheme`, defaults dark
+- `Wordmark` component — single stair SVG + "Listing Elevate" text (no accent period), consistent `size="md"` in TopNav everywhere
+- `ThemeToggle` component — 36px square sun/moon button
 
-### Pages
+### Pages redesigned (all on main)
 
-| Page | File | Highlights |
+| Page | File | Notes |
 | --- | --- | --- |
-| Landing | `src/pages/Index.tsx` | Liquid-glass nav, scroll-pinned hero video, editorial process / showcase / pricing / CTA / FAQ / footer, auth modal |
-| Upload | `src/pages/Upload.tsx` | 4-step cinematic wizard (Style → Add-ons → Property → Photos), step rail, sticky total bar, sharp option grids, Lucide icons (no emoji) |
-| Status | `src/pages/Status.tsx` | Vertical timeline with continuous rail and animated progress fill, left rail metadata (stage / clips / elapsed), failed callout with help mailto, complete state with side-by-side video cards |
-| Login | `src/pages/Login.tsx` | 2-column editorial split (copy left, form right), magic-link inline confirmation with accent card |
-| AuthCallback | `src/pages/AuthCallback.tsx` | Brand-aligned holding screen with animated three-dot ellipsis and dedicated error state |
-| Account shell | `src/pages/Account.tsx` | Editorial header + underline-style sub-nav (Listings / Billing / Brand) |
-| Account/Properties | `src/pages/account/Properties.tsx` | Editorial table with label headers, status as colored chips, tabular numerics, hover row tint, dashed empty state |
-| Account/Billing | `src/pages/account/Billing.tsx` | Three giant tabular stat cells, Stripe placeholder as bordered editorial card, breakdown table with Total footer |
-| Account/Profile | `src/pages/account/Profile.tsx` | Sectioned Contact / Logo / Palette form, dashed dropzone for logo, fused color picker swatch + hex input |
-| Dashboard shell | `src/pages/Dashboard.tsx` | "Studio control" header + underline sub-nav (Overview / Pipeline / Listings / Logs / Settings) |
-| Dashboard/Overview | `src/pages/dashboard/Overview.tsx` | 6 KPI cells, recharts daily spend bar (sharp, accent fill), in-production list with animated progress, recent deliveries |
-| Dashboard/Pipeline | `src/pages/dashboard/Pipeline.tsx` | 6 stage columns in a 1px-divider grid, 'Manual review' bordered list with thumbnail placeholders + actions |
-| Dashboard/Properties | `src/pages/dashboard/Properties.tsx` | Editorial table with search + status filter, Chevron pagination, status as label chips |
-| Dashboard/Logs | `src/pages/dashboard/Logs.tsx` | Filter row + 5-column terminal-style log viewer, severity color-coded, CSV export |
-| Dashboard/PropertyDetail | `src/pages/dashboard/PropertyDetail.tsx` | Back link, status header, 4-cell KPI strip, deliverables grid, real per-call cost table, Tabs (Photos / Shot plan / Timeline / System prompts) with verbatim prompts and copy-to-clipboard |
-| Presets | `src/pages/Presets.tsx` | Numbered editorial list, label-style chips for package/duration/orientation/add-ons, two-step inline delete confirm, dashed empty state |
-| 404 | `src/pages/NotFound.tsx` | Massive clamp() display number, two-line headline, tabular path bottom |
+| Landing | `src/pages/Index.tsx` | Liquid-glass hero nav, scroll-pinned cinematic video, **typewriter verb cycle** (Take → Retain → Sell), editorial process/showcase/pricing/CTA/FAQ/footer, magic-link auth modal |
+| Upload | `src/pages/Upload.tsx` | 4-step wizard (Style → Add-ons → Property → Photos), sticky total bar |
+| Status | `src/pages/Status.tsx` | Vertical timeline stepper with animated progress rail |
+| Login + AuthCallback | `src/pages/Login.tsx`, `AuthCallback.tsx` | 2-column editorial split, animated ellipsis loader |
+| Account shell + Properties/Billing/Profile | `src/pages/Account.tsx`, `src/pages/account/*` | Underline sub-nav, editorial tables, brand customization |
+| Dashboard shell | `src/pages/Dashboard.tsx` | Stripped to a thin container — sub-nav moved into TopNav |
+| Overview | `src/pages/dashboard/Overview.tsx` | 4 KPI tiles + 3-col info row (spend chart / SLA ring / distribution) + throughput bar chart + top agents leaderboard + active pipeline + recent deliveries |
+| Pipeline | `src/pages/dashboard/Pipeline.tsx` | 6-column stage grid + Manual review list |
+| Listings | `src/pages/dashboard/Properties.tsx` | Editorial table with **64×48 thumbnail column**, search + status filter, pagination |
+| Logs | `src/pages/dashboard/Logs.tsx` | 5-column terminal-style viewer with severity colors + CSV export |
+| PropertyDetail | `src/pages/dashboard/PropertyDetail.tsx` | 2-col header with **primary listing photo sidebar**, Live pulse indicator, 4-cell KPI strip, deliverables grid, cost breakdown table, Tabs (Photos / Shot plan / Timeline / System prompts) |
+| **Finances** | `src/pages/dashboard/Finances.tsx` | See below |
+| Presets + 404 | `src/pages/Presets.tsx`, `NotFound.tsx` | Editorial list + clamp() 404 |
 
-### TopNav
-- `src/components/TopNav.tsx` returns `null` on `/` (Index renders its own hero-aware nav). Everywhere else: liquid-glass header (`bg-background/55`, `backdrop-blur-2xl`, `backdrop-saturate-150`), Wordmark, ThemeToggle, sharp account dropdown trigger.
+### Navigation (`src/components/TopNav.tsx`)
+- Returns `null` on `/` (landing renders its own hero-aware nav)
+- On every other page: liquid-glass header with `<Wordmark size="md" />`
+- On `/dashboard/*`: adds "Studio" label next to the wordmark + inline sub-nav (Overview · Pipeline · Listings · Logs · Finances · Learning · Settings) with cinematic underline active state
+- Theme toggle + account dropdown on the right
+
+### Auth persistence
+- **Implicit flow** (not PKCE) — survives cross-origin magic-link redirects
+- `AUTH_CALLBACK_URL` helper hardcodes production to `https://listingelevate.com/auth/callback`
+- `persistSession: true` with default `localStorage` (the custom hybrid cookie adapter was reverted — it was over-engineered)
+
+### Finances tab (`/dashboard/finances`)
+
+**Database tables** (applied via Supabase migration `finances_tables`):
+- `token_purchases` — provider / amount / units / unit_type / note
+- `expenses` — category / amount / description
+- `revenue_entries` — source / amount / property_id / note
+
+**Page features:**
+- **5 KPI tiles:** Revenue in, Token spend, Other expenses, Net (red/green tone), Cost / video (`token spend ÷ delivered count`)
+- **Claude excluded from every dollar total** — Anthropic cost events are tracked in `cost_events` but never contribute to the finance page totals, pie chart, balance cards, or cashflow. Info note at the top: *"Claude usage runs on a Pro subscription and is excluded from dollar totals. Units are still tracked."*
+- **30-day cashflow area chart** — revenue + spend overlaid with separate gradient fills
+- **Token spend pie chart** — reads from the existing `cost_events` table so Kling vs Runway vs Luma counters are correct by construction (every real pipeline call writes an event)
+- **Per-provider balance cards** — purchased vs spent, progress bar, units remaining, color-coded tone
+- **Three log-it forms** — new token purchase, new expense, new revenue
+- **Three editorial ledger tables** — each row has pencil (edit) + trash (delete) on hover; editing opens a Dialog with all fields pre-filled
+
+### Cross-cutting polish shipped today
+- Wordmark size + period cleanup (removed `Listing.Elevate` → `Listing Elevate`, unified all top-left occurrences to `size="md"`)
+- Typewriter hero verb cycle (types → holds → erases → loops Take/Retain/Sell)
+- Primary listing image surfaced in `/dashboard/properties` (thumbnail column) and `/dashboard/properties/:id` (sidebar)
+- Edit dialogs for all three Finances ledgers
+- Cost-per-video KPI
+- Anthropic exclusion from finance totals
 
 ---
 
-## Build & types
+## Open / parked (not blocking)
 
-- `npm run build` → ✅ no warnings
-- `npx tsc -p tsconfig.app.json --noEmit` → ✅ clean (vitest/globals notice is pre-existing, unrelated)
-- All Tailwind ambiguous-arbitrary warnings resolved by switching to the named `ease-cinematic` token + `[transition-duration:1400ms]` for the two slow-zoom hover transforms.
+- **`drive-ingest` branch** — Google Drive folder → Supabase Storage ingest. Needs a rebase onto current `main`. `GOOGLE_API_KEY` already set on Vercel.
+- **Hero video bundle weight** — production JS chunk is ~1.3 MB. Vite suggests code-splitting.
+- **Real video previews on Status page** — `<video>` tags read from `horizontal_video_url` / `vertical_video_url` on the property. Empty until the backend fully populates those.
+- **Supabase Site URL dashboard fix** — user still needs to manually set the project's Site URL to `https://listingelevate.com` and add redirect URLs for `https://listingelevate.com/**`. The implicit-flow code change is a resilience net, not a substitute.
 
 ---
 
-## Worktree workflow (for future sessions)
+## Gotchas for future sessions
 
+### Parallel work and merge conflicts
+Multiple Claude sessions routinely edit `~/real-estate-pipeline` simultaneously. Treat it as shared state. When merging a feature branch, expect conflicts in:
+- `src/pages/dashboard/PropertyDetail.tsx` — high-touch file; the finances merge lost the primary-image sidebar once and had to be re-applied on top in a follow-up commit. Watch for this pattern.
+- `src/App.tsx` — route list is a frequent conflict surface; resolve by keeping all routes.
+- `src/components/TopNav.tsx` — dashboard nav array is a frequent conflict surface; resolve by keeping all entries.
+- `.gitignore` — both sides tend to add lines; resolve as union.
+
+### Symlinked worktrees
+`node_modules` in each worktree is a symlink to the main clone. `.gitignore` matches both the symlink and the directory form. Do **not** `git add -A` without scanning for it — twice it leaked in before the gitignore was hardened.
+
+### Running checks
 ```bash
-cd ~/real-estate-pipeline-ui
-git status            # independent from ~/real-estate-pipeline
-npm run dev           # dev server, uses symlinked node_modules
-npm run build         # production build sanity
-git push              # triggers Vercel preview
-vercel ls reelready | grep Preview | head    # grab the URL
+cd ~/real-estate-pipeline            # or a worktree
+npx tsc -p tsconfig.app.json --noEmit
+npm run build
+```
+`tsc` emits one harmless `vitest/globals` notice — filter it out with `grep -v vitest`.
+
+### Vercel previews
+```bash
+vercel ls reelready | grep Preview | head
 ```
 
-**Do not** `git add -A` without checking — historical issue: the `node_modules` symlink and `.DS_Store` both leaked twice before the gitignore was hardened. Both are now blocked.
-
-**Do not** merge `ui-redesign` → `main` until the user has clicked through the latest preview URL and approved.
+### Supabase
+- Project ID: `vrhmaeywqsohlztoouxu` (org slug `vwbwrlokauukwmzkzsgk`)
+- MCP exposes: `apply_migration`, `execute_sql`, `list_tables`, `get_logs`, `get_advisors`
+- **Does not** expose auth config (Site URL / Redirect URLs) — that's a manual dashboard change
 
 ---
 
-## Open follow-ups (not blockers)
+## Branch status
 
-- **Hero video bundle weight** — the production JS chunk is 1.27 MB (gzip 372 KB). Vite suggests dynamic-import code-splitting. Out of scope for the redesign but a reasonable next step before launch.
-- **Real video previews on Status page** — the design now uses `<video>` tags pointing at `horizontal_video_url` / `vertical_video_url`, but if those aren't set yet the preview will be empty. Backend should populate them.
-- **Standalone `/login` page** — kept and redesigned because magic-link emails deep-link to it. It now mirrors the brand and offers a 'sign up on home' fallback link.
-- **Drive ingest** — still parked on the `drive-ingest` branch. To merge it back, rebase `drive-ingest` onto the new `ui-redesign` HEAD (or first onto `main` after `ui-redesign` ships) and resolve any minor conflicts in `lib/pipeline.ts` and `lib/types.ts`.
+```
+main           — production, everything merged
+ui-redesign    — legacy feature branch, fully merged into main, safe to archive
+finances-tab   — legacy feature branch, fully merged into main, safe to archive
+drive-ingest   — parked, not merged, needs rebase before merge
+```
+
+---
+
+## Recent commits on main
+
+```
+91b5bad PropertyDetail: restore primary-image sidebar lost during merge
+e74910d Add 8 cinematographer shot styles as prompt sub-variants
+da82145 Merge finances-tab: edit, Claude exclusion, cost/video, photo previews, wordmark
+66135be Finances edits, Claude exclusion, cost/video + listing photo previews + wordmark cleanup
+f2fcca7 Delete tilt_up and crane_up — awkward, don't map to real estate shots
+e976ffd Live auto-refresh on admin property detail page
+a92c7a7 Master exterior shots + reveal semantics + feature_closeup + doorway-trap filter + kitchen 2-3
+d618825 Merge finances-tab: new dashboard tab for revenue, expenses, token balances
+```
+
+End of session. 🎬
