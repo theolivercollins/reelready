@@ -20,6 +20,7 @@ import {
   FileText,
   Settings as SettingsIcon,
   Sparkles,
+  DollarSign,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
@@ -29,6 +30,7 @@ const dashboardNav = [
   { to: "/dashboard/pipeline", label: "Pipeline", icon: GitBranch },
   { to: "/dashboard/properties", label: "Listings", icon: Building2 },
   { to: "/dashboard/logs", label: "Logs", icon: FileText },
+  { to: "/dashboard/finances", label: "Finances", icon: DollarSign },
   { to: "/dashboard/learning", label: "Learning", icon: Sparkles },
   { to: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
