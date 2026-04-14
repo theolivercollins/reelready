@@ -19,7 +19,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
-  const { iteration_id } = (req.body ?? {}) as { iteration_id?: string };
+  const { iteration_id, provider: providerOverride } = (req.body ?? {}) as {
+    iteration_id?: string;
+    provider?: "kling" | "runway" | null;
+  };
   if (!iteration_id) return res.status(400).json({ error: "iteration_id required" });
 
   const supabase = getSupabase();
@@ -44,6 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       imageUrl,
       scene: iteration.director_output_json,
       roomType: iteration.analysis_json?.room_type ?? "other",
+      providerOverride: providerOverride === "kling" || providerOverride === "runway" ? providerOverride : null,
     });
 
     const { data: updated, error: uErr } = await supabase

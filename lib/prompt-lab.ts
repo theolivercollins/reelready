@@ -16,7 +16,9 @@ import {
 } from "./prompts/director.js";
 import { computeClaudeCost } from "./utils/claude-cost.js";
 import { selectProvider } from "./providers/router.js";
-import { pollUntilComplete } from "./providers/provider.interface.js";
+import { pollUntilComplete, type IVideoProvider } from "./providers/provider.interface.js";
+import { KlingProvider } from "./providers/kling.js";
+import { RunwayProvider } from "./providers/runway.js";
 import type { RoomType, CameraMovement } from "./types.js";
 
 // ---- Types ----
@@ -236,13 +238,17 @@ export async function renderLabClip(params: {
   imageUrl: string;
   scene: DirectorSceneOutput;
   roomType: RoomType;
+  providerOverride?: "kling" | "runway" | null;
 }): Promise<{
   clipUrl: string | null;
   provider: string;
   costCents: number;
   error: string | null;
 }> {
-  const provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
+  let provider: IVideoProvider;
+  if (params.providerOverride === "kling") provider = new KlingProvider();
+  else if (params.providerOverride === "runway") provider = new RunwayProvider();
+  else provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
   const img = await fetch(params.imageUrl);
   if (!img.ok) throw new Error(`Failed to fetch source image: ${img.status}`);
   const sourceImage = Buffer.from(await img.arrayBuffer());

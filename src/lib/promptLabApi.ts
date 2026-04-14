@@ -100,6 +100,12 @@ export function refineIteration(body: {
   return fetchJSON("/api/admin/prompt-lab/refine", { method: "POST", body: JSON.stringify(body) });
 }
 
-export function renderIteration(iterationId: string): Promise<LabIteration & { renderError?: string }> {
-  return fetchJSON("/api/admin/prompt-lab/render", { method: "POST", body: JSON.stringify({ iteration_id: iterationId }) });
+export function renderIteration(
+  iterationId: string,
+  provider?: "kling" | "runway" | null
+): Promise<LabIteration & { renderError?: string }> {
+  return fetchJSON("/api/admin/prompt-lab/render", {
+    method: "POST",
+    body: JSON.stringify({ iteration_id: iterationId, provider: provider ?? null }),
+  });
 }

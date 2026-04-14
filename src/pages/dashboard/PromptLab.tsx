@@ -202,11 +202,11 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     navigate("/dashboard/prompt-lab");
   }
 
-  async function handleRender(iterationId: string) {
+  async function handleRender(iterationId: string, provider?: "kling" | "runway" | null) {
     setBusy(`render-${iterationId}`);
     setError(null);
     try {
-      const result = await renderIteration(iterationId);
+      const result = await renderIteration(iterationId, provider ?? null);
       if (result.renderError) setError(`Render failed: ${result.renderError}`);
       await reload();
     } catch (e) {
@@ -320,7 +320,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   iteration={it}
                   isLatest={it.id === latest?.id}
                   busy={busy}
-                  onRender={() => handleRender(it.id)}
+                  onRender={(provider) => handleRender(it.id, provider)}
                   onRefine={(p) => handleRefine(it.id, p)}
                 />
               ))
@@ -393,7 +393,7 @@ function IterationCard({
   iteration: LabIteration;
   isLatest: boolean;
   busy: string | null;
-  onRender: () => void;
+  onRender: (provider: "kling" | "runway" | null) => void;
   onRefine: (payload: { rating: number | null; tags: string[]; comment: string; chatInstruction: string }) => void;
 }) {
   const [rating, setRating] = useState<number | null>(iteration.rating);
@@ -401,6 +401,7 @@ function IterationCard({
   const [comment, setComment] = useState(iteration.user_comment ?? "");
   const [chat, setChat] = useState("");
   const [renderForReal, setRenderForReal] = useState(false);
+  const [providerChoice, setProviderChoice] = useState<"auto" | "kling" | "runway">("auto");
 
   const director = iteration.director_output_json;
   const analysis = iteration.analysis_json as Record<string, unknown> | null;
@@ -479,7 +480,7 @@ function IterationCard({
 
       {/* Render controls (latest only) */}
       {isLatest && !iteration.clip_url && director && (
-        <div className="mt-5 flex items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -488,11 +489,21 @@ function IterationCard({
             />
             Render for real (~$0.05–$0.15)
           </label>
+          <select
+            value={providerChoice}
+            onChange={(e) => setProviderChoice(e.target.value as "auto" | "kling" | "runway")}
+            className="border border-border bg-background px-2 py-1 text-xs"
+            disabled={!renderForReal || rendering}
+          >
+            <option value="auto">Auto (by motion)</option>
+            <option value="kling">Kling</option>
+            <option value="runway">Runway</option>
+          </select>
           <Button
             size="sm"
             variant={renderForReal ? "default" : "outline"}
             disabled={!renderForReal || rendering}
-            onClick={onRender}
+            onClick={() => onRender(providerChoice === "auto" ? null : providerChoice)}
           >
             {rendering ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Play className="mr-2 h-3 w-3" />}
             {rendering ? "Rendering…" : "Render clip"}
