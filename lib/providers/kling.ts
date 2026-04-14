@@ -63,15 +63,12 @@ export class KlingProvider implements IVideoProvider {
         method: "POST",
         headers: this.getAuthHeaders(),
         body: JSON.stringify({
+          // Kling v2-master. Negative_prompt intentionally OMITTED — long
+          // stability anchors were making the model confused instead of
+          // constrained. Short crisp cinematography prompts perform better.
           model_name: "kling-v2-master",
           image: imageBase64,
           prompt: params.prompt,
-          negative_prompt:
-            "camera exit, leaving the room, passing through doorway, passing through window, passing through sliding door, " +
-            "new doorways, added rooms, new architecture, hallucinated walls, invented furniture, fake sliding door, fake fence, " +
-            "zoom out to reveal new space, scene change, teleport, different location, time of day change, " +
-            "warped walls, melting surfaces, bending counters, distorted windows, deformed furniture, " +
-            "people, text, watermark, logo, subtitles, captions, blurry, low quality",
           cfg_scale: 0.75,
           duration: params.durationSeconds <= 5 ? "5" : "10",
           aspect_ratio: params.aspectRatio,
