@@ -55,7 +55,11 @@ export class KlingProvider implements IVideoProvider {
   }
 
   async generateClip(params: GenerateClipParams): Promise<GenerationJob> {
-    const imageBase64 = params.sourceImage.toString("base64");
+    // Kling accepts either an HTTPS URL or base64 for `image`. Prefer URL
+    // when available — large photos base64-encode past provider caps.
+    const image = params.sourceImageUrl
+      ? params.sourceImageUrl
+      : params.sourceImage.toString("base64");
 
     const response = await fetch(
       `${this.baseUrl}/videos/image2video`,
@@ -67,7 +71,7 @@ export class KlingProvider implements IVideoProvider {
           // stability anchors were making the model confused instead of
           // constrained. Short crisp cinematography prompts perform better.
           model_name: "kling-v2-master",
-          image: imageBase64,
+          image,
           prompt: params.prompt,
           cfg_scale: 0.75,
           duration: params.durationSeconds <= 5 ? "5" : "10",

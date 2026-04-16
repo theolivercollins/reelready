@@ -17,8 +17,11 @@ export class RunwayProvider implements IVideoProvider {
   }
 
   async generateClip(params: GenerateClipParams): Promise<GenerationJob> {
-    const imageBase64 = params.sourceImage.toString("base64");
-    const dataUrl = `data:image/jpeg;base64,${imageBase64}`;
+    // Prefer HTTPS URL (no size cap beyond 2048 chars of URL itself).
+    // Falls back to base64 data URL, which Runway caps at 5 MB.
+    const promptImage = params.sourceImageUrl
+      ? params.sourceImageUrl
+      : `data:image/jpeg;base64,${params.sourceImage.toString("base64")}`;
 
     const response = await fetch(`${this.baseUrl}/image_to_video`, {
       method: "POST",
@@ -29,7 +32,7 @@ export class RunwayProvider implements IVideoProvider {
       },
       body: JSON.stringify({
         model: "gen4_turbo",
-        promptImage: dataUrl,
+        promptImage,
         promptText: params.prompt,
         duration: params.durationSeconds <= 7 ? 5 : 10,
         ratio: params.aspectRatio === "16:9" ? "1280:720" : "720:1280",

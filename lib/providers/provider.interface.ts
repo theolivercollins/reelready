@@ -2,6 +2,12 @@ import type { VideoProvider } from "../db.js";
 
 export interface GenerateClipParams {
   sourceImage: Buffer;
+  /**
+   * Optional HTTPS URL to the source image. When provided, providers that
+   * natively accept URL-based inputs (e.g. Runway) should prefer this over
+   * base64-encoding `sourceImage`, which avoids Runway's 5MB data-URL cap.
+   */
+  sourceImageUrl?: string;
   prompt: string;
   durationSeconds: number;
   aspectRatio: "16:9" | "9:16";

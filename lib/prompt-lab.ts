@@ -456,11 +456,14 @@ export async function submitLabRender(params: {
   } else {
     provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
   }
+  // Keep the Buffer path as a fallback for providers that don't accept URLs,
+  // but pass the URL so Runway/Kling can skip base64 (which caps at 5MB).
   const img = await fetch(params.imageUrl);
   if (!img.ok) throw new Error(`Failed to fetch source image: ${img.status}`);
   const sourceImage = Buffer.from(await img.arrayBuffer());
   const job = await provider.generateClip({
     sourceImage,
+    sourceImageUrl: params.imageUrl,
     prompt: params.scene.prompt,
     durationSeconds: params.scene.duration_seconds >= 7 ? 10 : 5,
     aspectRatio: "16:9",
