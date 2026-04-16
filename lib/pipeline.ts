@@ -6,6 +6,7 @@ import {
   updatePhotoAnalysis,
   getSelectedPhotos,
   insertScenes,
+  embedScene,
   updateSceneStatus,
   updateScene,
   getScenesForProperty,
@@ -502,6 +503,20 @@ async function runScripting(propertyId: string): Promise<void> {
       duration_seconds: s.duration_seconds,
       provider: s.provider_preference ?? undefined,
     }))
+  );
+
+  // Embed each newly-inserted scene so future similarity retrieval has a
+  // populated pool. Fire-and-forget per scene with per-scene error capture
+  // so one failure never fails the run.
+  const insertedScenes = await getScenesForProperty(propertyId);
+  await Promise.all(
+    insertedScenes.map((s) =>
+      embedScene(s.id).catch((err) => {
+        void log(propertyId, "scripting", "warn", `embed scene failed: ${s.id}`, {
+          error: String(err),
+        });
+      }),
+    ),
   );
 
   const scriptUsage = computeClaudeCost(response.usage as never);

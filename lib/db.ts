@@ -11,6 +11,7 @@ import type {
   LogStage,
   LogLevel,
 } from "./types.js";
+import { buildAnalysisText, embedTextSafe, toPgVector } from "./embeddings.js";
 
 export type {
   Property,
@@ -364,6 +365,43 @@ export async function insertScenes(
   const { data, error } = await getSupabase().from("scenes").insert(scenes).select();
   if (error) throw error;
   return data as Scene[];
+}
+
+export async function embedScene(sceneId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { data: scene, error } = await supabase
+    .from("scenes")
+    .select(
+      "id, camera_movement, prompt, photo:photos(room_type, key_features, composition, suggested_motion)",
+    )
+    .eq("id", sceneId)
+    .single();
+  if (error || !scene || !scene.photo) return;
+  // PostgREST types a FK-joined relation as an array at compile time even
+  // when the relationship is to-one; at runtime it's a single object here
+  // because photos.id is a unique PK. Normalize via unknown to keep the
+  // local shape tight without widening the Photo type.
+  const photoRaw = scene.photo as unknown;
+  const photo = (Array.isArray(photoRaw) ? photoRaw[0] : photoRaw) as {
+    room_type: string | null;
+    key_features: string[] | null;
+    composition: string | null;
+    suggested_motion: string | null;
+  } | undefined;
+  if (!photo) return;
+  const text = buildAnalysisText({
+    roomType: photo.room_type ?? "",
+    keyFeatures: photo.key_features ?? [],
+    composition: photo.composition ?? undefined,
+    suggestedMotion: photo.suggested_motion ?? undefined,
+    cameraMovement: scene.camera_movement as string,
+  });
+  const embedded = await embedTextSafe(text);
+  if (!embedded) return;
+  await supabase
+    .from("scenes")
+    .update({ embedding: toPgVector(embedded.vector), embedding_model: embedded.model })
+    .eq("id", sceneId);
 }
 
 export async function getScenesForProperty(propertyId: string): Promise<Scene[]> {
