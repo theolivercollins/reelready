@@ -187,6 +187,9 @@ export async function retrieveSimilarIterations(
     prompt: string | null;
     camera_movement: string | null;
     clip_url: string | null;
+    tags: string[] | null;
+    comment: string | null;
+    refinement: string | null;
     distance: number;
   }>).map((r) => {
     const dir = (r.director_output_json ?? {}) as {
@@ -205,11 +208,9 @@ export async function retrieveSimilarIterations(
         r.camera_movement ?? dir.scene?.camera_movement ?? dir.camera_movement ?? "unknown",
       prompt: r.prompt ?? dir.scene?.prompt ?? dir.prompt ?? "",
       rating: r.rating,
-      // match_rated_examples doesn't return tags/comment/refinement/provider
-      // for either source — keep nullable for downstream renderers.
-      tags: null,
-      comment: null,
-      refinement: null,
+      tags: r.tags ?? null,
+      comment: r.comment ?? null,
+      refinement: r.refinement ?? null,
       provider:
         dir.provider_preference ??
         dir.provider ??
