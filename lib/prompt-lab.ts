@@ -86,31 +86,12 @@ async function resolveDirectorSystem(): Promise<{ body: string; hash: string }> 
   return { body: DIRECTOR_SYSTEM, hash: DIRECTOR_PROMPT_HASH };
 }
 
-// ---- Fetch image as base64 for Claude vision ----
-
-async function fetchImageAsBase64(url: string): Promise<{
-  data: string;
-  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
-}> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
-  const contentType = response.headers.get("content-type") ?? "";
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" =
-    contentType.includes("png") ? "image/png"
-    : contentType.includes("webp") ? "image/webp"
-    : contentType.includes("gif") ? "image/gif"
-    : "image/jpeg";
-  return { data: buffer.toString("base64"), mediaType };
-}
-
 // ---- Run photo analysis on a single image ----
 
 export async function analyzeSingleImage(imageUrl: string): Promise<{
   analysis: PhotoAnalysisResult;
   costCents: number;
 }> {
-  const img = await fetchImageAsBase64(imageUrl);
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -120,10 +101,7 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
       {
         role: "user",
         content: [
-          {
-            type: "image",
-            source: { type: "base64", media_type: img.mediaType, data: img.data },
-          },
+          { type: "image", source: { type: "url", url: imageUrl } },
           { type: "text", text: buildAnalysisUserPrompt(1) },
         ],
       },
