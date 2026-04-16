@@ -9,6 +9,7 @@ import {
   directSinglePhoto,
   getNextIterationNumber,
   retrieveSimilarIterations,
+  retrieveSimilarLosers,
   retrieveMatchingRecipes,
   ANALYSIS_PROMPT_HASH,
   DIRECTOR_PROMPT_HASH,
@@ -52,18 +53,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     const embedded = await embedTextSafe(embeddingText);
 
-    const exemplars = embedded
-      ? await retrieveSimilarIterations(embedded.vector, { minRating: 4, limit: 5 })
-      : [];
-    const recipes = embedded
-      ? await retrieveMatchingRecipes(embedded.vector, analysis.room_type)
-      : [];
+    const [exemplars, losers, recipes] = embedded
+      ? await Promise.all([
+          retrieveSimilarIterations(embedded.vector, { minRating: 4, limit: 5 }),
+          retrieveSimilarLosers(embedded.vector, { maxRating: 2, limit: 3 }),
+          retrieveMatchingRecipes(embedded.vector, analysis.room_type),
+        ])
+      : [[], [], []] as [
+          Awaited<ReturnType<typeof retrieveSimilarIterations>>,
+          Awaited<ReturnType<typeof retrieveSimilarLosers>>,
+          Awaited<ReturnType<typeof retrieveMatchingRecipes>>,
+        ];
 
     const { scene, costCents: dCost } = await directSinglePhoto(
       analysis,
       "lab-photo",
       exemplars,
-      recipes
+      recipes,
+      losers
     );
 
     const iterationNumber = await getNextIterationNumber(session_id);
@@ -81,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         embedding_model: embedded?.model ?? null,
         retrieval_metadata: {
           exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
+          losers: losers.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
           recipe: recipes[0]
             ? {
                 id: (recipes[0] as { id: string }).id,
@@ -107,7 +115,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       iteration,
       retrieval: {
         exemplar_count: exemplars.length,
+        loser_count: losers.length,
         exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance })),
+        losers: losers.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance })),
         recipe: recipes[0] ?? null,
       },
     });

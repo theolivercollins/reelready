@@ -875,8 +875,9 @@ function PromoteRecipeControl({
 function RetrievalChips({ metadata }: { metadata: LabIteration["retrieval_metadata"] }) {
   if (!metadata) return null;
   const exemplars = metadata.exemplars ?? [];
+  const losers = metadata.losers ?? [];
   const recipe = metadata.recipe;
-  if (exemplars.length === 0 && !recipe) return null;
+  if (exemplars.length === 0 && losers.length === 0 && !recipe) return null;
   return (
     <>
       {exemplars.length > 0 && (
@@ -885,6 +886,14 @@ function RetrievalChips({ metadata }: { metadata: LabIteration["retrieval_metada
           title={exemplars.map((e) => `${e.rating}★ · ${e.camera_movement} · d=${e.distance.toFixed(3)}\n   ${e.prompt}`).join("\n\n")}
         >
           Based on {exemplars.length} similar {exemplars.length === 1 ? "win" : "wins"}
+        </span>
+      )}
+      {losers.length > 0 && (
+        <span
+          className="rounded bg-rose-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-rose-700 dark:text-rose-400"
+          title={losers.map((e) => `${e.rating}★ · ${e.camera_movement} · d=${e.distance.toFixed(3)}\n   ${e.prompt}`).join("\n\n")}
+        >
+          Avoiding {losers.length} {losers.length === 1 ? "loser" : "losers"}
         </span>
       )}
       {recipe && (

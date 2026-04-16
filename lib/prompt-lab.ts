@@ -200,6 +200,62 @@ export async function retrieveSimilarIterations(
   });
 }
 
+export async function retrieveSimilarLosers(
+  embedding: number[],
+  opts: { maxRating?: number; limit?: number } = {}
+): Promise<RetrievedExemplar[]> {
+  const { getSupabase } = await import("./client.js");
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc("match_loser_examples", {
+    query_embedding: toPgVector(embedding),
+    max_rating: opts.maxRating ?? 2,
+    match_count: opts.limit ?? 3,
+  });
+  if (error || !data) return [];
+  return (data as Array<{
+    source: "lab" | "prod";
+    example_id: string;
+    rating: number;
+    analysis_json: Record<string, unknown>;
+    director_output_json: Record<string, unknown>;
+    prompt: string | null;
+    camera_movement: string | null;
+    clip_url: string | null;
+    tags: string[] | null;
+    comment: string | null;
+    refinement: string | null;
+    distance: number;
+  }>).map((r) => {
+    const dir = (r.director_output_json ?? {}) as {
+      camera_movement?: string;
+      prompt?: string;
+      provider?: string;
+      provider_preference?: string;
+      scene?: { camera_movement?: string; prompt?: string; provider?: string; provider_preference?: string };
+    };
+    const analysis = (r.analysis_json ?? {}) as { room_type?: string };
+    return {
+      id: r.example_id,
+      source: r.source,
+      room_type: analysis.room_type ?? "other",
+      camera_movement:
+        r.camera_movement ?? dir.scene?.camera_movement ?? dir.camera_movement ?? "unknown",
+      prompt: r.prompt ?? dir.scene?.prompt ?? dir.prompt ?? "",
+      rating: r.rating,
+      tags: r.tags ?? null,
+      comment: r.comment ?? null,
+      refinement: r.refinement ?? null,
+      provider:
+        dir.provider_preference ??
+        dir.provider ??
+        dir.scene?.provider_preference ??
+        dir.scene?.provider ??
+        null,
+      distance: r.distance,
+    };
+  });
+}
+
 export async function retrieveMatchingRecipes(
   embedding: number[],
   roomType: string | null,
@@ -232,6 +288,22 @@ function renderExemplarBlock(exemplars: RetrievedExemplar[]): string {
   return `\n\n━━━ PAST WINNERS ON STRUCTURALLY SIMILAR PHOTOS ━━━\nThese are ${exemplars.length} prior Lab iterations on photos whose analysis embedded close to this one, rated 4+ by the admin. They are evidence of what has worked on similar compositions. Bias toward their patterns unless the current photo's specifics argue otherwise.\n\n${lines.join("\n\n")}\n━━━ END PAST WINNERS ━━━`;
 }
 
+function renderLoserBlock(losers: RetrievedExemplar[]): string {
+  if (losers.length === 0) return "";
+  const lines = losers.map((e, idx) => {
+    const parts = [
+      `  ${idx + 1}. [${e.rating}★ · ${e.room_type} · ${e.camera_movement} · ${e.provider ?? "?"}]`,
+      `     prompt: "${e.prompt}"`,
+    ];
+    if (e.tags?.length) parts.push(`     tags: ${e.tags.join(", ")}`);
+    if (e.comment) parts.push(`     why it failed: ${e.comment}`);
+    if (e.refinement) parts.push(`     admin asked to change: ${e.refinement}`);
+    return parts.join("\n");
+  });
+  const worstRating = Math.max(...losers.map((l) => l.rating));
+  return `\n\n━━━ PAST LOSERS ON STRUCTURALLY SIMILAR PHOTOS ━━━\nThese are ${losers.length} prior iterations on photos that embed close to this one, rated ${worstRating}★ or worse by the admin. Do NOT mirror these patterns. Steer away from their camera_movement choice, their framing, or whatever the tags/comments indicate went wrong. If your instinct leads you toward one of these patterns, pick a different verb or different framing.\n\n${lines.join("\n\n")}\n━━━ END PAST LOSERS ━━━`;
+}
+
 function renderRecipeBlock(recipes: RetrievedRecipe[]): string {
   if (recipes.length === 0) return "";
   const top = recipes[0];
@@ -244,7 +316,8 @@ export async function directSinglePhoto(
   analysis: PhotoAnalysisResult,
   photoId: string = "lab-photo",
   exemplars: RetrievedExemplar[] = [],
-  recipes: RetrievedRecipe[] = []
+  recipes: RetrievedRecipe[] = [],
+  losers: RetrievedExemplar[] = []
 ): Promise<{ scene: DirectorSceneOutput; costCents: number }> {
   const client = new Anthropic();
   const basePrompt = buildDirectorUserPrompt([
@@ -260,7 +333,11 @@ export async function directSinglePhoto(
       motion_rationale: analysis.motion_rationale,
     },
   ]);
-  const userPrompt = basePrompt + renderExemplarBlock(exemplars) + renderRecipeBlock(recipes);
+  const userPrompt =
+    basePrompt +
+    renderExemplarBlock(exemplars) +
+    renderLoserBlock(losers) +
+    renderRecipeBlock(recipes);
   const { body: directorSystem } = await resolveDirectorSystem();
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -308,6 +385,7 @@ export async function refineDirectorPrompt(params: {
   comment: string | null;
   chatInstruction: string;
   exemplars?: RetrievedExemplar[];
+  losers?: RetrievedExemplar[];
 }): Promise<{ scene: DirectorSceneOutput; rationale: string; costCents: number }> {
   const client = new Anthropic();
   const userMessage = `PHOTO ANALYSIS:
@@ -325,6 +403,7 @@ ${params.comment ? `comment: ${params.comment}` : ""}
 REFINEMENT INSTRUCTION:
 ${params.chatInstruction}
 ${renderExemplarBlock(params.exemplars ?? [])}
+${renderLoserBlock(params.losers ?? [])}
 
 Remember: the revised output must comply with the full DIRECTOR_SYSTEM rules (below for reference).
 

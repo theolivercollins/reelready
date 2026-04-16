@@ -51,6 +51,14 @@ export interface LabIteration {
       room_type?: string;
       camera_movement?: string;
     }>;
+    losers?: Array<{
+      id: string;
+      prompt: string;
+      rating: number;
+      distance: number;
+      room_type?: string;
+      camera_movement?: string;
+    }>;
     recipe?: {
       id: string;
       archetype: string;

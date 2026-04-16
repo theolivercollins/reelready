@@ -4,6 +4,7 @@ import { getSupabase } from "../../../lib/client.js";
 import {
   refineDirectorPrompt,
   retrieveSimilarIterations,
+  retrieveSimilarLosers,
   getNextIterationNumber,
   DIRECTOR_PROMPT_HASH,
 } from "../../../lib/prompt-lab.js";
@@ -54,15 +55,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     .eq("id", iteration_id);
 
-  // Parent embedding carries forward — retrieve similar winners if present.
+  // Parent embedding carries forward — retrieve similar winners + losers if present.
   let exemplars: Awaited<ReturnType<typeof retrieveSimilarIterations>> = [];
+  let losers: Awaited<ReturnType<typeof retrieveSimilarLosers>> = [];
+  let parentVec: number[] | null = null;
   if (Array.isArray(prev.embedding) && prev.embedding.length) {
-    exemplars = await retrieveSimilarIterations(prev.embedding as number[], { minRating: 4, limit: 5 });
+    parentVec = prev.embedding as number[];
   } else if (typeof prev.embedding === "string" && prev.embedding.startsWith("[")) {
     try {
-      const vec = JSON.parse(prev.embedding) as number[];
-      exemplars = await retrieveSimilarIterations(vec, { minRating: 4, limit: 5 });
+      parentVec = JSON.parse(prev.embedding) as number[];
     } catch { /* no-op */ }
+  }
+  if (parentVec) {
+    [exemplars, losers] = await Promise.all([
+      retrieveSimilarIterations(parentVec, { minRating: 4, limit: 5 }),
+      retrieveSimilarLosers(parentVec, { maxRating: 2, limit: 3 }),
+    ]);
   }
 
   try {
@@ -74,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       comment: typeof comment === "string" ? comment : null,
       chatInstruction: chat_instruction,
       exemplars,
+      losers,
     });
 
     const iterationNumber = await getNextIterationNumber(prev.session_id);
@@ -92,6 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         embedding_model: prev.embedding_model ?? null,
         retrieval_metadata: {
           exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
+          losers: losers.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
         },
       })
       .select()
@@ -102,7 +112,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       iteration: newIteration,
       retrieval: {
         exemplar_count: exemplars.length,
+        loser_count: losers.length,
         exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance })),
+        losers: losers.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance })),
       },
     });
   } catch (err) {
