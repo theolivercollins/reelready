@@ -7,7 +7,9 @@ alter table public.scenes
   add column if not exists embedding_model text;
 
 create index if not exists scenes_embedding_hnsw
-  on public.scenes using hnsw (embedding vector_cosine_ops);
+  on public.scenes using hnsw (embedding vector_cosine_ops)
+  with (m = 16, ef_construction = 64)
+  where embedding is not null;
 
 -- 2. Unified retrieval RPC: pool Lab iterations + rated production scenes.
 -- Returns top-N examples ordered by rating-weighted cosine distance.
@@ -50,8 +52,23 @@ language sql stable as $$
       'prod'::text as source,
       s.id as example_id,
       r.rating,
-      to_jsonb(p.*) - 'embedding' as analysis_json,
-      to_jsonb(s.*) - 'embedding' as director_output_json,
+      jsonb_build_object(
+        'room_type', p.room_type,
+        'key_features', p.key_features,
+        'composition', p.composition,
+        'aesthetic_score', p.aesthetic_score,
+        'depth_rating', p.depth_rating,
+        'suggested_motion', p.suggested_motion,
+        'motion_rationale', p.motion_rationale,
+        'video_viable', p.video_viable
+      ) as analysis_json,
+      jsonb_build_object(
+        'scene_number', s.scene_number,
+        'camera_movement', s.camera_movement,
+        'prompt', s.prompt,
+        'duration_seconds', s.duration_seconds,
+        'provider_preference', s.provider
+      ) as director_output_json,
       s.prompt,
       s.camera_movement::text,
       s.clip_url,
