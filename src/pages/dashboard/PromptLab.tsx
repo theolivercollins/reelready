@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Loader2,
@@ -792,8 +792,17 @@ function PromoteRecipeControl({
   iteration: LabIteration;
   director: NonNullable<LabIteration["director_output_json"]>;
 }) {
+  const analysis = iteration.analysis_json as { room_type?: string } | null;
+  const autoArchetype = useMemo(() => {
+    const room = analysis?.room_type ?? "scene";
+    const movement = director.camera_movement ?? "motion";
+    const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+    const slug = Math.random().toString(36).slice(2, 6);
+    return `${room}_${movement}_${stamp}_${slug}`;
+  }, [analysis?.room_type, director.camera_movement]);
+
   const [open, setOpen] = useState(false);
-  const [archetype, setArchetype] = useState("");
+  const [archetype, setArchetype] = useState(autoArchetype);
   const [tmpl, setTmpl] = useState(director.prompt);
   const [busy, setBusy] = useState(false);
   const [promoted, setPromoted] = useState(false);
@@ -834,11 +843,10 @@ function PromoteRecipeControl({
     <div className="mt-4 border border-border bg-muted/30 p-4 space-y-3">
       <div className="label text-muted-foreground">Promote to recipe library</div>
       <div>
-        <label className="text-xs text-muted-foreground">Archetype name</label>
+        <label className="text-xs text-muted-foreground">Archetype name <span className="opacity-60">(auto-filled, edit if you want)</span></label>
         <Input
           value={archetype}
           onChange={(e) => setArchetype(e.target.value)}
-          placeholder="e.g. kitchen_island_centered"
           className="mt-1 font-mono text-xs"
         />
       </div>
