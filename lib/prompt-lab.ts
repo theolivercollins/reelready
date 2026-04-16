@@ -142,6 +142,7 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
 
 export interface RetrievedExemplar {
   id: string;
+  source: "lab" | "prod";
   room_type: string;
   camera_movement: string;
   prompt: string;
@@ -171,34 +172,47 @@ export async function retrieveSimilarIterations(
 ): Promise<RetrievedExemplar[]> {
   const { getSupabase } = await import("./client.js");
   const supabase = getSupabase();
-  const { data, error } = await supabase.rpc("match_lab_iterations", {
+  const { data, error } = await supabase.rpc("match_rated_examples", {
     query_embedding: toPgVector(embedding),
     min_rating: opts.minRating ?? 4,
     match_count: opts.limit ?? 5,
   });
   if (error || !data) return [];
   return (data as Array<{
-    id: string;
-    analysis_json: { room_type?: string } | null;
-    director_output_json: { camera_movement?: string; prompt?: string } | null;
+    source: "lab" | "prod";
+    example_id: string;
     rating: number;
-    tags: string[] | null;
-    user_comment: string | null;
-    refinement_instruction: string | null;
-    provider: string | null;
+    analysis_json: Record<string, unknown> | null;
+    director_output_json: Record<string, unknown> | null;
+    prompt: string | null;
+    camera_movement: string | null;
+    clip_url: string | null;
     distance: number;
-  }>).map((r) => ({
-    id: r.id,
-    room_type: r.analysis_json?.room_type ?? "other",
-    camera_movement: r.director_output_json?.camera_movement ?? "unknown",
-    prompt: r.director_output_json?.prompt ?? "",
-    rating: r.rating,
-    tags: r.tags,
-    comment: r.user_comment,
-    refinement: r.refinement_instruction,
-    provider: r.provider,
-    distance: r.distance,
-  }));
+  }>).map((r) => {
+    const dir = (r.director_output_json ?? {}) as {
+      camera_movement?: string;
+      prompt?: string;
+      provider?: string;
+      scene?: { camera_movement?: string; prompt?: string };
+    };
+    const analysis = (r.analysis_json ?? {}) as { room_type?: string };
+    return {
+      id: r.example_id,
+      source: r.source,
+      room_type: analysis.room_type ?? "other",
+      camera_movement:
+        r.camera_movement ?? dir.scene?.camera_movement ?? dir.camera_movement ?? "unknown",
+      prompt: r.prompt ?? dir.scene?.prompt ?? dir.prompt ?? "",
+      rating: r.rating,
+      // match_rated_examples doesn't return tags/comment/refinement/provider
+      // for either source — keep nullable for downstream renderers.
+      tags: null,
+      comment: null,
+      refinement: null,
+      provider: dir.provider ?? null,
+      distance: r.distance,
+    };
+  });
 }
 
 export async function retrieveMatchingRecipes(
