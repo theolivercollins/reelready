@@ -493,7 +493,7 @@ async function runScripting(propertyId: string): Promise<void> {
   const validPhotoIds = new Set(photos.map((p) => p.id));
   const validScenes = output.scenes.filter((s) => validPhotoIds.has(s.photo_id));
 
-  await insertScenes(
+  const insertedScenes = await insertScenes(
     validScenes.map((s) => ({
       property_id: propertyId,
       photo_id: s.photo_id,
@@ -508,7 +508,6 @@ async function runScripting(propertyId: string): Promise<void> {
   // Embed each newly-inserted scene so future similarity retrieval has a
   // populated pool. Fire-and-forget per scene with per-scene error capture
   // so one failure never fails the run.
-  const insertedScenes = await getScenesForProperty(propertyId);
   await Promise.all(
     insertedScenes.map((s) =>
       embedScene(s.id).catch((err) => {

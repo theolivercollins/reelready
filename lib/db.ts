@@ -394,14 +394,15 @@ export async function embedScene(sceneId: string): Promise<void> {
     keyFeatures: photo.key_features ?? [],
     composition: photo.composition ?? undefined,
     suggestedMotion: photo.suggested_motion ?? undefined,
-    cameraMovement: scene.camera_movement as string,
+    cameraMovement: (scene.camera_movement as string | null) ?? "",
   });
   const embedded = await embedTextSafe(text);
   if (!embedded) return;
-  await supabase
+  const { error: updateError } = await supabase
     .from("scenes")
     .update({ embedding: toPgVector(embedded.vector), embedding_model: embedded.model })
     .eq("id", sceneId);
+  if (updateError) throw updateError;
 }
 
 export async function getScenesForProperty(propertyId: string): Promise<Scene[]> {
