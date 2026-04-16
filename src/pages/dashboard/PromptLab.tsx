@@ -1082,8 +1082,8 @@ function IterationCard({
         </div>
       )}
 
-      {/* Feedback + refine (latest only) */}
-      {isLatest && director && (
+      {/* Feedback — rating available on any iteration; refine latest only */}
+      {director && (
         <div className="mt-6 space-y-4 border-t border-border pt-5">
           <div>
             <span className="label text-muted-foreground">Rate this iteration</span>
@@ -1146,26 +1146,28 @@ function IterationCard({
             </Button>
           </div>
 
-          <div>
-            <span className="label text-muted-foreground">What should change? (optional — only if refining)</span>
-            <Textarea
-              value={chat}
-              onChange={(e) => setChat(e.target.value)}
-              placeholder="e.g. 'the dolly is too fast, make it slower' or 'use reveal past the island corner instead of push_in'"
-              className="mt-2 min-h-[80px]"
-            />
-            <div className="mt-3 flex justify-end">
-              <Button
-                onClick={() =>
-                  onRefine({ rating, tags, comment, chatInstruction: chat })
-                }
-                disabled={!chat.trim() || refining}
-              >
-                {refining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Refine → new iteration
-              </Button>
+          {isLatest && (
+            <div>
+              <span className="label text-muted-foreground">What should change? (optional — only if refining)</span>
+              <Textarea
+                value={chat}
+                onChange={(e) => setChat(e.target.value)}
+                placeholder="e.g. 'the dolly is too fast, make it slower' or 'use reveal past the island corner instead of push_in'"
+                className="mt-2 min-h-[80px]"
+              />
+              <div className="mt-3 flex justify-end">
+                <Button
+                  onClick={() =>
+                    onRefine({ rating, tags, comment, chatInstruction: chat })
+                  }
+                  disabled={!chat.trim() || refining}
+                >
+                  {refining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  Refine → new iteration
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
