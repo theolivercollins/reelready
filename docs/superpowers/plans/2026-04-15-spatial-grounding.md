@@ -1,5 +1,7 @@
 # Spatial Grounding + Unified Embeddings — Implementation Plan
 
+> **STATUS: PAUSED (2026-04-15).** The unified-embeddings half of this plan has been extracted and is being executed separately — see `2026-04-15-unified-embeddings.md`. The spatial-grounding half (Tasks 2, 3, 4, 5, 9 in this document) is shelved pending outcome of unified embeddings. Do NOT execute this plan as-is; the scenes + RPC pieces will already be in place when spatial work resumes. When resuming, re-read the spec and produce a spatial-only plan rather than running this document top-to-bottom.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Teach the director where the camera is and what motions are physically possible from that pose, and unify production scene ratings with Lab iterations in a single retrieval pool so every piece of feedback teaches both environments.
