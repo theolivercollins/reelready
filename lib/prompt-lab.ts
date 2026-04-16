@@ -193,7 +193,8 @@ export async function retrieveSimilarIterations(
       camera_movement?: string;
       prompt?: string;
       provider?: string;
-      scene?: { camera_movement?: string; prompt?: string };
+      provider_preference?: string;
+      scene?: { camera_movement?: string; prompt?: string; provider?: string; provider_preference?: string };
     };
     const analysis = (r.analysis_json ?? {}) as { room_type?: string };
     return {
@@ -209,7 +210,12 @@ export async function retrieveSimilarIterations(
       tags: null,
       comment: null,
       refinement: null,
-      provider: dir.provider ?? null,
+      provider:
+        dir.provider_preference ??
+        dir.provider ??
+        dir.scene?.provider_preference ??
+        dir.scene?.provider ??
+        null,
       distance: r.distance,
     };
   });
