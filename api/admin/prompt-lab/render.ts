@@ -4,7 +4,7 @@ export const maxDuration = 60;
 
 import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase } from "../../../lib/client.js";
-import { submitLabRender } from "../../../lib/prompt-lab.js";
+import { submitLabRender, ProviderCapacityError } from "../../../lib/prompt-lab.js";
 
 // POST /api/admin/prompt-lab/render
 //   body: { iteration_id, provider? }
@@ -70,6 +70,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(updated);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (err instanceof ProviderCapacityError) {
+      // Don't stamp render_error for capacity: the user can simply retry.
+      return res.status(429).json({
+        error: "provider at capacity",
+        detail: msg,
+        provider: err.provider,
+        in_flight: err.inFlight,
+        limit: err.limit,
+      });
+    }
     await supabase
       .from("prompt_lab_iterations")
       .update({ render_error: msg })

@@ -444,6 +444,47 @@ function getProviderByName(name: "kling" | "runway"): IVideoProvider {
   return name === "kling" ? new KlingProvider() : new RunwayProvider();
 }
 
+// Kling trial plan caps concurrent jobs at 5. Leave 1 slot of slack so
+// parallel submissions don't race past the limit. Override via env if the
+// plan changes.
+const KLING_CONCURRENCY_LIMIT = Number(process.env.KLING_CONCURRENCY_LIMIT ?? 4);
+
+export class ProviderCapacityError extends Error {
+  readonly provider: "kling" | "runway";
+  readonly inFlight: number;
+  readonly limit: number;
+  constructor(provider: "kling" | "runway", inFlight: number, limit: number) {
+    super(
+      `${provider} is at capacity (${inFlight}/${limit} in flight). Try Runway or wait ~90s.`,
+    );
+    this.provider = provider;
+    this.inFlight = inFlight;
+    this.limit = limit;
+  }
+}
+
+// Count Kling jobs submitted but not yet finalized across both Lab and prod.
+async function countKlingInFlight(): Promise<number> {
+  const { getSupabase } = await import("./client.js");
+  const supabase = getSupabase();
+  const [lab, prod] = await Promise.all([
+    supabase
+      .from("prompt_lab_iterations")
+      .select("id", { count: "exact", head: true })
+      .eq("provider", "kling")
+      .not("provider_task_id", "is", null)
+      .is("clip_url", null)
+      .is("render_error", null),
+    supabase
+      .from("scenes")
+      .select("id", { count: "exact", head: true })
+      .eq("provider", "kling")
+      .not("provider_task_id", "is", null)
+      .is("clip_url", null),
+  ]);
+  return (lab.count ?? 0) + (prod.count ?? 0);
+}
+
 export async function submitLabRender(params: {
   imageUrl: string;
   scene: DirectorSceneOutput;
@@ -456,6 +497,19 @@ export async function submitLabRender(params: {
   } else {
     provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
   }
+
+  // Capacity guard: if Kling is saturated, auto-fallback on "auto" selection
+  // or throw a clear error if the user explicitly asked for Kling.
+  if (provider.name === "kling") {
+    const inFlight = await countKlingInFlight();
+    if (inFlight >= KLING_CONCURRENCY_LIMIT) {
+      if (params.providerOverride === "kling") {
+        throw new ProviderCapacityError("kling", inFlight, KLING_CONCURRENCY_LIMIT);
+      }
+      provider = new RunwayProvider();
+    }
+  }
+
   // Keep the Buffer path as a fallback for providers that don't accept URLs,
   // but pass the URL so Runway/Kling can skip base64 (which caps at 5MB).
   const img = await fetch(params.imageUrl);
