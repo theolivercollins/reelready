@@ -30,11 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "PATCH") {
-    const { label, archetype, batch_label } = (req.body ?? {}) as { label?: string | null; archetype?: string | null; batch_label?: string | null };
-    const patch: Record<string, string | null> = {};
+    const { label, archetype, batch_label, archived } = (req.body ?? {}) as { label?: string | null; archetype?: string | null; batch_label?: string | null; archived?: boolean };
+    const patch: Record<string, string | boolean | null> = {};
     if (label !== undefined) patch.label = label?.toString().trim() || null;
     if (archetype !== undefined) patch.archetype = archetype?.toString().trim() || null;
     if (batch_label !== undefined) patch.batch_label = batch_label?.toString().trim() || null;
+    if (typeof archived === "boolean") patch.archived = archived;
     if (Object.keys(patch).length === 0) return res.status(400).json({ error: "no fields to update" });
     const { data, error } = await supabase
       .from("prompt_lab_sessions")

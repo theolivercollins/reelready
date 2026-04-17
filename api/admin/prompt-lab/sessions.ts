@@ -13,11 +13,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
 
   if (req.method === "GET") {
-    const { data, error } = await supabase
+    const includeArchived = req.query.include_archived === "true";
+    let query = supabase
       .from("prompt_lab_sessions")
-      .select("id, created_by, image_url, image_path, label, archetype, batch_label, created_at")
+      .select("id, created_by, image_url, image_path, label, archetype, batch_label, archived, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
+    if (!includeArchived) query = query.eq("archived", false);
+    const { data, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
 
     // Also grab iteration counts + best rating per session in one pass,

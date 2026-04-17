@@ -8,6 +8,7 @@ export interface LabSession {
   label: string | null;
   archetype: string | null;
   batch_label: string | null;
+  archived: boolean;
   created_at: string;
   iteration_count?: number;
   best_rating?: number | null;
@@ -99,8 +100,9 @@ export async function uploadLabImage(file: File): Promise<{ url: string; path: s
   return { url: pub.publicUrl, path };
 }
 
-export function listSessions(): Promise<{ sessions: LabSession[] }> {
-  return fetchJSON("/api/admin/prompt-lab/sessions");
+export function listSessions(opts?: { includeArchived?: boolean }): Promise<{ sessions: LabSession[] }> {
+  const params = opts?.includeArchived ? "?include_archived=true" : "";
+  return fetchJSON(`/api/admin/prompt-lab/sessions${params}`);
 }
 
 export function createSession(body: { image_url: string; image_path: string; label?: string; archetype?: string; batch_label?: string }): Promise<LabSession> {
@@ -111,7 +113,7 @@ export function getSession(sessionId: string): Promise<{ session: LabSession; it
   return fetchJSON(`/api/admin/prompt-lab/${sessionId}`);
 }
 
-export function updateSession(sessionId: string, patch: { label?: string | null; archetype?: string | null; batch_label?: string | null }): Promise<LabSession> {
+export function updateSession(sessionId: string, patch: { label?: string | null; archetype?: string | null; batch_label?: string | null; archived?: boolean }): Promise<LabSession> {
   return fetchJSON(`/api/admin/prompt-lab/${sessionId}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 

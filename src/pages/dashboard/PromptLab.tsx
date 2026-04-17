@@ -65,14 +65,20 @@ function SessionList() {
   const [autoAnalyze, setAutoAnalyze] = useState(true);
   const navigate = useNavigate();
 
+  const [showArchived, setShowArchived] = useState(false);
+
   async function reload() {
     try {
-      const r = await listSessions();
+      const r = await listSessions({ includeArchived: showArchived });
       setSessions(r.sessions);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+
+  useEffect(() => {
+    reload();
+  }, [showArchived]);
 
   useEffect(() => {
     reload();
@@ -160,7 +166,7 @@ function SessionList() {
           No sessions yet. Upload an image above to start.
         </div>
       ) : (
-        <BatchGroups sessions={sessions} onReload={reload} />
+        <BatchGroups sessions={sessions} onReload={reload} showArchived={showArchived} setShowArchived={setShowArchived} />
       )}
     </div>
   );
@@ -268,7 +274,7 @@ function statusOf(s: LabSession): ShotStatus {
   return "in_progress";
 }
 
-function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload: () => void }) {
+function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { sessions: LabSession[]; onReload: () => void; showArchived: boolean; setShowArchived: (v: boolean) => void }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, "all" | ShotStatus>>({});
@@ -322,6 +328,30 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
     const name = prompt("Name this batch");
     if (!name?.trim()) return;
     await batchMoveSelected(name.trim());
+  }
+
+  async function archiveSelected() {
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) => updateSession(id, { archived: true })),
+      );
+      setSelectedIds(new Set());
+      onReload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function unarchiveSelected() {
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) => updateSession(id, { archived: false })),
+      );
+      setSelectedIds(new Set());
+      onReload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
   }
 
   const groups = new Map<string, LabSession[]>();
@@ -380,32 +410,52 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
           {organizeMode ? "Done organizing" : "Organize"}
         </Button>
 
-        {organizeMode && selectedIds.size > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
-            <Button size="sm" variant="outline" onClick={groupSelected}>
-              Group into batch
-            </Button>
-            {ordered.filter(([b]) => b !== "Unbatched").length > 0 && (
-              <select
-                className="border border-border bg-background px-2 py-1 text-xs"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) batchMoveSelected(e.target.value === "__unbatched__" ? null : e.target.value);
-                }}
-              >
-                <option value="" disabled>Move to...</option>
-                <option value="__unbatched__">Unbatched</option>
-                {ordered.filter(([b]) => b !== "Unbatched").map(([b]) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            )}
-            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
-              Clear
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {organizeMode && selectedIds.size > 0 && (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+              <Button size="sm" variant="outline" onClick={groupSelected}>
+                Group into batch
+              </Button>
+              {ordered.filter(([b]) => b !== "Unbatched").length > 0 && (
+                <select
+                  className="border border-border bg-background px-2 py-1 text-xs"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) batchMoveSelected(e.target.value === "__unbatched__" ? null : e.target.value);
+                  }}
+                >
+                  <option value="" disabled>Move to...</option>
+                  <option value="__unbatched__">Unbatched</option>
+                  {ordered.filter(([b]) => b !== "Unbatched").map(([b]) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              )}
+              {Array.from(selectedIds).some((id) => !sessions.find((s) => s.id === id)?.archived) && (
+                <Button size="sm" variant="outline" onClick={archiveSelected}>
+                  <Trash2 className="mr-2 h-3 w-3" /> Archive
+                </Button>
+              )}
+              {showArchived && Array.from(selectedIds).some((id) => sessions.find((s) => s.id === id)?.archived) && (
+                <Button size="sm" variant="outline" onClick={unarchiveSelected}>
+                  Unarchive
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
+                Clear
+              </Button>
+            </>
+          )}
+          <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            Show archived
+          </label>
+        </div>
       </div>
 
       {ordered.map(([batch, items]) => {
@@ -646,7 +696,12 @@ function SessionCard({
             </div>
           </div>
         )}
-        {session.completed && (
+        {session.archived && (
+          <div className="absolute top-2 right-2 inline-flex items-center gap-1 rounded bg-zinc-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-sm">
+            Archived
+          </div>
+        )}
+        {!session.archived && session.completed && (
           <div className="absolute top-2 right-2 inline-flex items-center gap-1 rounded bg-emerald-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-sm">
             ✓ Completed
           </div>
