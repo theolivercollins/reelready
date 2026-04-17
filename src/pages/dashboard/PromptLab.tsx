@@ -531,6 +531,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
   const [data, setData] = useState<{ session: LabSession; iterations: LabIteration[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -631,7 +632,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         comment: payload.comment || null,
       });
       if (result.auto_promoted) {
-        setError(`✓ Saved. Auto-promoted to recipe "${result.auto_promoted.archetype}"`);
+        setSuccess(`Promoted to recipe "${result.auto_promoted.archetype}"`);
       }
       await reload();
     } catch (e) {
@@ -688,6 +689,14 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         <div className="flex items-start gap-2 border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="flex items-start gap-2 border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+          <Sparkles className="h-4 w-4 shrink-0" />
+          <span>{success}</span>
+          <button onClick={() => setSuccess(null)} className="ml-auto text-xs opacity-60 hover:opacity-100">dismiss</button>
         </div>
       )}
 
