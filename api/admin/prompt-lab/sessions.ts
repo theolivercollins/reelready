@@ -56,14 +56,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (it.rating === 5) row.completed = true;
         }
         if (it.provider_task_id && !it.clip_url && !it.render_error) row.pending_render = true;
-        if (it.clip_url && it.rating == null) row.ready_for_approval = true;
-        // "Has feedback" = admin has rated, tagged, commented, or refined at
-        // least one iteration. Auto-generated analysis doesn't count.
         const feedback = typeof it.rating === "number"
           || (Array.isArray(it.tags) && it.tags.length > 0)
           || (typeof it.user_comment === "string" && it.user_comment.trim().length > 0 && !it.user_comment.startsWith("[refiner rationale]"))
           || (typeof it.refinement_instruction === "string" && it.refinement_instruction.trim().length > 0);
         if (feedback) row.has_feedback = true;
+        // Only flag "ready for approval" if the session has an unrated clip
+        // AND the admin hasn't given any feedback on any iteration yet.
+        // Once you've rated anything in the session, the banner goes away.
+        if (it.clip_url && it.rating == null && !row.has_feedback) row.ready_for_approval = true;
       }
 
       const iterationIds = Array.from(iterationIdToSession.keys());
