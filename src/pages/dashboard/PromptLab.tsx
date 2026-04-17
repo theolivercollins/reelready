@@ -10,6 +10,8 @@ import {
   Play,
   Sparkles,
   DollarSign,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -270,6 +272,57 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, "all" | ShotStatus>>({});
+  const [organizeMode, setOrganizeMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [collapsedBatches, setCollapsedBatches] = useState<Set<string>>(new Set());
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllInBatch(batch: string, items: LabSession[]) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = items.every((s) => next.has(s.id));
+      for (const s of items) {
+        if (allSelected) next.delete(s.id);
+        else next.add(s.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleCollapse(batch: string) {
+    setCollapsedBatches((prev) => {
+      const next = new Set(prev);
+      if (next.has(batch)) next.delete(batch);
+      else next.add(batch);
+      return next;
+    });
+  }
+
+  async function batchMoveSelected(targetLabel: string | null) {
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) => updateSession(id, { batch_label: targetLabel })),
+      );
+      setSelectedIds(new Set());
+      onReload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function groupSelected() {
+    const name = prompt("Name this batch");
+    if (!name?.trim()) return;
+    await batchMoveSelected(name.trim());
+  }
 
   const groups = new Map<string, LabSession[]>();
   for (const s of sessions) {
@@ -314,6 +367,47 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
 
   return (
     <div className="space-y-10">
+      {/* Organize toolbar */}
+      <div className="flex items-center justify-between">
+        <Button
+          size="sm"
+          variant={organizeMode ? "default" : "outline"}
+          onClick={() => {
+            setOrganizeMode((prev) => !prev);
+            if (organizeMode) setSelectedIds(new Set());
+          }}
+        >
+          {organizeMode ? "Done organizing" : "Organize"}
+        </Button>
+
+        {organizeMode && selectedIds.size > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+            <Button size="sm" variant="outline" onClick={groupSelected}>
+              Group into batch
+            </Button>
+            {ordered.filter(([b]) => b !== "Unbatched").length > 0 && (
+              <select
+                className="border border-border bg-background px-2 py-1 text-xs"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) batchMoveSelected(e.target.value === "__unbatched__" ? null : e.target.value);
+                }}
+              >
+                <option value="" disabled>Move to...</option>
+                <option value="__unbatched__">Unbatched</option>
+                {ordered.filter(([b]) => b !== "Unbatched").map(([b]) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
+              Clear
+            </Button>
+          </div>
+        )}
+      </div>
+
       {ordered.map(([batch, items]) => {
         const rated = items.filter((i) => typeof i.best_rating === "number");
         const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.best_rating ?? 0), 0) / rated.length : null;
@@ -349,54 +443,81 @@ function BatchGroups({ sessions, onReload }: { sessions: LabSession[]; onReload:
               }
             }}
           >
-            <div className="mb-3 flex items-baseline justify-between gap-4">
-              <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => toggleCollapse(batch)}
+                  className="p-1 text-muted-foreground hover:text-foreground transition"
+                  title={collapsedBatches.has(batch) ? "Expand" : "Collapse"}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${collapsedBatches.has(batch) ? "-rotate-90" : ""}`}
+                  />
+                </button>
+                <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
+                {organizeMode && (
+                  <button
+                    onClick={() => selectAllInBatch(batch, items)}
+                    className="ml-2 text-[10px] text-muted-foreground hover:text-foreground underline"
+                  >
+                    {items.every((s) => selectedIds.has(s.id)) ? "Deselect all" : "Select all"}
+                  </button>
+                )}
+              </div>
               <span className="shrink-0 text-xs text-muted-foreground">
+                {collapsedBatches.has(batch) ? `${counts.all} sessions · ` : ""}
                 {counts.completed}/{counts.all} completed
                 {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
               </span>
             </div>
 
-            <div className="mb-3 flex flex-wrap gap-1">
-              {(
-                [
-                  ["all", `All (${counts.all})`],
-                  ["not_started", `Need to start (${counts.not_started})`],
-                  ["in_progress", `In progress (${counts.in_progress})`],
-                  ["completed", `Completed (${counts.completed})`],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setFilters((prev) => ({ ...prev, [batch]: key }))}
-                  className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-wider transition ${
-                    filter === key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {!collapsedBatches.has(batch) && (
+              <>
+                <div className="mb-3 flex flex-wrap gap-1">
+                  {(
+                    [
+                      ["all", `All (${counts.all})`],
+                      ["not_started", `Need to start (${counts.not_started})`],
+                      ["in_progress", `In progress (${counts.in_progress})`],
+                      ["completed", `Completed (${counts.completed})`],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setFilters((prev) => ({ ...prev, [batch]: key }))}
+                      className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-wider transition ${
+                        filter === key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
 
-            {visible.length === 0 ? (
-              <div className="rounded border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                No sessions in this filter.
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {visible.map((s) => (
-                  <SessionCard
-                    key={s.id}
-                    session={s}
-                    isDragging={draggingId === s.id}
-                    onDragStart={() => setDraggingId(s.id)}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setDropTarget(null);
-                    }}
-                  />
-                ))}
-              </div>
+                {visible.length === 0 ? (
+                  <div className="rounded border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                    No sessions in this filter.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {visible.map((s) => (
+                      <SessionCard
+                        key={s.id}
+                        session={s}
+                        isDragging={draggingId === s.id}
+                        organizeMode={organizeMode}
+                        selected={selectedIds.has(s.id)}
+                        onToggleSelect={() => toggleSelect(s.id)}
+                        onDragStart={() => setDraggingId(s.id)}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setDropTarget(null);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         );
@@ -469,27 +590,53 @@ function BatchTitle({ label, onRename }: { label: string; onRename: (v: string) 
 function SessionCard({
   session,
   isDragging,
+  organizeMode,
+  selected,
+  onToggleSelect,
   onDragStart,
   onDragEnd,
 }: {
   session: LabSession;
   isDragging: boolean;
+  organizeMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
   return (
     <Link
-      to={`/dashboard/development/prompt-lab/${session.id}`}
-      draggable
-      onDragStart={(e) => {
+      to={organizeMode ? "#" : `/dashboard/development/prompt-lab/${session.id}`}
+      onClick={organizeMode ? (e) => { e.preventDefault(); onToggleSelect(); } : undefined}
+      draggable={!organizeMode}
+      onDragStart={organizeMode ? undefined : (e) => {
         e.dataTransfer.setData("text/session-id", session.id);
         e.dataTransfer.effectAllowed = "move";
         onDragStart();
       }}
-      onDragEnd={onDragEnd}
-      className={`relative border border-border bg-background transition hover:border-foreground ${isDragging ? "opacity-40" : ""} ${session.completed ? "border-emerald-500/50" : ""}`}
+      onDragEnd={organizeMode ? undefined : onDragEnd}
+      className={`relative border bg-background transition ${
+        organizeMode
+          ? selected
+            ? "border-foreground ring-2 ring-foreground/20 cursor-pointer"
+            : "border-border cursor-pointer hover:border-foreground/50"
+          : `border-border hover:border-foreground ${isDragging ? "opacity-40" : ""}`
+      } ${session.completed ? "border-emerald-500/50" : ""}`}
     >
       <div className="relative aspect-video w-full overflow-hidden bg-muted">
+        {organizeMode && (
+          <div className="absolute top-2 left-2 z-10">
+            <div
+              className={`h-5 w-5 rounded border-2 flex items-center justify-center transition ${
+                selected
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-white/80 bg-black/30 text-transparent"
+              }`}
+            >
+              {selected && <Check className="h-3 w-3" />}
+            </div>
+          </div>
+        )}
         <img src={session.image_url} alt={session.label ?? "session"} className="h-full w-full object-cover pointer-events-none" />
         {session.pending_render && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
