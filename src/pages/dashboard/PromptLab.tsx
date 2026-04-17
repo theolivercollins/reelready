@@ -24,6 +24,7 @@ import {
   analyzeSession,
   refineIteration,
   renderIteration,
+  rerenderWithProvider,
   rateIteration,
   type LabSession,
   type LabIteration,
@@ -642,6 +643,25 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     }
   }
 
+  async function handleRerender(sourceIterationId: string, provider: "kling" | "runway") {
+    setBusy(`rerender-${sourceIterationId}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await rerenderWithProvider(sourceIterationId, provider);
+      if (result.queued) {
+        setSuccess(result.message ?? `Queued for ${provider}`);
+      } else {
+        setSuccess(`Re-rendering with ${provider} — new iteration created`);
+      }
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!data) {
     return (
       <div className="py-20 text-center">
@@ -733,6 +753,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   onRender={(provider) => handleRender(it.id, provider)}
                   onRefine={(p) => handleRefine(it.id, p)}
                   onRate={(p) => handleRate(it.id, p)}
+                  onRerender={(provider) => handleRerender(it.id, provider)}
                 />
               ))
           )}
@@ -926,6 +947,7 @@ function IterationCard({
   onRender,
   onRefine,
   onRate,
+  onRerender,
 }: {
   iteration: LabIteration;
   isLatest: boolean;
@@ -933,6 +955,7 @@ function IterationCard({
   onRender: (provider: "kling" | "runway" | null) => void;
   onRefine: (payload: { rating: number | null; tags: string[]; comment: string; chatInstruction: string }) => void;
   onRate: (payload: { rating: number | null; tags: string[]; comment: string }) => void;
+  onRerender: (provider: "kling" | "runway") => void;
 }) {
   const [rating, setRating] = useState<number | null>(iteration.rating);
   const [tags, setTags] = useState<string[]>(iteration.tags ?? []);
@@ -1078,6 +1101,31 @@ function IterationCard({
           >
             Open clip in new tab ↗
           </a>
+        </div>
+      )}
+
+      {/* Try with different provider (any iteration that has a clip or director output) */}
+      {director && (iteration.clip_url || iteration.render_error) && (
+        <div className="mt-4 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Try with:</span>
+          {(["kling", "runway"] as const)
+            .filter((p) => p !== iteration.provider)
+            .map((p) => (
+              <Button
+                key={p}
+                size="sm"
+                variant="outline"
+                disabled={busy === `rerender-${iteration.id}`}
+                onClick={() => onRerender(p)}
+              >
+                {busy === `rerender-${iteration.id}` ? (
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-3 w-3" />
+                )}
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </Button>
+            ))}
         </div>
       )}
 
