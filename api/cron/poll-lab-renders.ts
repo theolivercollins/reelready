@@ -3,11 +3,11 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 export const maxDuration = 120;
 
 import { getSupabase } from "../../lib/client.js";
-import { finalizeLabRender } from "../../lib/prompt-lab.js";
+import { finalizeLabRender, submitLabRender } from "../../lib/prompt-lab.js";
 
 // Runs every minute per vercel.json crons.
-// Picks up Lab iterations with provider_task_id set + clip_url null,
-// polls the provider, and finalizes (download + upload + store URL).
+// Phase 1: submit queued renders when provider slots open.
+// Phase 2: finalize in-flight renders (download + upload + store URL).
 
 interface PendingRow {
   id: string;
@@ -18,8 +18,88 @@ interface PendingRow {
   render_submitted_at: string | null;
 }
 
+interface QueuedRow {
+  id: string;
+  session_id: string;
+  provider: string;
+  render_queued_at: string;
+  director_output_json: Record<string, unknown>;
+  analysis_json: Record<string, unknown> | null;
+  prompt_lab_sessions: { image_url: string } | null;
+}
+
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
+  const results: Array<{ id: string; phase: string; status: string; err?: string }> = [];
+
+  // ── Phase 1: submit queued renders ──
+  const { data: queued } = await supabase
+    .from("prompt_lab_iterations")
+    .select("id, session_id, provider, render_queued_at, director_output_json, analysis_json, prompt_lab_sessions(image_url)")
+    .not("render_queued_at", "is", null)
+    .is("provider_task_id", null)
+    .is("clip_url", null)
+    .is("render_error", null)
+    .order("render_queued_at", { ascending: true })
+    .limit(10);
+
+  for (const row of (queued ?? []) as QueuedRow[]) {
+    if (!row.provider || (row.provider !== "kling" && row.provider !== "runway")) {
+      results.push({ id: row.id, phase: "queue", status: "skip: unknown provider" });
+      continue;
+    }
+    // Timeout queued items after 30 min
+    const queueAge = Date.now() - new Date(row.render_queued_at).getTime();
+    if (queueAge > 30 * 60 * 1000) {
+      await supabase
+        .from("prompt_lab_iterations")
+        .update({ render_error: "queued render expired after 30 minutes", render_queued_at: null })
+        .eq("id", row.id);
+      results.push({ id: row.id, phase: "queue", status: "expired" });
+      continue;
+    }
+
+    const session = row.prompt_lab_sessions as { image_url: string } | null;
+    const imageUrl = session?.image_url;
+    if (!imageUrl || !row.director_output_json) {
+      results.push({ id: row.id, phase: "queue", status: "skip: missing data" });
+      continue;
+    }
+
+    try {
+      const scene = row.director_output_json as { prompt: string; camera_movement: string; duration_seconds: number };
+      const roomType = (row.analysis_json as { room_type?: string })?.room_type ?? "other";
+      const { jobId, provider } = await submitLabRender({
+        imageUrl,
+        scene: scene as any,
+        roomType: roomType as any,
+        providerOverride: row.provider as "kling" | "runway",
+      });
+      await supabase
+        .from("prompt_lab_iterations")
+        .update({
+          provider,
+          provider_task_id: jobId,
+          render_submitted_at: new Date().toISOString(),
+          render_queued_at: null,
+        })
+        .eq("id", row.id);
+      results.push({ id: row.id, phase: "queue", status: `submitted to ${provider}` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("at capacity")) {
+        results.push({ id: row.id, phase: "queue", status: "still waiting for slot" });
+      } else {
+        await supabase
+          .from("prompt_lab_iterations")
+          .update({ render_error: msg, render_queued_at: null })
+          .eq("id", row.id);
+        results.push({ id: row.id, phase: "queue", status: "failed", err: msg });
+      }
+    }
+  }
+
+  // ── Phase 2: finalize in-flight renders ──
   const { data, error } = await supabase
     .from("prompt_lab_iterations")
     .select("id, session_id, provider, provider_task_id, cost_cents, render_submitted_at")
@@ -30,14 +110,12 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
   if (error) return res.status(500).json({ error: error.message });
 
   const rows = (data ?? []) as PendingRow[];
-  const results: Array<{ id: string; status: string; err?: string }> = [];
 
   for (const row of rows) {
     if (!row.provider || (row.provider !== "kling" && row.provider !== "runway")) {
-      results.push({ id: row.id, status: "skip: unknown provider" });
+      results.push({ id: row.id, phase: "finalize", status: "skip: unknown provider" });
       continue;
     }
-    // Bail on long-abandoned renders (>30 min without completion)
     if (row.render_submitted_at) {
       const age = Date.now() - new Date(row.render_submitted_at).getTime();
       if (age > 30 * 60 * 1000) {
@@ -45,7 +123,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           .from("prompt_lab_iterations")
           .update({ render_error: "render timed out after 30 minutes" })
           .eq("id", row.id);
-        results.push({ id: row.id, status: "timed out" });
+        results.push({ id: row.id, phase: "finalize", status: "timed out" });
         continue;
       }
     }
@@ -58,7 +136,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         providerTaskId: row.provider_task_id,
       });
       if (!outcome.done) {
-        results.push({ id: row.id, status: "still processing" });
+        results.push({ id: row.id, phase: "finalize", status: "still processing" });
         continue;
       }
       if (outcome.error) {
@@ -66,7 +144,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           .from("prompt_lab_iterations")
           .update({ render_error: outcome.error })
           .eq("id", row.id);
-        results.push({ id: row.id, status: "failed", err: outcome.error });
+        results.push({ id: row.id, phase: "finalize", status: "failed", err: outcome.error });
         continue;
       }
       await supabase
@@ -76,12 +154,16 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           cost_cents: Math.round((row.cost_cents ?? 0) + (outcome.costCents ?? 0)),
         })
         .eq("id", row.id);
-      results.push({ id: row.id, status: "complete" });
+      results.push({ id: row.id, phase: "finalize", status: "complete" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      results.push({ id: row.id, status: "error", err: msg });
+      results.push({ id: row.id, phase: "finalize", status: "error", err: msg });
     }
   }
 
-  return res.status(200).json({ processed: rows.length, results });
+  return res.status(200).json({
+    queued_processed: (queued ?? []).length,
+    inflight_processed: rows.length,
+    results,
+  });
 }

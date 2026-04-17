@@ -1015,6 +1015,17 @@ function IterationCard({
         </div>
       )}
 
+      {/* Queued for render (waiting for provider slot) */}
+      {!iteration.clip_url && !iteration.provider_task_id && iteration.render_queued_at && !iteration.render_error && (
+        <div className="mt-5 inline-flex items-center gap-2 rounded bg-violet-500/10 px-3 py-1.5 text-xs text-violet-700 dark:text-violet-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Queued for {iteration.provider ?? "render"} — waiting for slot
+          <span className="text-violet-700/70 dark:text-violet-400/70">
+            · auto-submits when capacity opens (cron checks every minute)
+          </span>
+        </div>
+      )}
+
       {/* Pending render indicator */}
       {!iteration.clip_url && iteration.provider_task_id && !iteration.render_error && (
         <div className="mt-5 inline-flex items-center gap-2 rounded bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">

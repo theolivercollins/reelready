@@ -71,13 +71,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (err instanceof ProviderCapacityError) {
-      // Don't stamp render_error for capacity: the user can simply retry.
-      return res.status(429).json({
-        error: "provider at capacity",
-        detail: msg,
+      // Queue instead of erroring — cron will submit when a slot opens.
+      await supabase
+        .from("prompt_lab_iterations")
+        .update({
+          provider: err.provider,
+          render_queued_at: new Date().toISOString(),
+          render_error: null,
+        })
+        .eq("id", iteration_id);
+      return res.status(200).json({
+        queued: true,
         provider: err.provider,
         in_flight: err.inFlight,
         limit: err.limit,
+        message: `${err.provider} is full (${err.inFlight}/${err.limit}). Queued — will auto-submit when a slot opens.`,
       });
     }
     await supabase

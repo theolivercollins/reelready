@@ -36,6 +36,7 @@ export interface LabIteration {
   provider_task_id: string | null;
   render_error: string | null;
   render_submitted_at: string | null;
+  render_queued_at: string | null;
   cost_cents: number;
   rating: number | null;
   tags: string[] | null;
