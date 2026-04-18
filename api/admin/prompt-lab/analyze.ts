@@ -65,12 +65,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           Awaited<ReturnType<typeof retrieveMatchingRecipes>>,
         ];
 
+    // Fetch previous iterations for this session so the director doesn't repeat itself
+    const { data: prevIterations } = await supabase
+      .from("prompt_lab_iterations")
+      .select("director_output_json, rating")
+      .eq("session_id", session_id)
+      .not("director_output_json", "is", null);
+    const previousAttempts = (prevIterations ?? [])
+      .filter((it: any) => it.director_output_json && it.rating !== 5)
+      .map((it: any) => ({
+        camera_movement: it.director_output_json.camera_movement ?? "",
+        prompt: it.director_output_json.prompt ?? "",
+        rating: it.rating as number | null,
+      }));
+
     const { scene, costCents: dCost } = await directSinglePhoto(
       analysis,
       "lab-photo",
       exemplars,
       recipes,
-      losers
+      losers,
+      previousAttempts
     );
 
     const iterationNumber = await getNextIterationNumber(session_id);

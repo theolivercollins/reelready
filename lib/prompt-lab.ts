@@ -304,6 +304,14 @@ function renderLoserBlock(losers: RetrievedExemplar[]): string {
   return `\n\n━━━ PAST LOSERS ON STRUCTURALLY SIMILAR PHOTOS ━━━\nThese are ${losers.length} prior iterations on photos that embed close to this one, rated ${worstRating}★ or worse by the admin. Do NOT mirror these patterns. Steer away from their camera_movement choice, their framing, or whatever the tags/comments indicate went wrong. If your instinct leads you toward one of these patterns, pick a different verb or different framing.\n\n${lines.join("\n\n")}\n━━━ END PAST LOSERS ━━━`;
 }
 
+function renderPreviousAttemptsBlock(attempts: Array<{ camera_movement: string; prompt: string; rating?: number | null }>): string {
+  if (attempts.length === 0) return "";
+  const lines = attempts.map((a, idx) =>
+    `  ${idx + 1}. [${a.camera_movement}${a.rating != null ? ` · ${a.rating}★` : ""}] "${a.prompt}"`,
+  );
+  return `\n\n━━━ ALREADY TRIED ON THIS PHOTO — DO NOT REPEAT ━━━\nThe following prompts were already generated for this exact photo in previous iterations. They were NOT rated 5★. You MUST produce a meaningfully different camera_movement + prompt combination. Do not rephrase — pick a different verb or a different compositional target.\n\n${lines.join("\n")}\n━━━ END ALREADY TRIED ━━━`;
+}
+
 function renderRecipeBlock(recipes: RetrievedRecipe[]): string {
   if (recipes.length === 0) return "";
   const top = recipes[0];
@@ -317,7 +325,8 @@ export async function directSinglePhoto(
   photoId: string = "lab-photo",
   exemplars: RetrievedExemplar[] = [],
   recipes: RetrievedRecipe[] = [],
-  losers: RetrievedExemplar[] = []
+  losers: RetrievedExemplar[] = [],
+  previousAttempts: Array<{ camera_movement: string; prompt: string; rating?: number | null }> = []
 ): Promise<{ scene: DirectorSceneOutput; costCents: number }> {
   const client = new Anthropic();
   const basePrompt = buildDirectorUserPrompt([
@@ -337,6 +346,7 @@ export async function directSinglePhoto(
     basePrompt +
     renderExemplarBlock(exemplars) +
     renderLoserBlock(losers) +
+    renderPreviousAttemptsBlock(previousAttempts) +
     renderRecipeBlock(recipes);
   const { body: directorSystem } = await resolveDirectorSystem();
   const response = await client.messages.create({
