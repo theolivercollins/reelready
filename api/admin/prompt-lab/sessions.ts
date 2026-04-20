@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ids.length > 0) {
       const { data: its } = await supabase
         .from("prompt_lab_iterations")
-        .select("id, session_id, rating, tags, user_comment, refinement_instruction, clip_url, provider_task_id, render_error")
+        .select("id, session_id, rating, tags, user_comment, refinement_instruction, clip_url, provider_task_id, render_error, render_queued_at, director_output_json")
         .in("session_id", ids);
       const iterationIdToSession = new Map<string, string>();
       for (const it of its ?? []) {
@@ -48,6 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           completed: false,
           pending_render: false,
           ready_for_approval: false,
+          iteration_needs_attention: false,
           has_feedback: false,
         });
         row.iteration_count += 1;
@@ -64,10 +65,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           || (typeof it.user_comment === "string" && it.user_comment.trim().length > 0 && !it.user_comment.startsWith("[refiner rationale]"))
           || (typeof it.refinement_instruction === "string" && it.refinement_instruction.trim().length > 0);
         if (feedback) row.has_feedback = true;
-        // Only flag "ready for approval" if the session has an unrated clip
-        // AND the admin hasn't given any feedback on any iteration yet.
-        // Once you've rated anything in the session, the banner goes away.
-        if (it.clip_url && it.rating == null && !row.has_feedback) row.ready_for_approval = true;
+        // Any unrated clip = generation approval needed (even after re-renders)
+        if (it.clip_url && it.rating == null) row.ready_for_approval = true;
+        // Iteration with a prompt but no clip yet and not rendering/queued = needs attention
+        if (it.director_output_json && !it.clip_url && !it.provider_task_id && !it.render_error && !it.render_queued_at && it.rating == null) {
+          row.iteration_needs_attention = true;
+        }
       }
 
       const iterationIds = Array.from(iterationIdToSession.keys());
@@ -92,6 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           completed: false,
           pending_render: false,
           ready_for_approval: false,
+          iteration_needs_attention: false,
           has_feedback: false,
         }),
       })),

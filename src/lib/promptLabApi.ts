@@ -15,6 +15,7 @@ export interface LabSession {
   completed?: boolean;
   pending_render?: boolean;
   ready_for_approval?: boolean;
+  iteration_needs_attention?: boolean;
   has_feedback?: boolean;
 }
 

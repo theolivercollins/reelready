@@ -708,7 +708,12 @@ function SessionCard({
         )}
         {!session.completed && !session.pending_render && session.ready_for_approval && (
           <div className="absolute bottom-0 inset-x-0 bg-sky-500 px-2 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-white">
-            Ready for approval
+            Generation approval needed
+          </div>
+        )}
+        {!session.completed && !session.pending_render && !session.ready_for_approval && session.iteration_needs_attention && (
+          <div className="absolute bottom-0 inset-x-0 bg-teal-500 px-2 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-white">
+            Iteration approval needed
           </div>
         )}
       </div>
