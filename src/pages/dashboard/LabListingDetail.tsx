@@ -14,6 +14,7 @@ import {
   type LabListingScene,
   type LabListingIteration,
 } from "@/lib/labListingsApi";
+import { rateIteration as rateIterationApi } from "@/lib/labListingsApi";
 
 export default function LabListingDetail() {
   const { id = "" } = useParams();
@@ -99,6 +100,35 @@ export default function LabListingDetail() {
     if (!confirmed) return;
     await patchListing(id, { archived: true });
     window.location.href = "/dashboard/development/lab";
+  }
+
+  async function rateOptimistic(iterId: string, patch: {
+    rating?: number | null;
+    reasons?: string[] | null;
+    comment?: string | null;
+    archived?: boolean;
+  }): Promise<void> {
+    const prev = iterations;
+    setIterations((cur) =>
+      cur.map((i) =>
+        i.id === iterId
+          ? {
+              ...i,
+              rating: patch.rating !== undefined ? patch.rating : i.rating,
+              rating_reasons: patch.reasons ?? i.rating_reasons,
+              user_comment: patch.comment !== undefined ? patch.comment : i.user_comment,
+              archived: patch.archived !== undefined ? patch.archived : i.archived,
+            }
+          : i,
+      ),
+    );
+    try {
+      const res = await rateIterationApi(id, iterId, patch);
+      setIterations((cur) => cur.map((i) => (i.id === iterId ? res.iteration : i)));
+    } catch (err) {
+      setIterations(prev);
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   const stats = useMemo(() => {
@@ -207,6 +237,7 @@ export default function LabListingDetail() {
               photos={photos}
               defaultModel={listing.model_name}
               onReload={reload}
+              onRateOptimistic={rateOptimistic}
             />
           )}
         </>

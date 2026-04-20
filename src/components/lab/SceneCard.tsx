@@ -33,6 +33,12 @@ interface SceneCardProps {
   photos: LabListingPhoto[];
   defaultModel: string;
   onReload: () => void;
+  onRateOptimistic?: (iterId: string, patch: {
+    rating?: number | null;
+    reasons?: string[] | null;
+    comment?: string | null;
+    archived?: boolean;
+  }) => Promise<void>;
 }
 
 function Stars({ value, onChange, disabled }: { value: number | null; onChange: (n: number) => void; disabled?: boolean }) {
@@ -53,11 +59,17 @@ function Stars({ value, onChange, disabled }: { value: number | null; onChange: 
   );
 }
 
-function IterationExpanded({ listingId, scene, iter, onReload }: {
+function IterationExpanded({ listingId, scene, iter, onReload, onRateOptimistic }: {
   listingId: string;
   scene: LabListingScene;
   iter: LabListingIteration;
   onReload: () => void;
+  onRateOptimistic?: (iterId: string, patch: {
+    rating?: number | null;
+    reasons?: string[] | null;
+    comment?: string | null;
+    archived?: boolean;
+  }) => Promise<void>;
 }) {
   const [comment, setComment] = useState(iter.user_comment ?? "");
   const [promptOpen, setPromptOpen] = useState(false);
@@ -65,21 +77,33 @@ function IterationExpanded({ listingId, scene, iter, onReload }: {
   const [ratingModalValue, setRatingModalValue] = useState<number | null>(null);
 
   async function handleRate(n: number) {
-    await rateIteration(listingId, iter.id, { rating: n });
+    if (onRateOptimistic) {
+      await onRateOptimistic(iter.id, { rating: n });
+    } else {
+      await rateIteration(listingId, iter.id, { rating: n });
+      onReload();
+    }
     setRatingModalValue(n);
-    onReload();
   }
 
   async function saveRatingReasons(reasons: string[], modalComment: string) {
-    await rateIteration(listingId, iter.id, { reasons, comment: modalComment || null });
+    if (onRateOptimistic) {
+      await onRateOptimistic(iter.id, { reasons, comment: modalComment || null });
+    } else {
+      await rateIteration(listingId, iter.id, { reasons, comment: modalComment || null });
+      onReload();
+    }
     if (modalComment) setComment(modalComment);
-    onReload();
   }
 
   async function saveComment() {
     if (comment === (iter.user_comment ?? "")) return;
-    await rateIteration(listingId, iter.id, { comment: comment || null });
-    onReload();
+    if (onRateOptimistic) {
+      await onRateOptimistic(iter.id, { comment: comment || null });
+    } else {
+      await rateIteration(listingId, iter.id, { comment: comment || null });
+      onReload();
+    }
   }
 
   async function regenerate(modelOverride?: string) {
@@ -97,8 +121,12 @@ function IterationExpanded({ listingId, scene, iter, onReload }: {
   }
 
   async function toggleArchived() {
-    await rateIteration(listingId, iter.id, { archived: !iter.archived });
-    onReload();
+    if (onRateOptimistic) {
+      await onRateOptimistic(iter.id, { archived: !iter.archived });
+    } else {
+      await rateIteration(listingId, iter.id, { archived: !iter.archived });
+      onReload();
+    }
   }
 
   async function remove() {
@@ -230,12 +258,18 @@ function IterationCollapsed({ iter, expanded, onToggle }: {
   );
 }
 
-function IterationSection({ listingId, scene, iter, defaultExpanded, onReload }: {
+function IterationSection({ listingId, scene, iter, defaultExpanded, onReload, onRateOptimistic }: {
   listingId: string;
   scene: LabListingScene;
   iter: LabListingIteration;
   defaultExpanded: boolean;
   onReload: () => void;
+  onRateOptimistic?: (iterId: string, patch: {
+    rating?: number | null;
+    reasons?: string[] | null;
+    comment?: string | null;
+    archived?: boolean;
+  }) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   return (
@@ -243,7 +277,7 @@ function IterationSection({ listingId, scene, iter, defaultExpanded, onReload }:
       <IterationCollapsed iter={iter} expanded={expanded} onToggle={() => setExpanded((e) => !e)} />
       {expanded && (
         <div className="p-3 pt-0">
-          <IterationExpanded listingId={listingId} scene={scene} iter={iter} onReload={onReload} />
+          <IterationExpanded listingId={listingId} scene={scene} iter={iter} onReload={onReload} onRateOptimistic={onRateOptimistic} />
         </div>
       )}
     </div>
@@ -310,7 +344,7 @@ function RefinementNotesPanel({ listingId, scene, onReload }: {
   );
 }
 
-export function SceneCard({ listingId, scene, iterations, photos, defaultModel, onReload }: SceneCardProps) {
+export function SceneCard({ listingId, scene, iterations, photos, defaultModel, onReload, onRateOptimistic }: SceneCardProps) {
   const startPhoto = photos.find((p) => p.id === scene.photo_id);
   const endPhoto = scene.end_photo_id ? photos.find((p) => p.id === scene.end_photo_id) : null;
   const [rendering, setRendering] = useState(false);
@@ -499,6 +533,7 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
             iter={iter}
             defaultExpanded={i === 0}
             onReload={onReload}
+            onRateOptimistic={onRateOptimistic}
           />
         ))}
       </div>
