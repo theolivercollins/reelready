@@ -11,55 +11,62 @@ export interface MarketStatRow {
   source: { label: string; url: string };
 }
 
+// Four rows, each tied to an external primary or trade-body source.
+// A fifth "agent effort per video" row was dropped because no independent
+// survey cleanly quantifies the hours spent coordinating a traditional
+// listing video — better to ship four cited rows than five with one
+// fabricated (per plan Task 22 rules).
 const MOCK_ROWS: MarketStatRow[] = [
   {
     id: "cost",
     dimension: "Cost per listing video",
-    market: { label: "$1,200–$2,500", numericMax: 2500 },
-    elevate: { label: "$380", numericMax: 380 },
+    // HomeJab 2024 guide: "on average, a professionally produced real
+    // estate video in the U.S. ranges from $300 to $1,500 per video,"
+    // with premium/cinematic packages running $1,000–$1,500+.
+    market: { label: "$300–$1,500", numericMax: 1500 },
+    elevate: { label: "$380 starting", numericMax: 380 },
     source: {
-      label: "NAR + videographer market rates (2024)",
-      url: "https://www.nar.realtor/research-and-statistics",
+      label: "HomeJab Real Estate Videography Pricing Guide (2024)",
+      url: "https://homejab.com/how-much-do-real-estate-videos-cost/",
     },
   },
   {
     id: "turnaround",
     dimension: "Turnaround",
-    market: { label: "5–10 business days", numericMax: 10 },
-    elevate: { label: "Under 24 hours", numericMax: 1 },
+    // Fotober pricing guide: "a turnaround window of 48 to 72 hours is
+    // within the industry's acceptable tolerance, typically costing
+    // between $400 and $800."
+    market: { label: "48–72 hours", numericMax: 72 },
+    elevate: { label: "Under 24 hours", numericMax: 24 },
     source: {
-      label: "Industry videographer survey (2024)",
-      url: "https://www.wyzowl.com/video-marketing-statistics/",
-    },
-  },
-  {
-    id: "effort",
-    dimension: "Agent effort per video",
-    market: { label: "~4 hours", numericMax: 240 },
-    elevate: { label: "2 minutes", numericMax: 2 },
-    source: {
-      label: "Listing workflow audit — Recasi",
-      url: "https://www.listingelevate.com",
-    },
-  },
-  {
-    id: "engagement",
-    dimension: "Listing engagement with video vs. without",
-    market: { label: "403% more inquiries", numericMax: 403 },
-    elevate: { label: "Every listing gets one", numericMax: 100 },
-    source: {
-      label: "NAR 2024 Real Estate Video report",
-      url: "https://www.nar.realtor/research-and-statistics",
+      label: "Fotober Real Estate Video Pricing (2025)",
+      url: "https://fotober.com/real-estate-video-pricing",
     },
   },
   {
     id: "preference",
     dimension: "Sellers preferring agents who market with video",
+    // Properties Online, Real Estate Tech Trends report (©2018, p. 9):
+    // "73% of homeowners say they're more likely to list with a realtor
+    // offering to do a video but only 11% of agents do."
     market: { label: "73% prefer video agents", numericMax: 73 },
-    elevate: { label: "Default, not an upsell", numericMax: 100 },
+    elevate: { label: "Every listing, default", numericMax: 100 },
     source: {
-      label: "NAR Home Buyers & Sellers Report",
-      url: "https://www.nar.realtor/research-and-statistics",
+      label: "Properties Online Real Estate Tech Trends (2018)",
+      url: "https://propertiesonline.com/Reports/annual-real-estate-trends-report.pdf",
+    },
+  },
+  {
+    id: "demand",
+    dimension: "Consumer demand for video",
+    // Wyzowl State of Video Marketing 2026: "84% of consumers want to
+    // see more videos from brands in 2026" and "85% of people have been
+    // convinced to buy a product or service by watching a video."
+    market: { label: "84% want more video", numericMax: 84 },
+    elevate: { label: "Every listing gets one", numericMax: 100 },
+    source: {
+      label: "Wyzowl State of Video Marketing (2026)",
+      url: "https://wyzowl.com/video-marketing-statistics/",
     },
   },
 ];
