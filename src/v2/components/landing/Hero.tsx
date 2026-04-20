@@ -171,29 +171,6 @@ export function Hero() {
         </div>
       </div>
 
-      {/* Floating play widget — top-right mid */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          right: 20,
-          top: "52%",
-          zIndex: 2,
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.12)",
-          backdropFilter: "blur(18px) saturate(1.4)",
-          WebkitBackdropFilter: "blur(18px) saturate(1.4)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#fff",
-        }}
-      >
-        <LEIcon name="play" size={14} color="#fff" />
-      </div>
     </section>
   );
 }
@@ -234,7 +211,7 @@ function HeroNav() {
           textDecoration: "none",
         }}
       >
-        <LELogoMark size={20} variant="light" />
+        <LELogoMark size={30} variant="light" />
       </Link>
 
       <div
