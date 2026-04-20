@@ -145,6 +145,42 @@ Writing-path audit: verify every INSERT / UPDATE path in `api/admin/prompt-lab/*
 - `scripts/trace-director-prompt.ts` committed as regression guard
 - Audit report appended to this spec (or to `docs/ML-AUDIT-2026-04-20.md`) with findings per bullet above
 
+#### M.2d — SKU-level signal capture (added 2026-04-20 post-audit)
+
+**Problem discovered during Phase M.1:** `prompt_lab_recipes` stores `provider` ("kling" / "runway") but not `model_used` / SKU. When you rate a `kling-v2-6-pro` iteration 5★, the recipe + `match_rated_examples` both generalize to `provider = "kling"`. The next render picks `ATLAS_VIDEO_MODEL` (default `kling-v3-pro`), ignoring the SKU signal entirely.
+
+This was acceptable when Kling was one endpoint with one model. Atlas Cloud shipped six Kling SKUs 2026-04-20 evening; the learning layer hasn't caught up.
+
+**Fix scope:**
+
+1. **Migration 028:** Add `model_used text` column to `prompt_lab_recipes`. Backfill from `prompt_lab_iterations.provider` (legacy Lab — best we can do) and `prompt_lab_listing_scene_iterations.model_used` (Phase 2.8) where recipe FK resolves.
+2. **Extend `match_rated_examples` RPC** to return `model_used` alongside `camera_movement`, `rating`, etc. Extend `RetrievedExemplar` type in `lib/prompt-lab.ts`.
+3. **Update exemplar/recipe block rendering** — `renderExemplarBlock` + `renderRecipeBlock` surface the winning SKU to the director, e.g. `[5★ · kitchen · push_in · kling-v2-6-pro]`.
+4. **Auto-promote on rate:** when a new recipe is created from a 4★+ iteration (`api/admin/prompt-lab/listings/[id]/iterations/[iterId]/rate.ts` + the legacy Lab rate endpoint), write `model_used` onto the new recipe.
+5. **No director-output schema change.** The director still returns `provider_preference`; the new signal lives in the in-context exemplars + recipes. Whether the director should start returning `model_preference` is a follow-up decision deferred to post-mastery.
+6. **Static router integration (Phase C consumer):** `lib/providers/router-table.ts` (from Phase B) is the deterministic layer. M.2d makes rating signal *also* propagate via retrieval when an exact recipe match exists. Both layers coexist.
+
+**Why do this inside Phase M.2 instead of Phase B:** Phase B generates ~40–60 new rated iterations. Without M.2d, those ratings inform a one-shot static table and then stop producing signal. With M.2d, every rating during Phase B *also* becomes SKU-granular retrieval signal that keeps helping future listings without needing another manual head-to-head.
+
+**Cost:** one migration + ~3 code paths + RPC update. Roughly half a day. Blocks Phase B in the sense that Phase B's ratings have more value if M.2d lands first.
+
+**Updated sequencing:**
+
+```
+Phase A (Lab UX spine)  ————————————————————|
+Phase M.1 trace (parallel subagent)  —————|
+                                          ↓ verdict
+Phase M.2 (consolidate)                   |
+  ├─ M.2a capture surfaces                |
+  ├─ M.2b retrieval pruning               |
+  ├─ M.2c deliverables                    |
+  └─ M.2d SKU signal capture ← NEW        |
+                                          ↓
+Phase B (head-to-head)
+                                          ↓
+Phase C (router swap, base64→URL, duration-aware director)
+```
+
 ---
 
 ## Phase B — Model head-to-head
