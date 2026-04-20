@@ -348,17 +348,27 @@ Low-rated iteration → Claude suggests fail:* tags during judging
 
 ## Phasing (4 implementation plans, one per phase)
 
-### Phase 1 — Hybrid Judge + Calibration
+### Phase 1 — Claude-only Rubric Judge + Calibration
 
 Load-bearing. Blocks everything else.
 
-- Build Claude LLM-judge with rubric
-- Build CLIP-similarity channel
-- Build calibration routine against existing rated corpus
-- Land `lab_judge_scores` + `lab_judge_calibrations` tables
-- Expose judge as an API endpoint for manual "score this iteration" use
+**Scope adjusted 2026-04-19 based on code reality:** originally scoped as Claude+CLIP hybrid. CLIP channel deferred to Phase 1.5 because (a) CLIP requires a new provider (Replicate/etc., not currently wired), and (b) frame-extraction from rendered MP4 clips has no implementation (existing TODO in `lib/pipeline.ts` notes ffmpeg isn't available on Vercel). Phase 1 ships a **Claude-only rubric judge** that scores using the source image + iteration metadata + top-3 5★ neighbor prompts/ratings. If Claude alone hits the 80% agreement bar, CLIP becomes optional. If it doesn't, Phase 1.5 adds a CLIP channel with frame extraction via Vercel Sandbox or Shotstack.
 
-**Success criterion:** judge achieves ≥80% agreement (within ±1★) against a 50-iteration holdout set on at least 10 cells. Where calibration succeeds, the judge can auto-rate. Where it doesn't, it runs in advisory mode.
+- Build Claude LLM-judge with rubric (4 axes: prompt-adherence, motion-quality-plan, spatial-coherence-plan, aesthetic-intent)
+- Build calibration routine against existing rated corpus
+- Land `lab_judge_scores` + `lab_judge_calibrations` tables (schema allows a nullable `clip_similarity` column so Phase 1.5 adds data without migration)
+- Expose judge as API endpoints for manual "score this iteration" + "run calibration" + "read calibration status per cell"
+
+**Success criterion:** judge achieves ≥80% agreement (within ±1★) against a 50-iteration holdout set on at least 10 cells. Where calibration succeeds, the judge can auto-rate. Where it doesn't, it runs in advisory mode (suggests a rating, Oliver rates manually).
+
+### Phase 1.5 — CLIP channel (conditional)
+
+Only pursued if Phase 1's Claude-only judge fails to hit the 80% bar.
+
+- Pick a CLIP provider (Replicate `clip-vit-large-patch14` is likely cheapest)
+- Solve frame extraction (Vercel Sandbox with ffmpeg, or Shotstack's frame-grab if supported)
+- Add `clip_similarity` population to the existing `lab_judge_scores` table
+- Re-run calibration; confirm composite score hits the bar
 
 ### Phase 2 — Knowledge Map + Dashboard (read-only visualization first)
 
