@@ -21,7 +21,7 @@ export function Hero() {
     <section
       style={{
         position: "relative",
-        height: 820,
+        height: 574,
         overflow: "hidden",
         background: "#000",
       }}
@@ -61,7 +61,7 @@ export function Hero() {
         style={{
           position: "absolute",
           left: 48,
-          bottom: 80,
+          bottom: 180,
           right: 48,
           color: "#fff",
           zIndex: 2,
