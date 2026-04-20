@@ -10,14 +10,19 @@ interface ChatMessage {
   pinned?: boolean;
 }
 
-const SYSTEM = `You help the user shape a not-yet-rendered video scene for a real-estate listing walkthrough. You will see the scene's room type, camera movement, and director prompt.
+const SYSTEM = `You are a creative partner helping the user iterate on a single real-estate video scene. You see the complete scene state: the director prompt that scenes render from, any accumulated refinement notes, and every iteration with its model, prompt variation, rating, rating reasons, and user comments.
+
+The user can ask about the scene globally ("what should I change?") or about a specific iteration ("why did #3 shake more than #1?", "apply what worked in #2 to the next render"). Reference iterations by their number (#1, #2...).
 
 You have TWO tools — use them proactively:
 
-1. save_future_instruction(instruction) — append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the FIRST render.
-2. update_director_prompt(new_prompt) — rewrite the scene's director prompt entirely. Use when the user wants a structural change or refinement notes should be folded cleanly. Preserve the "LOCKED-OFF CAMERA..." stability preamble if present. Write a single paragraph of concrete visual language.
+1. save_future_instruction(instruction) — append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the NEXT render.
 
-Be decisive. Don't ask for confirmation on small tweaks. You can call multiple tools in one turn. After calling tools, add a brief 1-2 sentence confirmation of what you changed.`;
+2. update_director_prompt(new_prompt) — rewrite the scene's director prompt entirely. Use when the user wants a structural change, or when refinement notes have grown messy and should be folded cleanly into a single new prompt. Preserve the "LOCKED-OFF CAMERA..." stability preamble if present. Write the new prompt as a single paragraph of concrete visual language.
+
+Be decisive. Don't ask for confirmation on small tweaks. You can call multiple tools in one turn. After tool calls, add a brief 1-2 sentence confirmation.
+
+Keep replies tight. The user can watch the videos themselves — focus on translating their intent into concrete changes, and on connecting patterns across iterations (e.g., "iterations #1 and #4 both rated 4+ used slow push-in verbs; #2 and #3 with orbit were rated ≤2").`;
 
 function sse(res: VercelResponse, payload: unknown) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -45,16 +50,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .single();
   if (sceneErr || !scene) return res.status(404).json({ error: "scene not found" });
 
+  const { data: iterations } = await supabase
+    .from("prompt_lab_listing_scene_iterations")
+    .select("id, iteration_number, model_used, director_prompt, status, rating, rating_reasons, user_comment, archived")
+    .eq("scene_id", sceneId)
+    .order("iteration_number");
+
   const prior = (scene.chat_messages as ChatMessage[] | null) ?? [];
   const now = new Date().toISOString();
   const userMsg: ChatMessage = { role: "user", content: userMessage, ts: now };
 
+  const itersText = (iterations ?? []).length === 0
+    ? "No iterations rendered yet — user is shaping intent for the first render."
+    : (iterations ?? []).map((i) => {
+        const parts = [
+          `#${i.iteration_number} · ${i.model_used} · ${i.status}${i.archived ? " · archived" : ""}${i.rating !== null ? ` · ${i.rating}★` : " · unrated"}`,
+          `  prompt: ${i.director_prompt}`,
+        ];
+        if (i.rating_reasons && i.rating_reasons.length > 0) parts.push(`  reasons: ${i.rating_reasons.join(", ")}`);
+        if (i.user_comment) parts.push(`  comment: ${i.user_comment}`);
+        return parts.join("\n");
+      }).join("\n\n");
+
   const context = [
     `Scene ${scene.scene_number}: ${scene.room_type} / ${scene.camera_movement}`,
-    `Director prompt: ${scene.director_prompt}`,
-    scene.refinement_notes ? `Existing instructions for first render: ${scene.refinement_notes}` : null,
-    `Status: no iterations rendered yet — user is shaping intent BEFORE the first clip.`,
-  ].filter(Boolean).join("\n");
+    `Director prompt (applied to every NEW iteration unless rewritten):`,
+    scene.director_prompt,
+    "",
+    scene.refinement_notes ? `Refinement notes (concatenated onto prompt at render time):\n${scene.refinement_notes}` : "No refinement notes yet.",
+    "",
+    `Iterations (${(iterations ?? []).length}):`,
+    itersText,
+  ].join("\n");
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -74,11 +101,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       tools: [
         {
           name: "save_future_instruction",
-          description: "Append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the first render.",
+          description: "Append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the next render.",
           input_schema: {
             type: "object",
             properties: {
-              instruction: { type: "string", description: "A short imperative like 'Emphasize the marble veining' or 'Use a tighter 35mm framing'" },
+              instruction: { type: "string", description: "A short imperative like 'Use slower camera motion' or 'Emphasize the marble veining'" },
             },
             required: ["instruction"],
           },
@@ -96,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       ],
       messages: [
-        { role: "user", content: `Context for this scene:\n${context}` },
+        { role: "user", content: `Current scene state:\n${context}` },
         ...prior.map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: userMessage },
       ],
@@ -119,9 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (block.type === "tool_use" && block.name === "update_director_prompt") {
         const input = block.input as { new_prompt?: string };
-        if (input.new_prompt) {
-          promptUpdated = input.new_prompt.trim();
-        }
+        if (input.new_prompt) promptUpdated = input.new_prompt.trim();
       }
     }
 

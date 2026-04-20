@@ -50,6 +50,7 @@ export interface LabListingScene {
   director_intent: Record<string, unknown>;
   refinement_notes: string | null;
   use_end_frame: boolean;
+  archived: boolean;
   chat_messages: ChatMessage[];
   created_at: string;
 }
@@ -155,6 +156,13 @@ export async function setSceneUseEndFrame(listingId: string, sceneId: string, us
   return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}`, {
     method: "PATCH",
     body: JSON.stringify({ use_end_frame: useEndFrame }),
+  });
+}
+
+export async function setSceneArchived(listingId: string, sceneId: string, archived: boolean): Promise<{ scene: LabListingScene }> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ archived }),
   });
 }
 

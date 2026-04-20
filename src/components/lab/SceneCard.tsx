@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Star, Play, Sparkles, RotateCcw, MessageSquare, X, Copy, Trash2, ChevronDown, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
+import { Loader2, Star, Play, Sparkles, RotateCcw, X, Copy, Trash2, ChevronDown, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PairVisualization } from "./PairVisualization";
@@ -9,14 +9,12 @@ import {
   renderListing,
   rateIteration,
   refineScenePrompt,
-  chatIterationStream,
   chatSceneStream,
-  clearIterationChat,
   clearSceneChat,
-  pinChatMessage,
   pinSceneInstruction,
   setSceneRefinementNotes,
   setSceneUseEndFrame,
+  setSceneArchived,
   deleteIteration,
   regenerateFromIteration,
   type LabListingScene,
@@ -51,31 +49,25 @@ function Stars({ value, onChange, disabled }: { value: number | null; onChange: 
   );
 }
 
-function IterationRow({ listingId, scene, iter, onReload }: {
+function IterationExpanded({ listingId, scene, iter, onReload }: {
   listingId: string;
   scene: LabListingScene;
   iter: LabListingIteration;
   onReload: () => void;
 }) {
   const [comment, setComment] = useState(iter.user_comment ?? "");
-  const [chatOpen, setChatOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ratingModalValue, setRatingModalValue] = useState<number | null>(null);
 
   async function handleRate(n: number) {
-    // Persist the rating immediately; open the reasons modal right after
-    // so the user can close the modal and still keep the star change.
     await rateIteration(listingId, iter.id, { rating: n });
     setRatingModalValue(n);
     onReload();
   }
 
   async function saveRatingReasons(reasons: string[], modalComment: string) {
-    await rateIteration(listingId, iter.id, {
-      reasons,
-      comment: modalComment || null,
-    });
+    await rateIteration(listingId, iter.id, { reasons, comment: modalComment || null });
     if (modalComment) setComment(modalComment);
     onReload();
   }
@@ -111,15 +103,10 @@ function IterationRow({ listingId, scene, iter, onReload }: {
     onReload();
   }
 
-  async function pinMessage(idx: number, content: string) {
-    await pinChatMessage(listingId, scene.id, iter.id, idx, content);
-    onReload();
-  }
-
   const otherModel = iter.model_used === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro";
 
   return (
-    <div className={`border p-3 ${iter.archived ? "border-dashed border-border/60 bg-muted/30 opacity-70" : "border-border"}`}>
+    <>
       {ratingModalValue !== null && (
         <RatingReasonsModal
           rating={ratingModalValue}
@@ -130,30 +117,21 @@ function IterationRow({ listingId, scene, iter, onReload }: {
         />
       )}
 
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-muted-foreground">#{iter.iteration_number}</span>
-          <span className="border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">{iter.model_used}</span>
-          <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${
-            iter.status === "rendered" || iter.status === "rated" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" :
-            iter.status === "failed" ? "border-red-400/40 bg-red-400/10 text-red-700" :
-            "border-amber-400/40 bg-amber-400/10 text-amber-700"
-          }`}>
-            {iter.status}
-          </span>
-          {iter.archived && (
-            <span className="border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">archived</span>
-          )}
-        </div>
-        <Stars value={iter.rating} onChange={handleRate} disabled={!iter.clip_url} />
-      </div>
-
       {iter.clip_url && (
         <video controls src={iter.clip_url} className="mt-2 aspect-video w-full bg-black" preload="metadata" />
       )}
       {iter.render_error && (
         <p className="mt-2 text-[11px] text-destructive">Error: {iter.render_error}</p>
       )}
+
+      <div className="mt-2 flex items-center justify-between">
+        <Stars value={iter.rating} onChange={handleRate} disabled={!iter.clip_url} />
+        {iter.rating_reasons && iter.rating_reasons.length > 0 && (
+          <button type="button" onClick={() => setRatingModalValue(iter.rating!)} className="text-[10px] text-muted-foreground underline-offset-2 hover:underline">
+            edit reasons
+          </button>
+        )}
+      </div>
 
       {iter.rating_reasons && iter.rating_reasons.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
@@ -169,35 +147,30 @@ function IterationRow({ listingId, scene, iter, onReload }: {
               {r.replace(/_/g, " ")}
             </span>
           ))}
-          {iter.rating && (
-            <button type="button" onClick={() => setRatingModalValue(iter.rating!)} className="text-[9px] text-muted-foreground underline-offset-2 hover:underline">
-              edit
-            </button>
-          )}
         </div>
       )}
 
       {iter.clip_url && (
         <>
           <div className="mt-3 flex flex-wrap gap-1">
-            <Button size="sm" variant="outline" onClick={() => regenerate()} disabled={busy} title="Render another iteration with this exact prompt">
+            <Button size="sm" variant="outline" onClick={() => regenerate()} disabled={busy}>
               {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCcw className="mr-1 h-3 w-3" />}
               Regenerate
             </Button>
-            <Button size="sm" variant="outline" onClick={() => regenerate(otherModel)} disabled={busy} title={`Render with ${otherModel}`}>
+            <Button size="sm" variant="outline" onClick={() => regenerate(otherModel)} disabled={busy}>
               Try {otherModel === "kling-v3-pro" ? "Kling" : "Wan"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setPromptOpen((o) => !o)}>
               {promptOpen ? <ChevronDown className="mr-1 h-3 w-3" /> : <ChevronRight className="mr-1 h-3 w-3" />}
               Prompt
             </Button>
-            <Button size="sm" variant="ghost" onClick={copyPrompt} title="Copy prompt to clipboard">
+            <Button size="sm" variant="ghost" onClick={copyPrompt}>
               <Copy className="h-3 w-3" />
             </Button>
-            <Button size="sm" variant="ghost" onClick={toggleArchived} title={iter.archived ? "Unarchive" : "Archive (keeps rating signal)"}>
+            <Button size="sm" variant="ghost" onClick={toggleArchived}>
               {iter.archived ? <ArchiveRestore className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
             </Button>
-            <Button size="sm" variant="ghost" onClick={remove} title="Permanently delete" className="text-destructive hover:text-destructive">
+            <Button size="sm" variant="ghost" onClick={remove} className="text-destructive hover:text-destructive">
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>
@@ -213,40 +186,66 @@ function IterationRow({ listingId, scene, iter, onReload }: {
               onChange={(e) => setComment(e.target.value)}
               onBlur={saveComment}
               placeholder="What did you think? (saved on blur)"
-              className="mt-1 min-h-[52px] text-xs"
+              className="mt-1 min-h-[44px] text-xs"
             />
           </div>
-
-          <div className="mt-2">
-            <Button size="sm" variant="ghost" onClick={() => setChatOpen((o) => !o)}>
-              <MessageSquare className="mr-1 h-3 w-3" />
-              {chatOpen ? "Hide chat" : (iter.chat_messages.length > 0 ? `Chat (${iter.chat_messages.length})` : "Chat")}
-            </Button>
-          </div>
-
-          {chatOpen && (
-            <div className="mt-3">
-              <ChatPanel
-                messages={iter.chat_messages}
-                onSend={(m, cb) => chatIterationStream(listingId, iter.id, m, cb)}
-                onClear={async () => { await clearIterationChat(listingId, iter.id); onReload(); }}
-                onPinMessage={pinMessage}
-                onServerChange={onReload}
-                emptyHint="Ask about this iteration or tell the system what to change. Claude Haiku can save directives AND rewrite the director prompt directly when you ask."
-                placeholder="Ask or instruct... (Enter to send, Shift+Enter for newline)"
-                headerLabel="Chat with this iteration"
-              />
-              {scene.refinement_notes && (
-                <div className="mt-2 flex items-center justify-between border border-emerald-500/40 bg-emerald-500/10 p-2 text-xs text-emerald-800">
-                  <span>Instructions saved for future renders</span>
-                  <Button size="sm" variant="outline" onClick={async () => { await renderListing(listingId, { scene_ids: [scene.id] }); onReload(); }} className="h-6 border-emerald-700 text-emerald-800 hover:bg-emerald-500/20">
-                    <RotateCcw className="mr-1 h-3 w-3" /> Render with new instructions
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
         </>
+      )}
+    </>
+  );
+}
+
+function IterationCollapsed({ iter, expanded, onToggle }: {
+  iter: LabListingIteration;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-muted/40"
+    >
+      {expanded ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
+      <span className="font-mono text-muted-foreground">#{iter.iteration_number}</span>
+      <span className="border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">{iter.model_used}</span>
+      <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${
+        iter.status === "rendered" || iter.status === "rated" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" :
+        iter.status === "failed" ? "border-red-400/40 bg-red-400/10 text-red-700" :
+        "border-amber-400/40 bg-amber-400/10 text-amber-700"
+      }`}>
+        {iter.status}
+      </span>
+      <span className="flex-1" />
+      {iter.rating !== null ? (
+        <span className="inline-flex items-center gap-0.5 text-[11px]">
+          {iter.rating}<Star className="h-2.5 w-2.5 fill-foreground" />
+        </span>
+      ) : (
+        <span className="text-[11px] text-muted-foreground">unrated</span>
+      )}
+      {iter.archived && (
+        <span className="border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">archived</span>
+      )}
+    </button>
+  );
+}
+
+function IterationSection({ listingId, scene, iter, defaultExpanded, onReload }: {
+  listingId: string;
+  scene: LabListingScene;
+  iter: LabListingIteration;
+  defaultExpanded: boolean;
+  onReload: () => void;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  return (
+    <div className={`border ${iter.archived ? "border-dashed border-border/60 bg-muted/30" : "border-border"}`}>
+      <IterationCollapsed iter={iter} expanded={expanded} onToggle={() => setExpanded((e) => !e)} />
+      {expanded && (
+        <div className="p-3 pt-0">
+          <IterationExpanded listingId={listingId} scene={scene} iter={iter} onReload={onReload} />
+        </div>
       )}
     </div>
   );
@@ -318,16 +317,17 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
   const [rendering, setRendering] = useState(false);
   const [editing, setEditing] = useState(false);
   const [promptDraft, setPromptDraft] = useState(scene.director_prompt);
-  const [showArchived, setShowArchived] = useState(false);
-  const [sceneChatOpen, setSceneChatOpen] = useState(false);
+  const [showArchivedIters, setShowArchivedIters] = useState(false);
 
-  const { visibleIters, archivedCount } = useMemo(() => {
-    const arch = iterations.filter((i) => i.archived).length;
+  // Newest first so the latest iteration is the default-expanded hero.
+  const { orderedIters, archivedCount } = useMemo(() => {
+    const sorted = [...iterations].sort((a, b) => b.iteration_number - a.iteration_number);
+    const archived = sorted.filter((i) => i.archived).length;
     return {
-      visibleIters: showArchived ? iterations : iterations.filter((i) => !i.archived),
-      archivedCount: arch,
+      orderedIters: showArchivedIters ? sorted : sorted.filter((i) => !i.archived),
+      archivedCount: archived,
     };
-  }, [iterations, showArchived]);
+  }, [iterations, showArchivedIters]);
 
   async function submitRender(modelOverride?: string) {
     setRendering(true);
@@ -351,24 +351,36 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
     onReload();
   }
 
+  async function archiveScene() {
+    if (!confirm(scene.archived ? "Unarchive this scene?" : "Archive this scene? It'll be hidden from the shot plan (toggle to show).")) return;
+    await setSceneArchived(listingId, scene.id, !scene.archived);
+    onReload();
+  }
+
   async function pinSceneMessage(_idx: number, content: string) {
     await pinSceneInstruction(listingId, scene.id, content);
     onReload();
   }
 
   return (
-    <div className="border border-border bg-background p-5">
+    <div className={`border bg-background p-5 ${scene.archived ? "border-dashed border-border/60 bg-muted/30" : "border-border"}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <span className="label text-muted-foreground">Scene {scene.scene_number}</span>
-          <div className="mt-1 flex gap-2">
+          <div className="mt-1 flex flex-wrap gap-2">
             <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{scene.room_type}</span>
             <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{scene.camera_movement}</span>
             {endPhoto && (
               <span className="border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-700">paired</span>
             )}
+            {scene.archived && (
+              <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">archived</span>
+            )}
           </div>
         </div>
+        <Button size="sm" variant="ghost" onClick={archiveScene} title={scene.archived ? "Unarchive scene" : "Archive scene"}>
+          {scene.archived ? <ArchiveRestore className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
+        </Button>
       </div>
 
       <div className="mt-4">
@@ -421,38 +433,17 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
         <RefinementNotesPanel listingId={listingId} scene={scene} onReload={onReload} />
       </div>
 
-      <div className="mt-3">
-        <Button size="sm" variant="ghost" onClick={() => setSceneChatOpen((o) => !o)}>
-          <MessageSquare className="mr-1 h-3 w-3" />
-          {sceneChatOpen ? "Hide scene chat" : (scene.chat_messages.length > 0 ? `Scene chat (${scene.chat_messages.length})` : "Scene chat — shape intent before first render")}
-        </Button>
-        {sceneChatOpen && (
-          <div className="mt-2">
-            <ChatPanel
-              messages={scene.chat_messages}
-              onSend={(m, cb) => chatSceneStream(listingId, scene.id, m, cb)}
-              onClear={async () => { await clearSceneChat(listingId, scene.id); onReload(); }}
-              onPinMessage={pinSceneMessage}
-              onServerChange={onReload}
-              emptyHint="No iterations yet. Tell the system what this scene should emphasize. Claude can save instructions AND rewrite the director prompt directly."
-              placeholder="Describe what you want... (Enter to send, Shift+Enter for newline)"
-              headerLabel="Chat with this scene"
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-5 space-y-4">
+      <div className="mt-5 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="label text-muted-foreground">Iterations ({visibleIters.length}{archivedCount > 0 ? ` / ${iterations.length}` : ""})</span>
+            <span className="label text-muted-foreground">Iterations ({orderedIters.length}{archivedCount > 0 ? ` / ${iterations.length}` : ""})</span>
             {archivedCount > 0 && (
               <button
                 type="button"
-                onClick={() => setShowArchived((s) => !s)}
+                onClick={() => setShowArchivedIters((s) => !s)}
                 className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
               >
-                {showArchived ? `Hide archived (${archivedCount})` : `Show archived (${archivedCount})`}
+                {showArchivedIters ? `Hide archived (${archivedCount})` : `Show archived (${archivedCount})`}
               </button>
             )}
           </div>
@@ -468,13 +459,33 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
           </div>
         </div>
 
-        {visibleIters.length === 0 && (
+        {orderedIters.length === 0 && (
           <p className="text-xs text-muted-foreground">No iterations yet. Click Render to generate the first clip.</p>
         )}
 
-        {visibleIters.map((iter) => (
-          <IterationRow key={iter.id} listingId={listingId} scene={scene} iter={iter} onReload={onReload} />
+        {orderedIters.map((iter, i) => (
+          <IterationSection
+            key={iter.id}
+            listingId={listingId}
+            scene={scene}
+            iter={iter}
+            defaultExpanded={i === 0}
+            onReload={onReload}
+          />
         ))}
+      </div>
+
+      <div className="mt-6">
+        <ChatPanel
+          messages={scene.chat_messages}
+          onSend={(m, cb) => chatSceneStream(listingId, scene.id, m, cb)}
+          onClear={async () => { await clearSceneChat(listingId, scene.id); onReload(); }}
+          onPinMessage={pinSceneMessage}
+          onServerChange={onReload}
+          emptyHint="Chat with Claude about this scene. Ask about specific iterations (#1, #2...), request prompt changes, save directives for future renders, or compare what's working across iterations. Claude sees all ratings, reasons, and comments."
+          placeholder="Ask or instruct... (Enter to send, Shift+Enter for newline)"
+          headerLabel="Scene chat"
+        />
       </div>
     </div>
   );

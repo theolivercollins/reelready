@@ -11,12 +11,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!auth) return;
   const sceneId = String(req.query.sceneId ?? "");
   if (!sceneId) return res.status(400).json({ error: "sceneId required" });
-  const body = (req.body ?? {}) as { director_prompt?: string; use_end_frame?: boolean };
+  const body = (req.body ?? {}) as { director_prompt?: string; use_end_frame?: boolean; archived?: boolean };
   const patch: Record<string, unknown> = {};
   if (typeof body.director_prompt === "string") patch.director_prompt = body.director_prompt;
   if (typeof body.use_end_frame === "boolean") patch.use_end_frame = body.use_end_frame;
+  if (typeof body.archived === "boolean") patch.archived = body.archived;
   if (Object.keys(patch).length === 0) {
-    return res.status(400).json({ error: "director_prompt or use_end_frame required" });
+    return res.status(400).json({ error: "director_prompt, use_end_frame, or archived required" });
   }
   const supabase = getSupabase();
   const { data, error } = await supabase.from("prompt_lab_listing_scenes")

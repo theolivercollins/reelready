@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Star } from "lucide-react";
 import type { LabListingScene, LabListingIteration, LabListingPhoto } from "@/lib/labListingsApi";
 
@@ -9,8 +10,17 @@ interface ShotPlanTableProps {
   onSelect: (sceneId: string) => void;
 }
 
-export function ShotPlanTable({ scenes, iterations, photos, selectedSceneId, onSelect }: ShotPlanTableProps) {
+export function ShotPlanTable({ scenes: allScenes, iterations, photos, selectedSceneId, onSelect }: ShotPlanTableProps) {
   const photoById = new Map(photos.map((p) => [p.id, p]));
+  const [showArchived, setShowArchived] = useState(false);
+
+  const { scenes, archivedCount } = useMemo(() => {
+    const arch = allScenes.filter((s) => s.archived).length;
+    return {
+      scenes: showArchived ? allScenes : allScenes.filter((s) => !s.archived),
+      archivedCount: arch,
+    };
+  }, [allScenes, showArchived]);
 
   return (
     <div className="border border-border">
@@ -58,7 +68,7 @@ export function ShotPlanTable({ scenes, iterations, photos, selectedSceneId, onS
             onClick={() => onSelect(s.id)}
             className={`grid w-full grid-cols-[60px_40px_1fr_120px_80px_80px_80px_110px] items-center gap-3 border-b border-border px-3 py-2 text-left text-xs transition-colors last:border-b-0 ${
               selected ? "bg-foreground/5" : "hover:bg-muted/40"
-            }`}
+            } ${s.archived ? "opacity-60" : ""}`}
           >
             <div className="relative h-9 w-14 overflow-hidden border border-border bg-muted">
               {photo && <img src={photo.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />}
@@ -88,10 +98,24 @@ export function ShotPlanTable({ scenes, iterations, photos, selectedSceneId, onS
               <span className={`inline-block border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${statusColor}`}>
                 {latestStatus}
               </span>
+              {s.archived && (
+                <span className="ml-1 inline-block border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">archived</span>
+              )}
             </span>
           </button>
         );
       })}
+      {archivedCount > 0 && (
+        <div className="flex items-center justify-center border-t border-border bg-muted/30 px-3 py-1.5">
+          <button
+            type="button"
+            onClick={() => setShowArchived((s) => !s)}
+            className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {showArchived ? `Hide archived scenes (${archivedCount})` : `Show archived scenes (${archivedCount})`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

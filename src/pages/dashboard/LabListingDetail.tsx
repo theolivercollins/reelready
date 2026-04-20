@@ -63,7 +63,9 @@ export default function LabListingDetail() {
     setActionLoading("render-all");
     try {
       const renderedSceneIds = new Set(iterations.map((i) => i.scene_id));
-      const unrendered = scenes.filter((s) => !renderedSceneIds.has(s.id)).map((s) => s.id);
+      const unrendered = scenes
+        .filter((s) => !s.archived && !renderedSceneIds.has(s.id))
+        .map((s) => s.id);
       if (unrendered.length === 0) return;
       const confirmed = window.confirm(
         `Render ${unrendered.length} scenes at $0.095 each = $${(unrendered.length * 0.095).toFixed(2)}?`,
