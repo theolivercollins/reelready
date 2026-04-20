@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSupabase } from "../../lib/client.js";
 import { AtlasProvider } from "../../lib/providers/atlas.js";
-import { recordCostEvent } from "../../lib/db.js";
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
@@ -40,19 +39,23 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         .eq("id", iter.id);
 
       if (status.costCents && status.costCents > 0) {
+        // Direct cost_events insert — recordCostEvent's addPropertyCost
+        // path needs a real property_id, which Lab listings don't have.
+        // property_id is nullable on cost_events (ON DELETE SET NULL in
+        // migration 014), so a direct insert works cleanly.
         try {
-          await recordCostEvent({
-            propertyId: null as unknown as string,
-            sceneId: null,
+          await supabase.from("cost_events").insert({
+            property_id: null,
+            scene_id: null,
             stage: "generation",
             provider: "atlas",
-            unitsConsumed: 1,
-            unitType: "renders",
-            costCents: status.costCents,
+            units_consumed: 1,
+            unit_type: "renders",
+            cost_cents: Math.round(status.costCents),
             metadata: { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used },
           });
         } catch (costErr) {
-          console.error("[poll-listing-iterations] cost_events record failed:", costErr);
+          console.error("[poll-listing-iterations] cost_events insert failed:", costErr);
         }
       }
       finalized += 1;

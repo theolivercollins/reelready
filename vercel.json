@@ -4,7 +4,8 @@
   "outputDirectory": "dist",
   "crons": [
     { "path": "/api/cron/poll-scenes", "schedule": "* * * * *" },
-    { "path": "/api/cron/poll-lab-renders", "schedule": "* * * * *" }
+    { "path": "/api/cron/poll-lab-renders", "schedule": "* * * * *" },
+    { "path": "/api/cron/poll-listing-iterations", "schedule": "* * * * *" }
   ],
   "routes": [
     { "handle": "filesystem" },
@@ -17,6 +18,12 @@
     { "src": "/api/scenes/([^/]+)/rate", "dest": "/api/scenes/[id]/rate?id=$1" },
     { "src": "/api/scenes/([^/]+)", "dest": "/api/scenes/[id]?id=$1" },
     { "src": "/api/pipeline/([^/]+)", "dest": "/api/pipeline/[propertyId]?propertyId=$1" },
+    { "src": "/api/admin/prompt-lab/listings/([^/]+)/iterations/([^/]+)/rate", "dest": "/api/admin/prompt-lab/listings/[id]/iterations/[iterId]/rate?id=$1&iterId=$2" },
+    { "src": "/api/admin/prompt-lab/listings/([^/]+)/scenes/([^/]+)", "dest": "/api/admin/prompt-lab/listings/[id]/scenes/[sceneId]?id=$1&sceneId=$2" },
+    { "src": "/api/admin/prompt-lab/listings/([^/]+)/direct", "dest": "/api/admin/prompt-lab/listings/[id]/direct?id=$1" },
+    { "src": "/api/admin/prompt-lab/listings/([^/]+)/render", "dest": "/api/admin/prompt-lab/listings/[id]/render?id=$1" },
+    { "src": "/api/admin/prompt-lab/listings/([^/]+)", "dest": "/api/admin/prompt-lab/listings/[id]?id=$1" },
+    { "src": "/api/admin/prompt-lab/listings", "dest": "/api/admin/prompt-lab/listings/index" },
     { "src": "/api/admin/prompt-lab/recipes", "dest": "/api/admin/prompt-lab/recipes" },
     { "src": "/api/admin/prompt-lab/mine", "dest": "/api/admin/prompt-lab/mine" },
     { "src": "/api/admin/prompt-lab/proposals", "dest": "/api/admin/prompt-lab/proposals" },
