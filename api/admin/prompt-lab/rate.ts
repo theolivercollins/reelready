@@ -79,32 +79,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
       const slug = Math.random().toString(36).slice(2, 6);
       const archetype = `${analysis.room_type}_${director.camera_movement}_${stamp}_${slug}`;
-      const { data: recipe, error: insertErr } = await supabase
-        .from("prompt_lab_recipes")
-        .insert({
-          archetype,
-          room_type: analysis.room_type,
-          camera_movement: director.camera_movement,
-          provider: updated.provider,
-          prompt_template: director.prompt,
-          source_iteration_id: iteration_id,
-          rating_at_promotion: 5,
-          promoted_by: auth.user.id,
-          embedding: vec ? toPgVector(vec) : null,
-        })
-        .select("id, archetype")
-        .single();
-      if (recipe) {
-        auto_promoted = { id: recipe.id, archetype: recipe.archetype };
-      } else if (insertErr && /unique|duplicate/i.test(insertErr.message)) {
-        // Race: another request promoted first. Load the existing one.
-        const { data: raced } = await supabase
+      try {
+        const { data: recipe } = await supabase
+          .from("prompt_lab_recipes")
+          .insert({
+            archetype,
+            room_type: analysis.room_type,
+            camera_movement: director.camera_movement,
+            provider: updated.provider,
+            prompt_template: director.prompt,
+            source_iteration_id: iteration_id,
+            rating_at_promotion: 5,
+            promoted_by: auth.user.id,
+            embedding: vec ? toPgVector(vec) : null,
+          })
+          .select("id, archetype")
+          .single();
+        if (recipe) {
+          auto_promoted = { id: recipe.id, archetype: recipe.archetype };
+        }
+      } catch {
+        // Unique constraint (migration 015) — recipe already exists for
+        // this iteration. Reuse it instead of erroring.
+        const { data: existing } = await supabase
           .from("prompt_lab_recipes")
           .select("id, archetype")
           .eq("source_iteration_id", iteration_id)
           .eq("status", "active")
           .maybeSingle();
-        if (raced) auto_promoted = { id: raced.id, archetype: raced.archetype, reused: true };
+        if (existing) auto_promoted = { id: existing.id, archetype: existing.archetype, reused: true };
       }
     }
   }
