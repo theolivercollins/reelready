@@ -88,9 +88,9 @@ Atlas Cloud is a multi-model aggregator. One API key, one endpoint, six Kling SK
 
 | Key | Slug | Price | End-frame | Notes |
 |---|---|---|---|---|
-| `kling-v3-pro` | `kwaivgi/kling-v3.0-pro/image-to-video` | $0.095 | yes | Default |
+| `kling-v3-pro` | `kwaivgi/kling-v3.0-pro/image-to-video` | $0.095 | yes | Selectable; known shake issue on single-image |
 | `kling-v3-std` | `kwaivgi/kling-v3.0-std/image-to-video` | $0.071 | yes | Cheap exploration |
-| `kling-v2-6-pro` | `kwaivgi/kling-v2.6-pro/image-to-video` | $0.060 | yes | HOT-tagged, smoother motion |
+| `kling-v2-6-pro` | `kwaivgi/kling-v2.6-pro/image-to-video` | $0.060 | yes | **Default** (changed 2026-04-20 based on rated-iteration signal). HOT-tagged, smoother motion |
 | `kling-v2-1-pair` | `kwaivgi/kling-v2.1-i2v-pro/start-end-frame` | $0.076 | yes | Purpose-built for paired scenes |
 | `kling-v2-master` | `kwaivgi/kling-v2.0-i2v-master` | $0.221 | **no** | Premium; single-frame only |
 | `kling-o3-pro` | `kwaivgi/kling-video-o3-pro/image-to-video` | $0.095 | yes | Newest generation |
@@ -333,7 +333,7 @@ Development landing (`/dashboard/development`) shows:
 
 | Provider | Status | Notes |
 |---|---|---|
-| **Atlas Cloud** | Active (Lab listings) | 6 Kling SKUs registered (v3-pro default, v3-std, v2.6-pro, v2.1-pair, v2-master, o3-pro). Env: `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v3-pro`). Accepts `negative_prompt` + `cfg_scale` per request. |
+| **Atlas Cloud** | Active (Lab listings) | 6 Kling SKUs registered (v2.6-pro default, v3-pro, v3-std, v2.1-pair, v2-master, o3-pro). Env: `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v2-6-pro`, changed 2026-04-20). Accepts `negative_prompt` + `cfg_scale` per request. |
 | Runway | Active (legacy Lab + prod) | URL-based image input. Fallback target when Kling is full |
 | Kling (native) | Active (legacy Lab + prod) | 4-concurrent cap, auto-fallback to Runway, explicit queues with 30-min expiry |
 | Luma | Coded, not wired | |

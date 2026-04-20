@@ -11,7 +11,7 @@ export default function LabListingNew() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
-  const [model, setModel] = useState<string>("kling-v3-pro");
+  const [model, setModel] = useState<string>("kling-v2-6-pro");
 
   const MODEL_OPTIONS: Array<{ key: string; label: string; price: string }> = [
     { key: "kling-v3-pro", label: "Kling 3.0 Pro", price: "$0.095" },

@@ -199,7 +199,7 @@ export class AtlasProvider implements IVideoProvider {
     const key = process.env.ATLASCLOUD_API_KEY;
     if (!key) throw new Error("ATLASCLOUD_API_KEY is required for AtlasProvider");
     this.apiKey = key;
-    const modelName = process.env.ATLAS_VIDEO_MODEL ?? "kling-v3-pro";
+    const modelName = process.env.ATLAS_VIDEO_MODEL ?? "kling-v2-6-pro";
     const descriptor = ATLAS_MODELS[modelName];
     if (!descriptor) {
       throw new Error(`ATLAS_VIDEO_MODEL=${modelName} is not registered. Valid: ${Object.keys(ATLAS_MODELS).join(", ")}`);

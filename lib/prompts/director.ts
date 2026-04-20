@@ -134,6 +134,59 @@ RULES FOR THE PROMPT STRING:
 - NEVER use "slow_pan" / "slow pan" — it's a dead verb with 0% success rate
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT STYLE — HARD LENGTH + PHRASE BANS (READ TWICE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The 5★ Lab pool is uniformly terse. Every per-scene prompt you emit
+MUST match the shape of these legacy winners, not the verbose
+multi-sentence style that retrieval examples might appear to permit.
+
+LEGACY 5★ EXAMPLES (this is the shape — copy it):
+- "slow cinematic straight push with gentle curve centered on the arched entry portico and dark wood front door" (108 chars)
+- "smooth cinematic drone rising backward and upward from the white three-story beachfront home toward the turquoise Gulf coastline" (128 chars)
+- "slow cinematic straight push with gentle curve into the kitchen through the open pocket slider wall" (99 chars)
+- "slow cinematic straight push with gentle curve left toward the bar-height Adirondack dining set and canal view beyond" (117 chars)
+
+HARD LENGTH RULES:
+- Single-image scene (end_photo_id is null or omitted): prompt MUST be ≤ 120 characters.
+- Paired scene (end_photo_id set): prompt MAY extend to ≤ 250 characters — paired SKUs need a short trajectory clause between start and end frames, but still ONE sentence.
+- Character count includes spaces. Count before you emit.
+
+REQUIRED SINGLE-SENTENCE PATTERNS (pick the one that matches the scene):
+- Single-image: "[pace] cinematic [movement] [preposition] [subject + key feature]"
+  Example: "slow cinematic push in toward the waterfall granite island"
+- Paired: "[pace] cinematic [movement] from [start feature] to [end feature], [brief trajectory detail]"
+  Example: "smooth cinematic drone push in from the canal-front rooftop toward the arched portico, descending gently to ground level as the facade fills frame"
+
+BANNED PHRASES (do not emit any of these, anywhere):
+- "Motion is fluid and continuous"
+- "not jerky, not too slow"
+- "Emphasize the [anything]" / "Emphasize [anything]"
+- "Camera moves steadily forward" (redundant after "push in")
+- "closing distance"
+- "focal destination"
+- Any sentence beginning with "Camera..." that restates the movement verb you already used
+- Any trailing qualifier like "... as the focal destination" or "... revealing the endpoint"
+- Any phrase that restates what the movement verb already implies (a push-in already implies forward motion; don't add "moving forward")
+
+BANNED STRUCTURES:
+- Two or more sentences (no periods-then-capital-letter breaks).
+- Em-dashes ( — ) used as sentence breaks between independent clauses. A short parenthetical em-dash inside one clause is fine; a second full clause after an em-dash is not.
+- Multi-clause descriptions stitched by semicolons.
+- Any "Camera X. Motion Y. Emphasize Z." triptych.
+
+REQUIRED STRUCTURE:
+- Lead with the movement verb + modifier ("slow cinematic push in ...", "smooth cinematic drone rising ..."). Do NOT lead with "The camera ..." or "Camera ...".
+- Name ONE subject from key_features. Not two, not a list.
+- Stop the sentence once the subject is named. Do not tack on a second clause describing the motion again.
+
+EXEMPLAR BLOCKS ARE PATTERNS, NOT LENGTH PERMISSION:
+The PAST WINNERS and VALIDATED RECIPE blocks you may see below the user prompt are for CONTENT patterns (which verb, which feature, which framing worked). They are NOT permission to match or exceed their length. Your own output must obey the ≤120 char (single) / ≤250 char (paired) limits regardless of how long any retrieved example is. If an exemplar looks verbose, mimic its verb choice, not its word count.
+
+EXAMPLE — GOOD vs BAD FOR THE SAME SCENE (kitchen push_in, single-image):
+- GOOD (108 chars, 1 sentence): "slow cinematic push in toward the waterfall granite island at the center of the chef's kitchen"
+- BAD (351 chars, 4 sentences, banned phrases): "Smooth, deliberate push-in toward the far end of the kitchen. Camera moves steadily forward, closing distance to reveal the waterfall island, depth, and surrounding architectural details. Motion is fluid and continuous—not jerky, not too slow. Emphasize the island's lines and endpoint as the focal destination."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA MOVEMENT ENUM (for the camera_movement FIELD only, not the prompt)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 The camera_movement JSON field must be ONE of these 11 exact strings:

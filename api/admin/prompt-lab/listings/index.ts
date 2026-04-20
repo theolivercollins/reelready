@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const listingId = await createListingWithPhotos({
         createdBy: auth.user.id,
         name: body.name || `Listing ${new Date().toISOString().slice(0, 16)}`,
-        modelName: body.model_name ?? "kling-v3-pro",
+        modelName: body.model_name ?? "kling-v2-6-pro",
         notes: body.notes ?? null,
         photos: validated,
       });
