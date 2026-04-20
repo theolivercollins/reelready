@@ -1,4 +1,5 @@
 import type { CameraMovement, RoomType, VideoProvider } from "../types.js";
+import type { DirectorIntent } from "./director-intent.js";
 
 export interface DirectorSceneOutput {
   scene_number: number;
@@ -9,6 +10,7 @@ export interface DirectorSceneOutput {
   prompt: string;
   duration_seconds: number;
   provider_preference: VideoProvider | null;
+  director_intent?: DirectorIntent;
 }
 
 export interface DirectorOutput {
@@ -299,6 +301,39 @@ Every non-null end_photo_id must reference a photo in the current
 photo list. Do not invent ids.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DIRECTOR INTENT (structured; survives model swaps)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Every scene gets a director_intent object alongside its verbatim
+prompt. Intent is the model-agnostic record of what the scene is
+trying to achieve. If we swap from Kling v3 Pro to a new model in 6
+months, we regenerate prompts from intent — prior ratings tied to
+intent stay as signal.
+
+Required fields:
+- room_type: must match the scene's room_type
+- motion: must match the scene's camera_movement
+- subject: the named focal subject in the prompt (e.g. "waterfall
+  granite island", "freestanding tub", "front facade"). Pick the same
+  noun phrase you referenced in the prompt text.
+
+Optional fields:
+- end_subject: when end_photo_id is set, name the focal subject of the
+  end photo (e.g. "range wall" when paired with a wider kitchen shot).
+  Null when no pair.
+- style: array of style adjectives you chose for the prompt — e.g.
+  ["smooth", "cinematic"] or ["steady", "cinematic"].
+- mood: scene mood — "luxury", "warm", "modern", "cozy", "airy".
+  Default "modern_luxury" if unsure.
+- shot_style: sub-variant name if you picked one — "Cowboy Lift", "PTF
+  Orbit", "Straight Push with Rise", "Top Down Detail", "Detail Slider".
+  Null if no specific sub-variant.
+- foreground_element: only for reveal motions — the named occluder
+  (e.g. "kitchen island corner", "doorframe edge"). Null otherwise.
+
+Capture intent FROM the prompt you just wrote — do not invent different
+content. Intent describes the prompt; it is not separate.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Opening: Exterior establishing shot (drone_push_in or orbit) — 4 seconds. Editor reverses the drone_push_in in post for a classic pullback opening feel.
@@ -382,7 +417,17 @@ Return a JSON object with this exact shape:
       "camera_movement": "drone_push_in",
       "prompt": "smooth cinematic drone flying forward at rooftop height toward the waterfront facade",
       "duration_seconds": 4,
-      "provider_preference": null
+      "provider_preference": null,
+      "director_intent": {
+        "room_type": "exterior_front",
+        "motion": "drone_push_in",
+        "subject": "waterfront facade",
+        "end_subject": "front door hardware",
+        "style": ["smooth", "cinematic"],
+        "mood": "luxury",
+        "shot_style": null,
+        "foreground_element": null
+      }
     },
     {
       "scene_number": 2,
@@ -392,7 +437,17 @@ Return a JSON object with this exact shape:
       "camera_movement": "dolly_left_to_right",
       "prompt": "smooth cinematic dolly right across the waterfall granite island",
       "duration_seconds": 3.5,
-      "provider_preference": null
+      "provider_preference": null,
+      "director_intent": {
+        "room_type": "kitchen",
+        "motion": "dolly_left_to_right",
+        "subject": "waterfall granite island",
+        "end_subject": null,
+        "style": ["smooth", "cinematic"],
+        "mood": "modern_luxury",
+        "shot_style": "Detail Slider",
+        "foreground_element": null
+      }
     }
   ]
 }
