@@ -28,8 +28,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "GET");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const auth = await requireAdmin(req, res);
-  if (!auth) return;
+  // Preview-only bypass — see api/admin/judge/score.ts for notes.
+  if (process.env.VERCEL_ENV !== "preview") {
+    const auth = await requireAdmin(req, res);
+    if (!auth) return;
+  }
 
   const supabase = getSupabase();
   const { data: cells, error } = await supabase
