@@ -131,8 +131,18 @@ export class AtlasProvider implements IVideoProvider {
     };
   }
 
+  private resolveModel(override?: string): AtlasModelDescriptor {
+    if (!override) return this.model;
+    const descriptor = ATLAS_MODELS[override];
+    if (!descriptor) {
+      throw new Error(`modelOverride=${override} is not registered. Valid: ${Object.keys(ATLAS_MODELS).join(", ")}`);
+    }
+    return descriptor;
+  }
+
   async generateClip(params: GenerateClipParams): Promise<GenerationJob> {
-    const body = buildAtlasRequestBody(params, this.model);
+    const modelForCall = this.resolveModel(params.modelOverride);
+    const body = buildAtlasRequestBody(params, modelForCall);
     const res = await fetch(ENDPOINT, {
       method: "POST",
       headers: this.authHeaders(),

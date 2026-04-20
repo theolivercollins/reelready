@@ -15,6 +15,12 @@ export interface GenerateClipParams {
    * null/undefined, the provider generates a single-frame clip.
    */
   endImageUrl?: string;
+  /**
+   * Per-render override for AtlasProvider's model selection. When set,
+   * takes precedence over the ATLAS_VIDEO_MODEL env var. Lets per-scene
+   * model A/B work without env gymnastics.
+   */
+  modelOverride?: string;
   prompt: string;
   durationSeconds: number;
   aspectRatio: "16:9" | "9:16";
