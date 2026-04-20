@@ -48,7 +48,15 @@ export interface LabListingScene {
   camera_movement: string;
   director_prompt: string;
   director_intent: Record<string, unknown>;
+  refinement_notes: string | null;
   created_at: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  ts: string;
+  pinned?: boolean;
 }
 
 export interface LabListingIteration {
@@ -65,6 +73,7 @@ export interface LabListingIteration {
   cost_cents: number;
   status: string;
   render_error: string | null;
+  chat_messages: ChatMessage[];
   created_at: string;
 }
 
@@ -133,5 +142,33 @@ export async function refineScenePrompt(listingId: string, sceneId: string, dire
   return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}`, {
     method: "PATCH",
     body: JSON.stringify({ director_prompt: directorPrompt }),
+  });
+}
+
+export async function chatIteration(listingId: string, iterId: string, message: string): Promise<{
+  chat_messages: ChatMessage[];
+  saved_instructions: string[];
+}> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
+
+export async function pinSceneInstruction(listingId: string, sceneId: string, instruction: string): Promise<{
+  scene: { id: string; refinement_notes: string | null };
+}> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}/pin-instruction`, {
+    method: "POST",
+    body: JSON.stringify({ instruction }),
+  });
+}
+
+export async function setSceneRefinementNotes(listingId: string, sceneId: string, notes: string | null): Promise<{
+  scene: { id: string; refinement_notes: string | null };
+}> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}/pin-instruction`, {
+    method: "POST",
+    body: JSON.stringify({ refinement_notes: notes }),
   });
 }

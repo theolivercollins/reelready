@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Star, Play, Sparkles, RotateCcw } from "lucide-react";
+import { Loader2, Star, Play, Sparkles, RotateCcw, MessageSquare, Pin, X, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PairVisualization } from "./PairVisualization";
@@ -7,9 +7,13 @@ import {
   renderListing,
   rateIteration,
   refineScenePrompt,
+  chatIteration,
+  pinSceneInstruction,
+  setSceneRefinementNotes,
   type LabListingScene,
   type LabListingIteration,
   type LabListingPhoto,
+  type ChatMessage,
 } from "@/lib/labListingsApi";
 
 interface SceneCardProps {
@@ -39,6 +43,210 @@ function Stars({ value, onChange, disabled }: { value: number | null; onChange: 
   );
 }
 
+function IterationRow({ listingId, sceneId, iter, onReload }: {
+  listingId: string;
+  sceneId: string;
+  iter: LabListingIteration;
+  onReload: () => void;
+}) {
+  const [comment, setComment] = useState(iter.user_comment ?? "");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>(iter.chat_messages ?? []);
+  const [lastSaved, setLastSaved] = useState<string[]>([]);
+
+  async function handleRate(n: number) {
+    await rateIteration(listingId, iter.id, { rating: n });
+    onReload();
+  }
+
+  async function saveComment() {
+    if (comment === (iter.user_comment ?? "")) return;
+    await rateIteration(listingId, iter.id, { comment: comment || null });
+    onReload();
+  }
+
+  async function sendChat() {
+    const msg = chatInput.trim();
+    if (!msg || chatBusy) return;
+    setChatBusy(true);
+    const optimistic: ChatMessage = { role: "user", content: msg, ts: new Date().toISOString() };
+    setMessages((m) => [...m, optimistic]);
+    setChatInput("");
+    try {
+      const res = await chatIteration(listingId, iter.id, msg);
+      setMessages(res.chat_messages);
+      setLastSaved(res.saved_instructions);
+      if (res.saved_instructions.length > 0) onReload();
+    } catch (err) {
+      setMessages((m) => [...m, { role: "assistant", content: `Error: ${err instanceof Error ? err.message : String(err)}`, ts: new Date().toISOString() }]);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  async function pinUserMessage(content: string) {
+    await pinSceneInstruction(listingId, sceneId, content);
+    onReload();
+  }
+
+  return (
+    <div className="border border-border p-3">
+      <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-muted-foreground">#{iter.iteration_number}</span>
+          <span className="border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">{iter.model_used}</span>
+          <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${
+            iter.status === "rendered" || iter.status === "rated" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" :
+            iter.status === "failed" ? "border-red-400/40 bg-red-400/10 text-red-700" :
+            "border-amber-400/40 bg-amber-400/10 text-amber-700"
+          }`}>
+            {iter.status}
+          </span>
+        </div>
+        <Stars value={iter.rating} onChange={handleRate} disabled={!iter.clip_url} />
+      </div>
+
+      {iter.clip_url && (
+        <video controls src={iter.clip_url} className="mt-2 aspect-video w-full bg-black" preload="metadata" />
+      )}
+      {iter.render_error && (
+        <p className="mt-2 text-[11px] text-destructive">Error: {iter.render_error}</p>
+      )}
+
+      {iter.clip_url && (
+        <>
+          <div className="mt-3">
+            <span className="label text-muted-foreground">Comment</span>
+            <Textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              onBlur={saveComment}
+              placeholder="What did you think? (saved on blur)"
+              className="mt-1 min-h-[60px] text-xs"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <Button size="sm" variant="ghost" onClick={() => setChatOpen((o) => !o)}>
+              <MessageSquare className="mr-1 h-3 w-3" />
+              {chatOpen ? "Hide chat" : `Chat${messages.length > 0 ? ` (${messages.length})` : ""}`}
+            </Button>
+          </div>
+
+          {chatOpen && (
+            <div className="mt-2 border-t border-border pt-3">
+              {messages.length === 0 && (
+                <p className="text-[11px] text-muted-foreground italic">Ask about this iteration or tell the system what to change next time. The assistant can save instructions that influence future renders of this scene.</p>
+              )}
+              <div className="space-y-2">
+                {messages.map((m, i) => (
+                  <div key={i} className={`flex items-start gap-2 text-xs ${m.role === "user" ? "justify-end" : ""}`}>
+                    {m.role === "assistant" && (
+                      <span className="mt-0.5 shrink-0 rounded-full bg-foreground text-background px-1.5 py-0.5 text-[9px] uppercase tracking-wider">AI</span>
+                    )}
+                    <div className={`max-w-[80%] whitespace-pre-wrap rounded px-2 py-1.5 ${m.role === "user" ? "bg-foreground text-background" : "bg-muted"}`}>
+                      {m.content}
+                    </div>
+                    {m.role === "user" && (
+                      <button
+                        type="button"
+                        onClick={() => pinUserMessage(m.content)}
+                        title="Pin as instruction for future renders"
+                        className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <Pin className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {lastSaved.length > 0 && (
+                <div className="mt-2 border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-700">
+                  Saved for future renders: {lastSaved.join("; ")}
+                </div>
+              )}
+              <div className="mt-2 flex gap-2">
+                <Textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendChat(); } }}
+                  placeholder="Ask or instruct... (Cmd/Ctrl+Enter to send)"
+                  className="min-h-[40px] text-xs"
+                />
+                <Button size="sm" onClick={sendChat} disabled={chatBusy || !chatInput.trim()}>
+                  {chatBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function RefinementNotesPanel({ listingId, scene, onReload }: {
+  listingId: string;
+  scene: LabListingScene;
+  onReload: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(scene.refinement_notes ?? "");
+  const notes = scene.refinement_notes ?? "";
+
+  async function save() {
+    await setSceneRefinementNotes(listingId, scene.id, draft.trim() || null);
+    setEditing(false);
+    onReload();
+  }
+
+  async function clear() {
+    await setSceneRefinementNotes(listingId, scene.id, null);
+    setDraft("");
+    setEditing(false);
+    onReload();
+  }
+
+  if (!notes && !editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+      >
+        + Add instructions for future renders
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-amber-400/40 bg-amber-400/5 p-3">
+      <div className="flex items-center justify-between">
+        <span className="label text-amber-800">Future-render instructions</span>
+        {!editing && (
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" onClick={() => { setDraft(notes); setEditing(true); }}>Edit</Button>
+            <Button size="sm" variant="ghost" onClick={clear}><X className="h-3 w-3" /></Button>
+          </div>
+        )}
+      </div>
+      {editing ? (
+        <div className="mt-2 space-y-2">
+          <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="text-xs" />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={save}>Save</Button>
+            <Button size="sm" variant="outline" onClick={() => { setEditing(false); setDraft(notes); }}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        <pre className="mt-1 whitespace-pre-wrap font-sans text-xs text-foreground">{notes}</pre>
+      )}
+    </div>
+  );
+}
+
 export function SceneCard({ listingId, scene, iterations, photos, defaultModel, onReload }: SceneCardProps) {
   const startPhoto = photos.find((p) => p.id === scene.photo_id);
   const endPhoto = scene.end_photo_id ? photos.find((p) => p.id === scene.end_photo_id) : null;
@@ -54,11 +262,6 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
     } finally {
       setRendering(false);
     }
-  }
-
-  async function handleRate(iterId: string, rating: number) {
-    await rateIteration(listingId, iterId, { rating });
-    onReload();
   }
 
   async function handleRefine() {
@@ -111,6 +314,10 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
         )}
       </div>
 
+      <div className="mt-4">
+        <RefinementNotesPanel listingId={listingId} scene={scene} onReload={onReload} />
+      </div>
+
       <div className="mt-5 space-y-4">
         <div className="flex items-center justify-between">
           <span className="label text-muted-foreground">Iterations ({iterations.length})</span>
@@ -131,28 +338,7 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
         )}
 
         {iterations.map((iter) => (
-          <div key={iter.id} className="border border-border p-3">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-muted-foreground">#{iter.iteration_number}</span>
-                <span className="border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">{iter.model_used}</span>
-                <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${
-                  iter.status === "rendered" || iter.status === "rated" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" :
-                  iter.status === "failed" ? "border-red-400/40 bg-red-400/10 text-red-700" :
-                  "border-amber-400/40 bg-amber-400/10 text-amber-700"
-                }`}>
-                  {iter.status}
-                </span>
-              </div>
-              <Stars value={iter.rating} onChange={(n) => handleRate(iter.id, n)} disabled={!iter.clip_url} />
-            </div>
-            {iter.clip_url && (
-              <video controls src={iter.clip_url} className="mt-2 aspect-video w-full bg-black" preload="metadata" />
-            )}
-            {iter.render_error && (
-              <p className="mt-2 text-[11px] text-destructive">Error: {iter.render_error}</p>
-            )}
-          </div>
+          <IterationRow key={iter.id} listingId={listingId} sceneId={scene.id} iter={iter} onReload={onReload} />
         ))}
       </div>
     </div>

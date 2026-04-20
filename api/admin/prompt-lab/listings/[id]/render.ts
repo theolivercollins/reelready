@@ -32,8 +32,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   for (const sceneId of sceneIds) {
     const { data: scene } = await supabase.from("prompt_lab_listing_scenes")
-      .select("id, photo_id, end_image_url, director_prompt").eq("id", sceneId).maybeSingle();
+      .select("id, photo_id, end_image_url, director_prompt, refinement_notes").eq("id", sceneId).maybeSingle();
     if (!scene) continue;
+    const effectivePrompt = scene.refinement_notes
+      ? `${scene.director_prompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}`
+      : scene.director_prompt;
     const { data: photo } = await supabase.from("prompt_lab_listing_photos")
       .select("image_url").eq("id", scene.photo_id).maybeSingle();
     if (!photo) continue;
@@ -45,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: iter, error: iterErr } = await supabase.from("prompt_lab_listing_scene_iterations").insert({
       scene_id: sceneId,
       iteration_number: iterationNumber,
-      director_prompt: scene.director_prompt,
+      director_prompt: effectivePrompt,
       model_used: body.model_override ?? listing.model_name,
       status: "submitting",
     }).select().single();
@@ -56,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sourceImage: Buffer.from(""),
         sourceImageUrl: photo.image_url,
         endImageUrl: scene.end_image_url ?? undefined,
-        prompt: scene.director_prompt,
+        prompt: effectivePrompt,
         durationSeconds: 5,
         aspectRatio: "16:9",
         modelOverride: body.model_override,
