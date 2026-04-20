@@ -1,5 +1,4 @@
 import "@/v2/styles/v2.css";
-import { Nav } from "@/v2/components/landing/Nav";
 import { Hero } from "@/v2/components/landing/Hero";
 import { Process } from "@/v2/components/landing/Process";
 import { MarketComparison } from "@/v2/components/landing/MarketComparison";
@@ -29,7 +28,6 @@ function LandingShell() {
         position: "relative",
       }}
     >
-      <Nav />
       <Hero />
       <Process />
       <MarketComparison />
