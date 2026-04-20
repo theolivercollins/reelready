@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../../../lib/auth.js";
 import { getSupabase } from "../../../../lib/client.js";
-import { createListingWithPhotos, analyzeListingPhotos, directListingScenes } from "../../../../lib/prompt-lab-listings.js";
+import { createListingWithPhotos } from "../../../../lib/prompt-lab-listings.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = await requireAdmin(req, res);
@@ -45,15 +45,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         notes: body.notes ?? null,
         photos: validated,
       });
-      analyzeListingPhotos(listingId)
-        .then(() => directListingScenes(listingId))
-        .catch((err) => {
-          console.error("[listing lifecycle]", err);
-          return getSupabase()
-            .from("prompt_lab_listings")
-            .update({ status: "failed" })
-            .eq("id", listingId);
-        });
+      // The listing row lands at status='analyzing'. The
+      // /api/cron/poll-listing-lifecycle cron (every minute) picks it
+      // up, runs the analyzer, then the director, then flips it to
+      // 'ready_to_render'. Fire-and-forget from this handler does NOT
+      // work on Vercel — the function lambda is killed as soon as the
+      // response writes, so the background promise never runs.
       return res.status(201).json({ listing_id: listingId });
     } catch (err) {
       return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
