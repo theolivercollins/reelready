@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight, GitPullRequest, Gavel } from "lucide-react";
+import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight, GitPullRequest } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -109,19 +109,6 @@ const Development = () => {
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
             Rule mining across rated Lab iterations. Claude proposes specific edits to the DIRECTOR_SYSTEM grounded in winner/loser patterns. Admin approves per-change. Applied proposals become active lab_prompt_overrides (production unaffected).
-          </p>
-        </Link>
-        <Link
-          to="/dashboard/development/judge-smoke"
-          className="group border border-border bg-background p-6 transition hover:border-foreground"
-        >
-          <div className="flex items-center gap-3">
-            <Gavel className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
-            <div className="label text-muted-foreground group-hover:text-foreground">Judge smoke test</div>
-            <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-          </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Phase 1 Claude rubric judge. Score a single rated iteration, run a narrow calibration on one cell, or read the current calibration status across all cells — all with buttons + JSON output, no terminal required.
           </p>
         </Link>
       </div>
