@@ -1,32 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  ArrowRight,
-  ArrowLeft,
-  Bookmark,
-  CheckCircle2,
-  Loader2,
-  Mic,
-  RotateCcw,
-  Sparkles,
-  X,
-  Home,
-  Flame,
-  Trophy,
-  Layers,
-  RectangleVertical,
-  RectangleHorizontal,
-  Square,
-  Camera,
-  Check,
-} from "lucide-react";
+import { Loader2, CheckCircle2, X } from "lucide-react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { getPresets, savePreset, type Preset } from "@/lib/presets";
 import { createProperty } from "@/lib/api";
+import { LEIcon, LELogoMark } from "@/components/le";
 
 interface UploadedFile {
   file: File;
@@ -44,6 +25,96 @@ const stepFade: Variants = {
 
 const STEPS = ["Style", "Add-ons", "Property", "Photos"] as const;
 type StepId = 0 | 1 | 2 | 3;
+
+const PACKAGES = [
+  { id: "just_listed", name: "Just Listed", desc: "New to market" },
+  { id: "just_pended", name: "Just Pended", desc: "Under contract" },
+  { id: "just_closed", name: "Just Closed", desc: "Successful close" },
+  { id: "life_cycle", name: "Life Cycle", desc: "Three-video series", badge: "Best value" },
+];
+
+const DURATIONS = [
+  { id: "15s", label: "15", price: 75, lifeCyclePrice: 90 },
+  { id: "30s", label: "30", price: 125, lifeCyclePrice: 140 },
+  { id: "60s", label: "60", price: 175, lifeCyclePrice: 190 },
+];
+
+const ORIENTATIONS = [
+  { id: "vertical", label: "Vertical", dim: "9 : 16", sub: "Reels, TikTok, Shorts", extra: 0 },
+  { id: "horizontal", label: "Horizontal", dim: "16 : 9", sub: "YouTube, web, email", extra: 0 },
+  { id: "both", label: "Both", dim: "16:9 + 9:16", sub: "Cross-platform delivery", extra: 10 },
+];
+
+const sectionStyle: React.CSSProperties = {};
+const eyebrow: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: "0.22em",
+  textTransform: "uppercase",
+  color: "var(--le-text-faint)",
+  fontFamily: "var(--le-font-mono)",
+  fontWeight: 500,
+};
+
+function SectionHeader({
+  n,
+  title,
+  aside,
+}: {
+  n: string;
+  title: string;
+  aside?: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+        <span style={{ ...eyebrow, fontSize: 11 }}>{n}</span>
+        <h2
+          style={{
+            fontSize: 22,
+            margin: 0,
+            fontWeight: 500,
+            letterSpacing: "-0.015em",
+            color: "var(--le-text)",
+            fontFamily: "var(--le-font-sans)",
+          }}
+        >
+          {title}
+        </h2>
+      </div>
+      {aside}
+    </div>
+  );
+}
+
+function SelectTile({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        cursor: "pointer",
+        textAlign: "left",
+        padding: "22px 22px 24px",
+        background: active ? "var(--le-bg-sunken)" : "var(--le-bg)",
+        border: `1px solid ${active ? "var(--le-text)" : "var(--le-border-strong)"}`,
+        color: "var(--le-text)",
+        fontFamily: "var(--le-font-sans)",
+        transition: "all 0.18s ease",
+        width: "100%",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 const Upload = () => {
   // ─── form state ───
@@ -129,30 +200,10 @@ const Upload = () => {
     }, 1200);
   };
 
-  // ─── catalog ───
-  const packages = [
-    { id: "just_listed", name: "Just Listed", desc: "New to market", icon: Home },
-    { id: "just_pended", name: "Just Pended", desc: "Under contract", icon: Flame },
-    { id: "just_closed", name: "Just Closed", desc: "Successful close", icon: Trophy },
-    { id: "life_cycle", name: "Life Cycle", desc: "Three-video series", icon: Layers, badge: "Best value" },
-  ];
-
-  const durations = [
-    { id: "15s", label: "15", price: 75, lifeCyclePrice: 90 },
-    { id: "30s", label: "30", price: 125, lifeCyclePrice: 140 },
-    { id: "60s", label: "60", price: 175, lifeCyclePrice: 190 },
-  ];
-
-  const orientations = [
-    { id: "vertical", label: "Vertical", ratio: "9:16", icon: RectangleVertical, extra: 0 },
-    { id: "horizontal", label: "Horizontal", ratio: "16:9", icon: RectangleHorizontal, extra: 0 },
-    { id: "both", label: "Both", ratio: "9:16 + 16:9", icon: Square, extra: 10 },
-  ];
-
-  const selectedDur = durations.find((d) => d.id === selectedDuration);
+  const selectedDur = DURATIONS.find((d) => d.id === selectedDuration);
   const isLifeCycle = selectedPackage === "life_cycle";
   const basePrice = selectedDur ? (isLifeCycle ? selectedDur.lifeCyclePrice : selectedDur.price) : 0;
-  const orientationExtra = isLifeCycle ? 0 : (orientations.find((o) => o.id === selectedOrientation)?.extra || 0);
+  const orientationExtra = isLifeCycle ? 0 : ORIENTATIONS.find((o) => o.id === selectedOrientation)?.extra || 0;
   const voiceoverExtra = addVoiceover ? 15 : 0;
   const customExtra = addCustomRequest ? 15 : 0;
   const voiceCloneExtra = addVoiceClone ? 15 : 0;
@@ -161,7 +212,6 @@ const Upload = () => {
   const needsDaysOnMarket = selectedPackage === "just_pended" || selectedPackage === "just_closed";
   const needsSoldPrice = selectedPackage === "just_closed";
 
-  // ─── per-step validity ───
   const step0Valid = !!(selectedPackage && selectedDuration && selectedOrientation);
   const step1Valid = !addCustomRequest || customRequestText.trim().length > 0;
   const step2Valid = !!(
@@ -178,7 +228,6 @@ const Upload = () => {
   const canAdvance = stepValidity[step];
   const canSubmit = stepValidity.every(Boolean);
 
-  // ─── files ───
   const handleFiles = useCallback(
     (newFiles: FileList | File[]) => {
       const accepted = Array.from(newFiles).filter((f) => /\.(jpg|jpeg|png|heic|webp)$/i.test(f.name));
@@ -187,7 +236,7 @@ const Upload = () => {
       const mapped = toAdd.map((f) => ({ file: f, preview: URL.createObjectURL(f), id: crypto.randomUUID() }));
       setFiles((prev) => [...prev, ...mapped]);
     },
-    [files.length],
+    [files.length]
   );
 
   const removeFile = (id: string) => {
@@ -202,7 +251,6 @@ const Upload = () => {
   const formatSize = (bytes: number) =>
     bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
-  // ─── submit ───
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -218,7 +266,7 @@ const Upload = () => {
           brokerage: "",
           photos: files.map((f) => f.file),
         },
-        (uploaded, total) => setUploadProgress({ uploaded, total }),
+        (uploaded, total) => setUploadProgress({ uploaded, total })
       );
       setTrackingId(result.id);
       setSubmitted(true);
@@ -229,7 +277,6 @@ const Upload = () => {
     }
   };
 
-  // ─── nav ───
   const next = () => {
     if (step < 3 && canAdvance) setStep((s) => (s + 1) as StepId);
   };
@@ -240,49 +287,100 @@ const Upload = () => {
   // ─── success ───
   if (submitted) {
     return (
-      <div className="flex min-h-screen flex-col bg-background text-foreground">
-        <div className="flex flex-1 items-center justify-center px-6 py-24">
+      <div
+        className="le-root"
+        style={{
+          display: "flex",
+          minHeight: "100vh",
+          flexDirection: "column",
+          background: "var(--le-bg)",
+          color: "var(--le-text)",
+        }}
+      >
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "96px 24px" }}>
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: EASE }}
-            className="w-full max-w-md text-center"
+            style={{ width: "100%", maxWidth: 480, textAlign: "center" }}
           >
             <motion.div
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.15, duration: 0.8, ease: EASE }}
-              className="mx-auto mb-10 flex h-20 w-20 items-center justify-center border border-accent/40 bg-accent/10 text-accent"
+              style={{
+                margin: "0 auto 40px",
+                display: "flex",
+                width: 80,
+                height: 80,
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid var(--le-text)",
+                color: "var(--le-text)",
+              }}
             >
               <CheckCircle2 className="h-9 w-9" strokeWidth={1.5} />
             </motion.div>
-            <span className="label text-muted-foreground">— In production</span>
-            <h1 className="display-md mt-5">
+            <span className="le-eyebrow">— In production</span>
+            <h1
+              className="le-display"
+              style={{
+                fontSize: 54,
+                marginTop: 18,
+                lineHeight: 1,
+                fontWeight: 500,
+                letterSpacing: "-0.03em",
+                fontFamily: "var(--le-font-sans)",
+              }}
+            >
               Your video
               <br />
               is in motion.
             </h1>
-            <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
+            <p style={{ marginTop: 24, fontSize: 14, lineHeight: 1.6, color: "var(--le-text-muted)" }}>
               {files.length} photos received. Estimated delivery in 72 hours. We'll email you when it's ready.
             </p>
-            <div className="mt-12 border border-border">
-              <div className="flex items-center justify-between border-b border-border px-6 py-4">
-                <span className="label text-muted-foreground">Tracking</span>
-                <span className="tabular text-xs font-semibold text-foreground">{trackingId.slice(0, 8)}</span>
+            <div style={{ marginTop: 48, border: "1px solid var(--le-border)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderBottom: "1px solid var(--le-border)",
+                  padding: "16px 22px",
+                }}
+              >
+                <span className="le-eyebrow">Tracking</span>
+                <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 13, fontWeight: 500 }}>
+                  {trackingId.slice(0, 8).toUpperCase()}
+                </span>
               </div>
-              <div className="flex items-center justify-between px-6 py-4">
-                <span className="label text-muted-foreground">Total</span>
-                <span className="tabular text-base font-semibold text-foreground">${totalPrice}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 22px" }}>
+                <span className="le-eyebrow">Total</span>
+                <span style={{ fontFamily: "var(--le-font-sans)", fontSize: 18, fontWeight: 500 }}>${totalPrice}</span>
               </div>
             </div>
-            <Button size="lg" className="mt-8 w-full" onClick={() => navigate(`/status/${trackingId}`)}>
-              Track production
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            <button
+              type="button"
+              onClick={() => navigate(`/status/${trackingId}`)}
+              className="le-btn le-btn-primary"
+              style={{ marginTop: 32, width: "100%", padding: "14px 18px", fontSize: 14, borderRadius: 2 }}
+            >
+              Track production <LEIcon name="arrow" size={14} color="var(--le-accent-fg)" />
+            </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="mt-6 text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+              style={{
+                marginTop: 20,
+                fontSize: 12,
+                color: "var(--le-text-muted)",
+                textDecoration: "underline",
+                textUnderlineOffset: 4,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+              }}
             >
               Submit another listing
             </button>
@@ -294,584 +392,824 @@ const Upload = () => {
 
   // ─── main ───
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* Step header */}
-      <div className="border-b border-border">
-        <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-6 px-8 py-8 md:px-12">
-          <div>
-            <span className="label text-muted-foreground">— New listing</span>
-            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em] md:text-3xl">
-              {step === 0 && "Define the cut."}
-              {step === 1 && "Refine with add-ons."}
-              {step === 2 && "Tell us about the property."}
-              {step === 3 && "Upload your photography."}
-            </h1>
-          </div>
+    <div
+      className="le-root"
+      style={{
+        display: "flex",
+        minHeight: "100vh",
+        flexDirection: "column",
+        background: "var(--le-bg)",
+        color: "var(--le-text)",
+      }}
+    >
+      {/* NAV */}
+      <nav
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "20px 48px",
+          borderBottom: "1px solid var(--le-border)",
+        }}
+      >
+        <Link to="/" style={{ display: "flex", alignItems: "center", gap: 14, color: "var(--le-text)", textDecoration: "none" }}>
+          <LELogoMark size={15} color="var(--le-text)" />
+          <span
+            style={{
+              fontSize: 11,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "var(--le-text-faint)",
+              fontFamily: "var(--le-font-mono)",
+            }}
+          >
+            / Agent portal
+          </span>
+        </Link>
+        <div
+          className="hidden md:flex"
+          style={{
+            gap: 28,
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            color: "var(--le-text-muted)",
+          }}
+        >
+          <span style={{ color: "var(--le-text)", fontWeight: 500 }}>New submission</span>
+          <Link to="/account/properties" style={{ color: "inherit", textDecoration: "none" }}>History</Link>
+          <Link to="/presets" style={{ color: "inherit", textDecoration: "none" }}>Presets</Link>
+          <Link to="/account" style={{ color: "inherit", textDecoration: "none" }}>Account</Link>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {hasPresets && (
             <button
               type="button"
               onClick={handleUseLastPreset}
-              className="hidden items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground md:flex"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 11,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "var(--le-text-muted)",
+                fontFamily: "var(--le-font-mono)",
+                background: "transparent",
+                border: "1px solid var(--le-border-strong)",
+                padding: "8px 12px",
+                cursor: "pointer",
+                borderRadius: 2,
+              }}
             >
-              <RotateCcw className="h-3.5 w-3.5" /> Use last preset
+              Use last preset
+            </button>
+          )}
+        </div>
+      </nav>
+
+      {/* HEADER */}
+      <div style={{ padding: "72px 48px 48px" }}>
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            color: "var(--le-text-faint)",
+            fontFamily: "var(--le-font-mono)",
+            fontWeight: 500,
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span style={{ width: 14, height: 1, background: "var(--le-border-strong)" }} />
+          New submission · Step {step + 1} of {STEPS.length}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 48, flexWrap: "wrap" }}>
+          <h1
+            className="le-display"
+            style={{
+              fontSize: "clamp(2.25rem, 5vw, 4.5rem)",
+              lineHeight: 0.98,
+              margin: 0,
+              fontWeight: 500,
+              letterSpacing: "-0.035em",
+              maxWidth: 920,
+              fontFamily: "var(--le-font-sans)",
+            }}
+          >
+            {step === 0 && "Define the cut."}
+            {step === 1 && "Refine with add-ons."}
+            {step === 2 && "Tell us about the property."}
+            {step === 3 && "Upload your photography."}
+          </h1>
+          <p style={{ fontSize: 14, lineHeight: 1.55, color: "var(--le-text-muted)", maxWidth: 300, marginBottom: 8 }}>
+            Fill in the listing. Drop in 10–60 photos. You'll have cuts in roughly 72 hours.
+          </p>
+        </div>
+
+        {/* Step rail */}
+        <div style={{ marginTop: 48, display: "flex", gap: 12 }}>
+          {STEPS.map((label, i) => {
+            const active = i === step;
+            const done = i < step;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  if (i < step || (i === step + 1 && canAdvance)) setStep(i as StepId);
+                }}
+                style={{
+                  flex: 1,
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  textAlign: "left",
+                  cursor: i < step ? "pointer" : "default",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--le-font-mono)",
+                      fontSize: 10,
+                      color: active || done ? "var(--le-text)" : "var(--le-text-faint)",
+                    }}
+                  >
+                    0{i + 1}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: "0.18em",
+                      textTransform: "uppercase",
+                      color: active ? "var(--le-text)" : done ? "var(--le-text-muted)" : "var(--le-text-faint)",
+                      fontWeight: active ? 500 : 400,
+                    }}
+                  >
+                    {label}
+                  </span>
+                  {done && <LEIcon name="check" size={10} color="var(--le-text)" strokeWidth={2.4} />}
+                </div>
+                <div
+                  style={{
+                    height: 1,
+                    background: active ? "var(--le-text)" : done ? "var(--le-text-muted)" : "var(--le-border)",
+                    transition: "background 0.4s ease",
+                  }}
+                />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* STEP BODY */}
+      <div style={{ flex: 1, padding: "24px 48px 48px", overflow: "auto" }}>
+        <AnimatePresence mode="wait">
+          {/* Step 0 — Style */}
+          {step === 0 && (
+            <motion.div
+              key="step-0"
+              variants={stepFade}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              style={{ display: "flex", flexDirection: "column", gap: 64 }}
+            >
+              <section style={sectionStyle}>
+                <SectionHeader n="01" title="Package" />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+                  {PACKAGES.map((pkg) => (
+                    <SelectTile
+                      key={pkg.id}
+                      active={selectedPackage === pkg.id}
+                      onClick={() => setSelectedPackage(pkg.id)}
+                    >
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.01em" }}>{pkg.name}</div>
+                        {pkg.badge && (
+                          <span
+                            style={{
+                              fontFamily: "var(--le-font-mono)",
+                              fontSize: 10,
+                              letterSpacing: "0.16em",
+                              textTransform: "uppercase",
+                              color: "var(--le-accent)",
+                            }}
+                          >
+                            — {pkg.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 12, color: "var(--le-text-muted)" }}>{pkg.desc}</div>
+                    </SelectTile>
+                  ))}
+                </div>
+              </section>
+
+              <section style={sectionStyle}>
+                <SectionHeader n="02" title="Duration" />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                  {DURATIONS.map((d) => {
+                    const p = isLifeCycle ? d.lifeCyclePrice : d.price;
+                    return (
+                      <SelectTile
+                        key={d.id}
+                        active={selectedDuration === d.id}
+                        onClick={() => setSelectedDuration(d.id)}
+                      >
+                        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                              <span
+                                style={{
+                                  fontSize: 44,
+                                  fontWeight: 500,
+                                  letterSpacing: "-0.03em",
+                                  lineHeight: 1,
+                                  fontFamily: "var(--le-font-sans)",
+                                }}
+                              >
+                                {d.label}
+                              </span>
+                              <span style={{ fontSize: 11, color: "var(--le-text-muted)" }}>sec</span>
+                            </div>
+                            {isLifeCycle && (
+                              <span
+                                style={{
+                                  marginTop: 12,
+                                  display: "inline-block",
+                                  fontSize: 10,
+                                  letterSpacing: "0.16em",
+                                  textTransform: "uppercase",
+                                  color: "var(--le-accent)",
+                                  fontFamily: "var(--le-font-mono)",
+                                }}
+                              >
+                                — Bundle save $25
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: 16, fontWeight: 500, letterSpacing: "-0.01em" }}>${p}</span>
+                        </div>
+                      </SelectTile>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section style={sectionStyle}>
+                <SectionHeader n="03" title="Output format" />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+                  {ORIENTATIONS.map((o) => (
+                    <SelectTile
+                      key={o.id}
+                      active={selectedOrientation === o.id}
+                      onClick={() => setSelectedOrientation(o.id)}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                        <span
+                          style={{
+                            fontFamily: "var(--le-font-display)",
+                            fontSize: 26,
+                            fontStyle: "italic",
+                            letterSpacing: "-0.02em",
+                            lineHeight: 1,
+                          }}
+                        >
+                          {o.label}
+                        </span>
+                        <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 11, color: "var(--le-text-muted)" }}>
+                          {o.dim}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: "var(--le-text-muted)" }}>{o.sub}</span>
+                        {o.extra > 0 && !isLifeCycle && (
+                          <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 11, color: "var(--le-text-muted)" }}>+${o.extra}</span>
+                        )}
+                        {o.extra > 0 && isLifeCycle && (
+                          <span
+                            style={{
+                              fontFamily: "var(--le-font-mono)",
+                              fontSize: 10,
+                              letterSpacing: "0.16em",
+                              textTransform: "uppercase",
+                              color: "var(--le-accent)",
+                            }}
+                          >
+                            Included
+                          </span>
+                        )}
+                      </div>
+                    </SelectTile>
+                  ))}
+                </div>
+              </section>
+            </motion.div>
+          )}
+
+          {/* Step 1 — Add-ons */}
+          {step === 1 && (
+            <motion.div
+              key="step-1"
+              variants={stepFade}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              style={{ display: "flex", flexDirection: "column", gap: 32 }}
+            >
+              <section>
+                <SectionHeader n="04" title="Refine the experience" />
+                <p style={{ fontSize: 13, color: "var(--le-text-muted)", maxWidth: 480, marginTop: -12, marginBottom: 20 }}>
+                  Each add-on is optional. Voice clone and AI voiceover are mutually exclusive — pick one or neither.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    {
+                      active: addVoiceover,
+                      toggle: () => {
+                        setAddVoiceover(!addVoiceover);
+                        if (!addVoiceover) setAddVoiceClone(false);
+                      },
+                      label: "AI voiceover",
+                      desc: "Studio-quality narration generated from a script tailored to the listing.",
+                    },
+                    {
+                      active: addVoiceClone,
+                      toggle: () => {
+                        setAddVoiceClone(!addVoiceClone);
+                        if (!addVoiceClone) setAddVoiceover(false);
+                      },
+                      label: "Voice clone",
+                      desc: "Use a sample of your own voice. Setup happens after submission.",
+                    },
+                    {
+                      active: addCustomRequest,
+                      toggle: () => setAddCustomRequest(!addCustomRequest),
+                      label: "Custom request",
+                      desc: "Specific shots, music, or pacing notes for the production team.",
+                    },
+                  ].map((addon) => (
+                    <button
+                      key={addon.label}
+                      type="button"
+                      onClick={addon.toggle}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "18px 22px",
+                        border: `1px solid ${addon.active ? "var(--le-text)" : "var(--le-border-strong)"}`,
+                        background: addon.active ? "var(--le-bg-sunken)" : "var(--le-bg)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        color: "var(--le-text)",
+                        fontFamily: "var(--le-font-sans)",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: "-0.005em" }}>{addon.label}</div>
+                        <div style={{ fontSize: 12, color: "var(--le-text-muted)", marginTop: 4, maxWidth: 560 }}>
+                          {addon.desc}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 11, color: "var(--le-text-muted)" }}>+ $15</span>
+                        <div
+                          style={{
+                            width: 32,
+                            height: 18,
+                            borderRadius: 999,
+                            background: addon.active ? "var(--le-text)" : "var(--le-border-strong)",
+                            position: "relative",
+                            transition: "all .2s",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 2,
+                              left: addon.active ? 16 : 2,
+                              width: 14,
+                              height: 14,
+                              borderRadius: "50%",
+                              background: addon.active ? "var(--le-bg)" : "var(--le-bg)",
+                              transition: "all .2s",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence>
+                  {addCustomRequest && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.5, ease: EASE }}
+                      style={{ overflow: "hidden" }}
+                    >
+                      <div style={{ marginTop: 16 }}>
+                        <Label className="le-eyebrow">Custom notes</Label>
+                        <textarea
+                          value={customRequestText}
+                          onChange={(e) => setCustomRequestText(e.target.value)}
+                          placeholder="Specific shots, music style, pacing preferences, brand language…"
+                          rows={5}
+                          style={{
+                            marginTop: 10,
+                            width: "100%",
+                            padding: "12px 14px",
+                            minHeight: 120,
+                            border: "1px solid var(--le-border-strong)",
+                            background: "var(--le-bg)",
+                            color: "var(--le-text)",
+                            fontFamily: "var(--le-font-sans)",
+                            fontSize: 14,
+                            resize: "vertical",
+                            borderRadius: 2,
+                          }}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </section>
+            </motion.div>
+          )}
+
+          {/* Step 2 — Property */}
+          {step === 2 && (
+            <motion.div key="step-2" variants={stepFade} initial="hidden" animate="visible" exit="exit">
+              <SectionHeader n="05" title="Listing details" />
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, 1fr)",
+                  columnGap: 28,
+                  rowGap: 28,
+                  marginTop: 8,
+                }}
+              >
+                <FormField label="Property address" full>
+                  <Input
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="208 Berry Street, Brooklyn, NY"
+                  />
+                </FormField>
+                <FormField label="Listing price">
+                  <Input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="2400000"
+                  />
+                </FormField>
+                <FormField label="Bedrooms">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={bedrooms}
+                    onChange={(e) => setBedrooms(e.target.value)}
+                    placeholder="3"
+                  />
+                </FormField>
+                <FormField label="Bathrooms">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={bathrooms}
+                    onChange={(e) => setBathrooms(e.target.value)}
+                    placeholder="2.5"
+                  />
+                </FormField>
+                <FormField label="Listing agent">
+                  <Input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="Jane Smith" />
+                </FormField>
+                {needsDaysOnMarket && (
+                  <FormField label="Days on market">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={daysOnMarket}
+                      onChange={(e) => setDaysOnMarket(e.target.value)}
+                      placeholder="14"
+                    />
+                  </FormField>
+                )}
+                {needsSoldPrice && (
+                  <FormField label="Sold price">
+                    <Input
+                      type="number"
+                      value={soldPrice}
+                      onChange={(e) => setSoldPrice(e.target.value)}
+                      placeholder="2500000"
+                    />
+                  </FormField>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Step 3 — Photos */}
+          {step === 3 && (
+            <motion.div
+              key="step-3"
+              variants={stepFade}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              style={{ display: "flex", flexDirection: "column", gap: 24 }}
+            >
+              <SectionHeader
+                n="06"
+                title="Photos"
+                aside={
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 14 }}>
+                    <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 12, color: "var(--le-text-muted)" }}>
+                      {files.length} / 60
+                    </span>
+                    {files.length >= 10 && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 11,
+                          letterSpacing: "0.14em",
+                          textTransform: "uppercase",
+                          color: "oklch(0.55 0.15 155)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "oklch(0.6 0.15 155)" }} />
+                        Minimum met
+                      </span>
+                    )}
+                    {files.length > 0 && (
+                      <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 11, color: "var(--le-text-muted)" }}>
+                        {formatSize(totalSize)}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  handleFiles(e.dataTransfer.files);
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  aspectRatio: "16/7",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                  border: `1.5px dashed ${isDragging ? "var(--le-text)" : "var(--le-border-strong)"}`,
+                  background: isDragging ? "var(--le-bg-sunken)" : "var(--le-bg)",
+                  cursor: "pointer",
+                  transition: "all 0.4s ease",
+                }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.heic,.webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => e.target.files && handleFiles(e.target.files)}
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  {...({ webkitdirectory: "", directory: "" } as React.HTMLAttributes<HTMLInputElement>)}
+                  style={{ display: "none" }}
+                  onChange={(e) => e.target.files && handleFiles(e.target.files)}
+                />
+                <div>
+                  <LEIcon name="upload" size={28} color="var(--le-text-muted)" />
+                  <p style={{ marginTop: 20, fontSize: 16, fontWeight: 500, letterSpacing: "-0.01em" }}>
+                    Drop photos to upload
+                  </p>
+                  <p style={{ marginTop: 4, fontSize: 12, color: "var(--le-text-muted)" }}>or click to browse files</p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      folderInputRef.current?.click();
+                    }}
+                    style={{
+                      marginTop: 20,
+                      fontSize: 11,
+                      letterSpacing: "0.16em",
+                      textTransform: "uppercase",
+                      color: "var(--le-text)",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 4,
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: "var(--le-font-mono)",
+                    }}
+                  >
+                    Or import an entire folder
+                  </button>
+                </div>
+              </div>
+
+              {files.length > 0 && files.length < 10 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div style={{ flex: 1, height: 1, background: "var(--le-border)" }}>
+                    <motion.div
+                      style={{ height: "100%", background: "var(--le-text)" }}
+                      animate={{ width: `${(files.length / 10) * 100}%` }}
+                      transition={{ duration: 0.5, ease: EASE }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontFamily: "var(--le-font-mono)",
+                      fontSize: 11,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      color: "var(--le-text)",
+                    }}
+                  >
+                    {10 - files.length} more required
+                  </span>
+                </div>
+              )}
+
+              {files.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
+                  <AnimatePresence>
+                    {files.map((f) => (
+                      <motion.div
+                        key={f.id}
+                        initial={{ opacity: 0, scale: 0.85 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.85 }}
+                        transition={{ duration: 0.4, ease: EASE }}
+                        style={{
+                          position: "relative",
+                          aspectRatio: "4/3",
+                          overflow: "hidden",
+                          background: "var(--le-bg-sunken)",
+                        }}
+                      >
+                        <img src={f.preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFile(f.id);
+                          }}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(0,0,0,0.7)",
+                            opacity: 0,
+                            transition: "opacity 0.3s ease",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "#fff",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
+                          aria-label="Remove photo"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {submitError && (
+                <div
+                  style={{
+                    padding: "14px 18px",
+                    border: `1px solid var(--le-danger)`,
+                    background: "var(--le-danger-soft)",
+                    color: "var(--le-danger)",
+                    fontSize: 12,
+                  }}
+                >
+                  {submitError}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* STICKY SUBMIT BAR */}
+      <div
+        style={{
+          position: "sticky",
+          bottom: 0,
+          background: "var(--le-bg)",
+          borderTop: "1px solid var(--le-border)",
+          padding: "18px 48px",
+          zIndex: 30,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
+        <div style={{ display: "flex", gap: 40, alignItems: "center", flexWrap: "wrap" }}>
+          <MetaPair l="Total" v={`$${totalPrice}`} />
+          {selectedDur && <MetaPair l="Duration" v={`${selectedDur.label}s`} />}
+          {step === 0 && step0Valid && (
+            <button
+              type="button"
+              onClick={() => setShowSavePreset(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 11,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "var(--le-text-muted)",
+                fontFamily: "var(--le-font-mono)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              Save as preset
             </button>
           )}
         </div>
 
-        {/* Step rail */}
-        <div className="mx-auto max-w-[1080px] px-8 pb-6 md:px-12">
-          <div className="flex items-center gap-3">
-            {STEPS.map((label, i) => {
-              const active = i === step;
-              const done = i < step;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => {
-                    if (i < step || (i === step + 1 && canAdvance)) setStep(i as StepId);
-                  }}
-                  className="group flex flex-1 flex-col items-start gap-2 text-left"
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className={`tabular text-[10px] font-medium ${
-                        active || done ? "text-foreground" : "text-muted-foreground/50"
-                      }`}
-                    >
-                      0{i + 1}
-                    </span>
-                    <span
-                      className={`text-[11px] font-medium uppercase tracking-[0.18em] transition-colors ${
-                        active ? "text-foreground" : done ? "text-foreground/60" : "text-muted-foreground/50"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                    {done && <Check className="h-3 w-3 text-accent" />}
-                  </span>
-                  <span
-                    className={`h-px w-full transition-all duration-700 ease-cinematic ${
-                      active ? "bg-foreground" : done ? "bg-foreground/60" : "bg-border"
-                    }`}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Step body */}
-      <div className="flex-1 overflow-x-hidden">
-        <div className="mx-auto max-w-[1080px] px-8 py-16 md:px-12 md:py-24">
-          <AnimatePresence mode="wait">
-            {/* ─── Step 0 — Style ─── */}
-            {step === 0 && (
-              <motion.div key="step-0" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-16">
-                {/* Package */}
-                <section>
-                  <span className="label text-muted-foreground">— Package</span>
-                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Choose a story.</h2>
-                  <div className="mt-8 grid gap-px bg-border md:grid-cols-2">
-                    {packages.map((pkg) => {
-                      const Icon = pkg.icon;
-                      const sel = selectedPackage === pkg.id;
-                      return (
-                        <button
-                          key={pkg.id}
-                          type="button"
-                          onClick={() => setSelectedPackage(pkg.id)}
-                          className={`group relative flex items-start gap-5 bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
-                            sel ? "bg-secondary" : "hover:bg-secondary/40"
-                          }`}
-                        >
-                          <span
-                            className={`flex h-12 w-12 shrink-0 items-center justify-center border transition-colors duration-500 ${
-                              sel ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground group-hover:border-foreground/40"
-                            }`}
-                          >
-                            <Icon className="h-5 w-5" strokeWidth={1.5} />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline gap-3">
-                              <h3 className="text-base font-semibold tracking-[-0.01em]">{pkg.name}</h3>
-                              {pkg.badge && (
-                                <span className="label text-accent">— {pkg.badge}</span>
-                              )}
-                            </div>
-                            <p className="mt-1.5 text-xs text-muted-foreground">{pkg.desc}</p>
-                          </div>
-                          {sel && <Check className="h-4 w-4 text-foreground" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                {/* Duration */}
-                <section>
-                  <span className="label text-muted-foreground">— Duration</span>
-                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Set the length.</h2>
-                  <div className="mt-8 grid gap-px bg-border md:grid-cols-3">
-                    {durations.map((d) => {
-                      const sel = selectedDuration === d.id;
-                      const p = isLifeCycle ? d.lifeCyclePrice : d.price;
-                      return (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => setSelectedDuration(d.id)}
-                          className={`group flex items-end justify-between bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
-                            sel ? "bg-secondary" : "hover:bg-secondary/40"
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-baseline gap-1">
-                              <span className="tabular text-4xl font-semibold tracking-[-0.03em]">{d.label}</span>
-                              <span className="text-xs text-muted-foreground">sec</span>
-                            </div>
-                            {isLifeCycle && (
-                              <span className="label mt-3 inline-block text-accent">— Bundle save $25</span>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <span className="tabular text-base font-semibold">${p}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                {/* Orientation */}
-                <section>
-                  <span className="label text-muted-foreground">— Format</span>
-                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Pick your canvas.</h2>
-                  <div className="mt-8 grid gap-px bg-border md:grid-cols-3">
-                    {orientations.map((o) => {
-                      const Icon = o.icon;
-                      const sel = selectedOrientation === o.id;
-                      return (
-                        <button
-                          key={o.id}
-                          type="button"
-                          onClick={() => setSelectedOrientation(o.id)}
-                          className={`group flex items-center justify-between bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
-                            sel ? "bg-secondary" : "hover:bg-secondary/40"
-                          }`}
-                        >
-                          <div className="flex items-center gap-5">
-                            <span
-                              className={`flex h-12 w-12 items-center justify-center border ${
-                                sel ? "border-foreground text-foreground" : "border-border text-muted-foreground group-hover:border-foreground/40"
-                              }`}
-                            >
-                              <Icon className="h-5 w-5" strokeWidth={1.5} />
-                            </span>
-                            <div>
-                              <div className="text-base font-semibold tracking-[-0.01em]">{o.label}</div>
-                              <div className="tabular text-[11px] text-muted-foreground">{o.ratio}</div>
-                            </div>
-                          </div>
-                          {o.extra > 0 && !isLifeCycle && (
-                            <span className="tabular text-xs text-muted-foreground">+${o.extra}</span>
-                          )}
-                          {o.extra > 0 && isLifeCycle && (
-                            <span className="label text-accent">— Included</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              </motion.div>
-            )}
-
-            {/* ─── Step 1 — Add-ons ─── */}
-            {step === 1 && (
-              <motion.div key="step-1" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-12">
-                <section>
-                  <span className="label text-muted-foreground">— Optional</span>
-                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Refine the experience.</h2>
-                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                    Each add-on is optional. Voice clone and AI voiceover are mutually exclusive — pick one or neither.
-                  </p>
-
-                  <div className="mt-10 grid gap-px bg-border">
-                    {[
-                      {
-                        active: addVoiceover,
-                        toggle: () => {
-                          setAddVoiceover(!addVoiceover);
-                          if (!addVoiceover) setAddVoiceClone(false);
-                        },
-                        icon: Mic,
-                        label: "AI voiceover",
-                        desc: "Studio-quality narration generated from a script tailored to the listing.",
-                      },
-                      {
-                        active: addVoiceClone,
-                        toggle: () => {
-                          setAddVoiceClone(!addVoiceClone);
-                          if (!addVoiceClone) setAddVoiceover(false);
-                        },
-                        icon: Mic,
-                        label: "Voice clone",
-                        desc: "Use a sample of your own voice. Setup happens after submission.",
-                      },
-                      {
-                        active: addCustomRequest,
-                        toggle: () => setAddCustomRequest(!addCustomRequest),
-                        icon: Sparkles,
-                        label: "Custom request",
-                        desc: "Specific shots, music, or pacing notes for the production team.",
-                      },
-                    ].map((addon) => {
-                      const Icon = addon.icon;
-                      return (
-                        <button
-                          key={addon.label}
-                          type="button"
-                          onClick={addon.toggle}
-                          className={`group flex items-start gap-6 bg-background p-6 text-left transition-all duration-500 ease-cinematic ${
-                            addon.active ? "bg-secondary" : "hover:bg-secondary/40"
-                          }`}
-                        >
-                          <span
-                            className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center border transition-colors duration-500 ${
-                              addon.active
-                                ? "border-foreground bg-foreground text-background"
-                                : "border-border text-muted-foreground group-hover:border-foreground/40"
-                            }`}
-                          >
-                            <Icon className="h-4 w-4" strokeWidth={1.5} />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-3">
-                              <h3 className="text-base font-semibold tracking-[-0.01em]">{addon.label}</h3>
-                              <span className="tabular text-xs text-muted-foreground">+ $15</span>
-                            </div>
-                            <p className="mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">{addon.desc}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <AnimatePresence>
-                    {addCustomRequest && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.5, ease: EASE }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-6">
-                          <Label className="label text-muted-foreground">Custom notes</Label>
-                          <textarea
-                            value={customRequestText}
-                            onChange={(e) => setCustomRequestText(e.target.value)}
-                            placeholder="Specific shots, music style, pacing preferences, brand language…"
-                            rows={5}
-                            className="mt-3 flex min-h-[120px] w-full rounded-none border border-border bg-transparent px-4 py-3 text-sm transition-colors placeholder:text-muted-foreground/60 focus-visible:border-accent focus-visible:outline-none"
-                          />
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </section>
-              </motion.div>
-            )}
-
-            {/* ─── Step 2 — Property ─── */}
-            {step === 2 && (
-              <motion.div key="step-2" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-12">
-                <section>
-                  <span className="label text-muted-foreground">— Property</span>
-                  <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Listing details.</h2>
-
-                  <div className="mt-10 space-y-8">
-                    <div>
-                      <Label className="label text-muted-foreground">Address</Label>
-                      <Input
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        placeholder="208 Berry Street, Brooklyn, NY"
-                        className="mt-3"
-                      />
-                    </div>
-
-                    <div className="grid gap-6 md:grid-cols-3">
-                      <div>
-                        <Label className="label text-muted-foreground">Price</Label>
-                        <div className="relative mt-3">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
-                            $
-                          </span>
-                          <Input
-                            type="number"
-                            value={price}
-                            onChange={(e) => setPrice(e.target.value)}
-                            placeholder="2,400,000"
-                            className="tabular pl-7"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="label text-muted-foreground">Bedrooms</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={bedrooms}
-                          onChange={(e) => setBedrooms(e.target.value)}
-                          placeholder="3"
-                          className="tabular mt-3"
-                        />
-                      </div>
-                      <div>
-                        <Label className="label text-muted-foreground">Bathrooms</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.5}
-                          value={bathrooms}
-                          onChange={(e) => setBathrooms(e.target.value)}
-                          placeholder="2.5"
-                          className="tabular mt-3"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="label text-muted-foreground">Listing agent</Label>
-                      <Input
-                        value={agent}
-                        onChange={(e) => setAgent(e.target.value)}
-                        placeholder="Jane Smith"
-                        className="mt-3"
-                      />
-                    </div>
-
-                    {needsDaysOnMarket && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, ease: EASE }}
-                        className="grid gap-6 md:grid-cols-2"
-                      >
-                        <div>
-                          <Label className="label text-muted-foreground">Days on market</Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={daysOnMarket}
-                            onChange={(e) => setDaysOnMarket(e.target.value)}
-                            placeholder="14"
-                            className="tabular mt-3"
-                          />
-                        </div>
-                        {needsSoldPrice && (
-                          <div>
-                            <Label className="label text-muted-foreground">Sold price</Label>
-                            <div className="relative mt-3">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60">
-                                $
-                              </span>
-                              <Input
-                                type="number"
-                                value={soldPrice}
-                                onChange={(e) => setSoldPrice(e.target.value)}
-                                placeholder="2,500,000"
-                                className="tabular pl-7"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-                  </div>
-                </section>
-              </motion.div>
-            )}
-
-            {/* ─── Step 3 — Photos ─── */}
-            {step === 3 && (
-              <motion.div key="step-3" variants={stepFade} initial="hidden" animate="visible" exit="exit" className="space-y-10">
-                <section>
-                  <div className="flex items-baseline justify-between">
-                    <div>
-                      <span className="label text-muted-foreground">— Source material</span>
-                      <h2 className="mt-4 text-xl font-semibold tracking-[-0.01em]">Bring in the photos.</h2>
-                      <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                        Drop or browse 10 to 60 high-resolution images. JPG, PNG, HEIC, or WebP.
-                      </p>
-                    </div>
-                    {files.length > 0 && (
-                      <div className="text-right">
-                        <span className="tabular block text-2xl font-semibold tracking-[-0.02em]">{files.length}</span>
-                        <span className="label text-muted-foreground">{formatSize(totalSize)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Drop zone */}
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragging(true);
-                    }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setIsDragging(false);
-                      handleFiles(e.dataTransfer.files);
-                    }}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`relative mt-10 flex aspect-[16/7] cursor-pointer items-center justify-center border-2 border-dashed text-center transition-all duration-500 ease-cinematic ${
-                      isDragging
-                        ? "border-accent bg-accent/5"
-                        : "border-border bg-secondary/30 hover:border-foreground/40 hover:bg-secondary/60"
-                    }`}
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept=".jpg,.jpeg,.png,.heic,.webp"
-                      className="hidden"
-                      onChange={(e) => e.target.files && handleFiles(e.target.files)}
-                    />
-                    <input
-                      ref={folderInputRef}
-                      type="file"
-                      {...({ webkitdirectory: "", directory: "" } as React.HTMLAttributes<HTMLInputElement>)}
-                      className="hidden"
-                      onChange={(e) => e.target.files && handleFiles(e.target.files)}
-                    />
-                    <div>
-                      <Camera className="mx-auto h-8 w-8 text-muted-foreground" strokeWidth={1.5} />
-                      <p className="mt-5 text-base font-semibold tracking-[-0.01em]">Drop photos to upload</p>
-                      <p className="mt-1 text-xs text-muted-foreground">or click to browse files</p>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          folderInputRef.current?.click();
-                        }}
-                        className="mt-6 text-[11px] font-medium uppercase tracking-[0.15em] text-accent underline underline-offset-4 hover:text-accent/80"
-                      >
-                        Or import an entire folder
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Progress */}
-                  {files.length > 0 && files.length < 10 && (
-                    <div className="mt-6 flex items-center gap-4">
-                      <div className="h-px flex-1 overflow-hidden bg-border">
-                        <motion.div
-                          className="h-full bg-foreground"
-                          animate={{ width: `${(files.length / 10) * 100}%` }}
-                          transition={{ duration: 0.5, ease: EASE }}
-                        />
-                      </div>
-                      <span className="tabular label text-accent">{10 - files.length} more required</span>
-                    </div>
-                  )}
-
-                  {/* Thumbnails */}
-                  {files.length > 0 && (
-                    <div className="mt-8 grid grid-cols-4 gap-1 sm:grid-cols-6 md:grid-cols-8">
-                      <AnimatePresence>
-                        {files.map((f) => (
-                          <motion.div
-                            key={f.id}
-                            initial={{ opacity: 0, scale: 0.85 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.85 }}
-                            transition={{ duration: 0.4, ease: EASE }}
-                            className="group relative aspect-square overflow-hidden bg-secondary"
-                          >
-                            <img src={f.preview} alt="" className="h-full w-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeFile(f.id);
-                              }}
-                              className="absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                              aria-label="Remove photo"
-                            >
-                              <X className="h-3.5 w-3.5 text-white" />
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </section>
-
-                {submitError && (
-                  <div className="border border-destructive/40 bg-destructive/10 p-5">
-                    <p className="text-xs text-destructive">{submitError}</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Sticky footer */}
-      <div className="sticky bottom-0 z-30 border-t border-border bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-6 px-8 py-5 md:px-12">
-          <div className="flex items-center gap-8">
-            <div>
-              <span className="label text-muted-foreground">Total</span>
-              <div className="tabular text-2xl font-semibold tracking-[-0.02em]">${totalPrice}</div>
-            </div>
-            {step === 0 && step0Valid && (
-              <button
-                type="button"
-                onClick={() => setShowSavePreset(true)}
-                className="hidden items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground md:flex"
-              >
-                <Bookmark className="h-3.5 w-3.5" /> Save as preset
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            {step > 0 && (
-              <Button type="button" variant="outline" onClick={back} disabled={submitting}>
-                <ArrowLeft className="h-4 w-4" /> Back
-              </Button>
-            )}
-            {step < 3 ? (
-              <Button type="button" onClick={next} disabled={!canAdvance}>
-                Continue
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            ) : (
-              <Button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting} size="lg">
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {uploadProgress
-                      ? `${uploadProgress.uploaded} / ${uploadProgress.total}`
-                      : "Submitting…"}
-                  </>
-                ) : (
-                  <>
-                    Generate video
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {step > 0 && (
+            <button
+              type="button"
+              onClick={back}
+              disabled={submitting}
+              className="le-btn le-btn-ghost"
+              style={{ padding: "12px 18px", fontSize: 13, borderRadius: 2 }}
+            >
+              <LEIcon name="arrow" size={13} /> Back
+            </button>
+          )}
+          {step < 3 ? (
+            <button
+              type="button"
+              onClick={next}
+              disabled={!canAdvance}
+              className="le-btn le-btn-primary"
+              style={{ padding: "12px 20px", fontSize: 13, borderRadius: 2, opacity: canAdvance ? 1 : 0.4 }}
+            >
+              Continue <LEIcon name="arrow" size={13} color="var(--le-accent-fg)" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className="le-btn le-btn-primary"
+              style={{ padding: "14px 22px", fontSize: 13, borderRadius: 2, opacity: canSubmit && !submitting ? 1 : 0.4 }}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {uploadProgress ? `${uploadProgress.uploaded} / ${uploadProgress.total}` : "Submitting…"}
+                </>
+              ) : (
+                <>
+                  Generate video <LEIcon name="arrow" size={13} color="var(--le-accent-fg)" />
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -879,13 +1217,19 @@ const Upload = () => {
       <Dialog open={showSavePreset} onOpenChange={setShowSavePreset}>
         <DialogContent className="max-w-sm rounded-none">
           <DialogHeader>
-            <DialogTitle className="text-lg font-semibold tracking-[-0.01em]">
+            <DialogTitle
+              className="text-lg font-medium tracking-[-0.01em]"
+              style={{ fontFamily: "var(--le-font-sans)" }}
+            >
               {presetSaved ? "Saved." : "Save as preset"}
             </DialogTitle>
           </DialogHeader>
           {presetSaved ? (
             <div className="flex flex-col items-center gap-4 py-6">
-              <div className="flex h-12 w-12 items-center justify-center border border-accent/40 bg-accent/10 text-accent">
+              <div
+                className="flex h-12 w-12 items-center justify-center"
+                style={{ border: "1px solid var(--le-border-strong)", color: "var(--le-text)" }}
+              >
                 <CheckCircle2 className="h-5 w-5" strokeWidth={1.5} />
               </div>
             </div>
@@ -899,9 +1243,15 @@ const Upload = () => {
                 onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
               />
               <DialogFooter>
-                <Button onClick={handleSavePreset} disabled={!presetName.trim()}>
+                <button
+                  type="button"
+                  onClick={handleSavePreset}
+                  disabled={!presetName.trim()}
+                  className="le-btn le-btn-primary"
+                  style={{ padding: "10px 18px", fontSize: 13, borderRadius: 2, opacity: presetName.trim() ? 1 : 0.4 }}
+                >
                   Save preset
-                </Button>
+                </button>
               </DialogFooter>
             </>
           )}
@@ -910,5 +1260,50 @@ const Upload = () => {
     </div>
   );
 };
+
+function FormField({
+  label,
+  full,
+  children,
+}: {
+  label: string;
+  full?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ gridColumn: full ? "span 4" : undefined }}>
+      <div style={eyebrow}>{label}</div>
+      <div
+        style={{
+          marginTop: 10,
+          paddingBottom: 2,
+          borderBottom: "1px solid var(--le-border-strong)",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function MetaPair({ l, v }: { l: string; v: string }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: "var(--le-text-faint)",
+          fontFamily: "var(--le-font-mono)",
+          fontWeight: 500,
+        }}
+      >
+        {l}
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 500, marginTop: 4, letterSpacing: "-0.01em" }}>{v}</div>
+    </div>
+  );
+}
 
 export default Upload;

@@ -6,6 +6,7 @@ import { ArrowLeft, Download, RotateCcw, Copy, Check, Loader2, AlertTriangle, St
 import { formatCents, formatDuration } from "@/lib/types";
 import type { Property, Photo, Scene, PipelineLog, CostEvent, SceneRating } from "@/lib/types";
 import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts, rateScene, resubmitScene } from "@/lib/api";
+import { LEIcon, StatusPill, type StatusPillKind } from "@/components/le";
 
 const FAILURE_TAGS = [
   "hallucinated architecture",
@@ -410,76 +411,162 @@ const PropertyDetail = () => {
   // Primary image: prefer the first selected photo, fall back to the first
   // photo overall. photos[] is already ordered by created_at from fetchProperty.
   const primaryPhoto = photos.find((p) => p.selected) ?? photos[0] ?? null;
+  const statusPillKind: StatusPillKind =
+    property.status === "complete"
+      ? "pass"
+      : property.status === "failed" || property.status === "needs_review"
+      ? "review"
+      : property.status === "queued"
+      ? "queued"
+      : "generating";
+  const trackingId = property.id.slice(0, 8).toUpperCase();
 
   return (
-    <div className="space-y-16">
-      {/* Header */}
-      <div>
-        <Link
-          to="/dashboard/properties"
-          className="label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" /> All listings
-        </Link>
-        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className={`label ${tone}`}>{property.status.replace("_", " ")}</span>
-              {isPolling && (
-                <span className="label inline-flex items-center gap-1.5 text-accent">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent"></span>
-                  </span>
-                  Live
-                </span>
-              )}
-            </div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em] md:text-4xl">
-              {property.address}
-            </h2>
-            <p className="tabular mt-3 text-xs text-muted-foreground">
-              {property.bedrooms}bd · {property.bathrooms}ba · ${property.price.toLocaleString()} ·{" "}
-              {property.listing_agent}
-            </p>
-            <div className="mt-8">
-              <Button variant="outline" onClick={handleRerun} disabled={rerunning}>
-                <RotateCcw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} /> Rerun pipeline
-              </Button>
-            </div>
+    <div className="le-root space-y-12">
+      {/* Cinematic hero strip */}
+      <div style={{ position: "relative", height: 300, overflow: "hidden", background: "#000", marginBottom: 8 }}>
+        {primaryPhoto ? (
+          <img
+            src={primaryPhoto.file_url}
+            alt={primaryPhoto.file_name || property.address}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              filter: "brightness(0.55)",
+            }}
+          />
+        ) : (
+          <div className="le-img-placeholder" style={{ position: "absolute", inset: 0 }}>
+            — No photos yet
           </div>
-
-          {/* Primary listing image */}
-          <div className="order-first lg:order-last">
-            <div className="relative aspect-[4/3] w-full overflow-hidden border border-border bg-secondary">
-              {primaryPhoto ? (
-                <img
-                  src={primaryPhoto.file_url}
-                  alt={primaryPhoto.file_name || property.address}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-muted-foreground/40">
-                  <span className="label">— No photos yet</span>
-                </div>
-              )}
-              {primaryPhoto && (
-                <span className="label absolute left-3 top-3 bg-black/60 px-2 py-1 text-white backdrop-blur-sm">
-                  Primary
-                </span>
-              )}
+        )}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(180deg, rgba(5,7,14,0.6) 0%, rgba(5,7,14,0.2) 40%, rgba(5,7,14,0.85) 100%)",
+          }}
+        />
+        <div
+          style={{
+            position: "relative",
+            zIndex: 2,
+            height: "100%",
+            padding: "24px 32px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            color: "#fff",
+          }}
+        >
+          <Link
+            to="/dashboard/properties"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 10,
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.7)",
+              textDecoration: "none",
+              fontFamily: "var(--le-font-mono)",
+            }}
+          >
+            <ArrowLeft className="h-3 w-3" /> Properties / <span style={{ color: "#fff" }}>PROP-{trackingId}</span>
+          </Link>
+          <div>
+            <h1
+              style={{
+                fontSize: "clamp(2rem, 5vw, 4.25rem)",
+                lineHeight: 0.98,
+                margin: 0,
+                fontWeight: 500,
+                letterSpacing: "-0.035em",
+                fontFamily: "var(--le-font-sans)",
+              }}
+            >
+              {property.address}
+            </h1>
+            <div
+              style={{
+                display: "flex",
+                gap: 22,
+                marginTop: 14,
+                fontSize: 12,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.75)",
+                fontFamily: "var(--le-font-mono)",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>${property.price.toLocaleString()}</span>
+              <span>
+                {property.bedrooms} BD · {property.bathrooms} BA
+              </span>
+              <span>{property.listing_agent}</span>
             </div>
-            {primaryPhoto && primaryPhoto.room_type && (
-              <p className="label mt-3 text-muted-foreground">
-                {primaryPhoto.room_type.replace(/_/g, " ")}
-                {primaryPhoto.key_features && primaryPhoto.key_features.length > 0 && (
-                  <> · {primaryPhoto.key_features.slice(0, 2).join(" · ")}</>
-                )}
-              </p>
-            )}
           </div>
         </div>
+        <div
+          style={{
+            position: "absolute",
+            right: 32,
+            bottom: 24,
+            zIndex: 2,
+            display: "flex",
+            gap: 6,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleRerun}
+            disabled={rerunning}
+            className="le-btn-glass"
+            style={{
+              padding: "9px 14px",
+              fontSize: 12,
+              borderRadius: 2,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              cursor: "pointer",
+            }}
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${rerunning ? "animate-spin" : ""}`} /> Rerun
+          </button>
+        </div>
+      </div>
+
+      {/* Status strip */}
+      <div
+        style={{
+          padding: "20px 0",
+          borderBottom: "1px solid var(--le-border)",
+          display: "flex",
+          gap: 24,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <StatusPill status={statusPillKind} label={property.status.replace(/_/g, " ").toUpperCase()} />
+        {isPolling && (
+          <span
+            className="le-eyebrow"
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--le-text)" }}
+          >
+            <span className="le-badge-dot le-pulse" style={{ background: "var(--le-text)" }} />
+            Live polling
+          </span>
+        )}
+        <span className={`label ${tone}`} style={{ marginLeft: "auto", fontFamily: "var(--le-font-mono)", fontSize: 11 }}>
+          {trackingId}
+        </span>
       </div>
 
       {/* Stat strip */}
