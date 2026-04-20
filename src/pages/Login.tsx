@@ -4,7 +4,8 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { Mail, Lock, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Wordmark } from "@/components/brand/Wordmark";
 
@@ -13,6 +14,7 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 export default function Login() {
   const { user, profile, loading, signInWithMagicLink } = useAuth();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -27,10 +29,16 @@ export default function Login() {
     setError("");
     setSubmitting(true);
     try {
-      await signInWithMagicLink(email);
-      setSent(true);
+      if (password) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        // Auth state change will trigger the <Navigate> above.
+      } else {
+        await signInWithMagicLink(email);
+        setSent(true);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send magic link");
+      setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
       setSubmitting(false);
     }
@@ -149,6 +157,23 @@ export default function Login() {
                 </div>
               </div>
 
+              <div>
+                <Label htmlFor="password" className="label text-muted-foreground">
+                  Password <span className="normal-case tracking-normal text-muted-foreground/60">— optional, leave blank for magic link</span>
+                </Label>
+                <div className="relative mt-3">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-11"
+                  />
+                </div>
+              </div>
+
               {error && (
                 <div className="border border-destructive/40 bg-destructive/5 p-4">
                   <p className="text-xs text-destructive">{error}</p>
@@ -158,11 +183,11 @@ export default function Login() {
               <Button type="submit" size="lg" className="w-full" disabled={submitting || !email}>
                 {submitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Sending
+                    <Loader2 className="h-4 w-4 animate-spin" /> {password ? "Signing in" : "Sending"}
                   </>
                 ) : (
                   <>
-                    Send magic link
+                    {password ? "Sign in" : "Send magic link"}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}

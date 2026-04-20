@@ -56,6 +56,7 @@ const Index = () => {
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [authFirst, setAuthFirst] = useState("");
   const [authLast, setAuthLast] = useState("");
   const [authBrokerage, setAuthBrokerage] = useState("");
@@ -66,6 +67,7 @@ const Index = () => {
   const openAuth = (tab: "signin" | "signup") => {
     setAuthTab(tab);
     setAuthEmail("");
+    setAuthPassword("");
     setAuthFirst("");
     setAuthLast("");
     setAuthBrokerage("");
@@ -84,6 +86,16 @@ const Index = () => {
     setAuthError("");
     setAuthLoading(true);
     try {
+      // Signin + password → direct login; any other combo → magic link.
+      if (authTab === "signin" && authPassword) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+        setAuthOpen(false);
+        return;
+      }
       const metadata =
         authTab === "signup"
           ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
@@ -807,6 +819,23 @@ const Index = () => {
                   </div>
                 </div>
 
+                {authTab === "signin" && (
+                  <div className="space-y-2">
+                    <Label className="le-eyebrow">
+                      Password{" "}
+                      <span style={{ color: "var(--le-text-faint)", letterSpacing: "normal", textTransform: "none" }}>
+                        — optional, blank sends magic link
+                      </span>
+                    </Label>
+                    <Input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                )}
+
                 {authError && <p className="text-xs" style={{ color: "var(--le-danger)" }}>{authError}</p>}
 
                 <button
@@ -819,7 +848,11 @@ const Index = () => {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      {authTab === "signup" ? "Create account" : "Send magic link"}
+                      {authTab === "signup"
+                        ? "Create account"
+                        : authPassword
+                          ? "Sign in"
+                          : "Send magic link"}
                       <LEIcon name="arrow" size={14} color="var(--le-accent-fg)" />
                     </>
                   )}
