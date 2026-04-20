@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Star } from "lucide-react";
 import type { LabListingScene, LabListingIteration, LabListingPhoto } from "@/lib/labListingsApi";
+import { resolveSceneStatus, type SceneStatusKind } from "@/lib/labSceneStatus";
 
 interface ShotPlanTableProps {
   scenes: LabListingScene[];
@@ -14,13 +15,28 @@ export function ShotPlanTable({ scenes: allScenes, iterations, photos, selectedS
   const photoById = new Map(photos.map((p) => [p.id, p]));
   const [showArchived, setShowArchived] = useState(false);
 
+  const PRIORITY: Record<SceneStatusKind, number> = {
+    needs_rating: 0,
+    failed: 1,
+    iterating: 2,
+    needs_first_render: 3,
+    rendering: 4,
+    done: 5,
+    archived: 6,
+  };
+
   const { scenes, archivedCount } = useMemo(() => {
     const arch = allScenes.filter((s) => s.archived).length;
-    return {
-      scenes: showArchived ? allScenes : allScenes.filter((s) => !s.archived),
-      archivedCount: arch,
-    };
-  }, [allScenes, showArchived]);
+    const visible = showArchived ? allScenes : allScenes.filter((s) => !s.archived);
+    const sorted = [...visible].sort((a, b) => {
+      const sa = resolveSceneStatus({ scene: a, iterations: iterations.filter((i) => i.scene_id === a.id) });
+      const sb = resolveSceneStatus({ scene: b, iterations: iterations.filter((i) => i.scene_id === b.id) });
+      const diff = PRIORITY[sa.kind] - PRIORITY[sb.kind];
+      if (diff !== 0) return diff;
+      return a.scene_number - b.scene_number;
+    });
+    return { scenes: sorted, archivedCount: arch };
+  }, [allScenes, iterations, showArchived]);
 
   return (
     <div className="border border-border">
@@ -43,23 +59,28 @@ export function ShotPlanTable({ scenes: allScenes, iterations, photos, selectedS
           return best === null || i.rating > best ? i.rating : best;
         }, null);
         const cost = sceneIters.reduce((sum, i) => sum + (i.cost_cents ?? 0), 0);
-        const latestStatus = sceneIters.length === 0
-          ? "planned"
-          : sceneIters.some((i) => i.status === "rendering" || i.status === "submitting")
-          ? "rendering"
-          : sceneIters.some((i) => i.status === "rendered" || i.status === "rated")
-          ? "rendered"
-          : sceneIters.some((i) => i.status === "failed")
-          ? "failed"
-          : sceneIters[0].status;
-        const statusColor =
-          latestStatus === "rendered" || latestStatus === "rated"
-            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
-            : latestStatus === "rendering" || latestStatus === "submitting"
-            ? "border-amber-400/40 bg-amber-400/10 text-amber-700"
-            : latestStatus === "failed"
-            ? "border-red-400/40 bg-red-400/10 text-red-700"
-            : "border-border bg-muted text-muted-foreground";
+        const status = resolveSceneStatus({
+          scene: s,
+          iterations: sceneIters,
+        });
+        const statusLabel: Record<SceneStatusKind, string> = {
+          needs_rating: "rate",
+          needs_first_render: "render",
+          rendering: "rendering",
+          iterating: "iterate",
+          failed: "failed",
+          done: "done",
+          archived: "archived",
+        };
+        const statusColor: Record<SceneStatusKind, string> = {
+          needs_rating: "border-teal-500/40 bg-teal-500/10 text-teal-700",
+          needs_first_render: "border-sky-500/40 bg-sky-500/10 text-sky-700",
+          rendering: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+          iterating: "border-violet-500/40 bg-violet-500/10 text-violet-700",
+          failed: "border-red-500/40 bg-red-500/10 text-red-700",
+          done: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
+          archived: "border-border bg-muted text-muted-foreground",
+        };
         const selected = selectedSceneId === s.id;
         return (
           <button
@@ -95,12 +116,9 @@ export function ShotPlanTable({ scenes: allScenes, iterations, photos, selectedS
               {cost > 0 ? `$${(cost / 100).toFixed(2)}` : "—"}
             </span>
             <span className="text-right">
-              <span className={`inline-block border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${statusColor}`}>
-                {latestStatus}
+              <span className={`inline-block border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${statusColor[status.kind]}`}>
+                {statusLabel[status.kind]}
               </span>
-              {s.archived && (
-                <span className="ml-1 inline-block border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">archived</span>
-              )}
             </span>
           </button>
         );
