@@ -91,6 +91,9 @@ export function TopNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // v2 shell mounts its own navigation; suppress the legacy TopNav on /v2/*.
+  if (location.pathname.startsWith("/v2")) return null;
+
   // Index.tsx renders its own hero-style navigation with auth modal hookup.
   if (location.pathname === "/") return null;
 

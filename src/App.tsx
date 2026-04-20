@@ -8,6 +8,7 @@ import { AuthProvider } from "@/lib/auth";
 import { RequireAuth, RequireAdmin } from "@/components/ProtectedRoute";
 import { TopNav } from "@/components/TopNav";
 import Index from "./pages/Index";
+import V2Landing from "./v2/pages/Landing";
 import Upload from "./pages/Upload";
 import Presets from "./pages/Presets";
 import Status from "./pages/Status";
@@ -51,6 +52,7 @@ const App = () => (
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<Index />} />
+              <Route path="/v2" element={<V2Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/status/:id" element={<Status />} />
