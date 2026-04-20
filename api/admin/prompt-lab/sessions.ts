@@ -69,16 +69,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Banner state is based on the LATEST iteration per session,
       // not the union of all iterations. The latest iteration reflects
       // where the user is currently working.
-      const latestBySession = new Map<string, typeof (its ?? [])[number]>();
+      // Banner state based on LATEST iteration per session.
+      const latestBySession: Record<string, any> = {};
       for (const it of its ?? []) {
-        const prev = latestBySession.get(it.session_id);
+        const prev = latestBySession[it.session_id];
         if (!prev || it.iteration_number > prev.iteration_number) {
-          latestBySession.set(it.session_id, it);
+          latestBySession[it.session_id] = it;
         }
       }
-      for (const [sid, latest] of latestBySession) {
+      for (const sid of Object.keys(latestBySession)) {
+        const latest = latestBySession[sid];
         const row = summaries[sid];
-        if (!row) continue;
+        if (!row || !latest) continue;
         if (latest.clip_url && latest.rating == null) {
           row.ready_for_approval = true;
         } else if (latest.director_output_json && !latest.clip_url && !latest.provider_task_id && !latest.render_error && !latest.render_queued_at && latest.rating == null) {
