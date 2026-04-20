@@ -403,7 +403,7 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
   }
 
   return (
-    <div className={`border bg-background p-5 ${scene.archived ? "border-dashed border-border/60 bg-muted/30" : "border-border"}`}>
+    <div data-scene-id={scene.id} className={`border bg-background p-5 ${scene.archived ? "border-dashed border-border/60 bg-muted/30" : "border-border"}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <span className="label text-muted-foreground">Scene {scene.scene_number}</span>

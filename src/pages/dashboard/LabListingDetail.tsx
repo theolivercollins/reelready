@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, RefreshCw, Play, Archive, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NextActionBanner } from "@/components/lab/NextActionBanner";
 import { SceneCard } from "@/components/lab/SceneCard";
 import { ShotPlanTable } from "@/components/lab/ShotPlanTable";
+import { resolveNextAction } from "@/lib/labNextAction";
 import {
   getListing,
   directListing,
@@ -155,6 +157,41 @@ export default function LabListingDetail() {
     return { rendered, totalCents, byModel };
   }, [scenes, iterations]);
 
+  const nextAction = useMemo(() => resolveNextAction({ scenes, iterations }), [scenes, iterations]);
+
+  function handleRateNext(sceneId: string) {
+    setSelectedSceneId(sceneId);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-scene-id="${sceneId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  async function handleRenderBatch(sceneIds: string[]) {
+    setActionLoading("next-action");
+    try {
+      await renderListing(id, { scene_ids: sceneIds });
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function handleRetryFailed(sceneId: string) {
+    setSelectedSceneId(sceneId);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-scene-id="${sceneId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  function handleIterate(sceneId: string) {
+    setSelectedSceneId(sceneId);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-scene-id="${sceneId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
   const selectedScene = scenes.find((s) => s.id === selectedSceneId) ?? null;
   const selectedIterations = selectedScene
     ? iterations.filter((i) => i.scene_id === selectedScene.id).sort((a, b) => a.iteration_number - b.iteration_number)
@@ -233,6 +270,14 @@ export default function LabListingDetail() {
         </div>
       ) : (
         <>
+          <NextActionBanner
+            action={nextAction}
+            busy={actionLoading === "next-action"}
+            onRate={handleRateNext}
+            onRenderBatch={handleRenderBatch}
+            onRetry={handleRetryFailed}
+            onIterate={handleIterate}
+          />
           <ShotPlanTable
             scenes={scenes}
             iterations={iterations}
