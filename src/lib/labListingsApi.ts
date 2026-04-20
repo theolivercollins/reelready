@@ -153,13 +153,83 @@ export async function setSceneUseEndFrame(listingId: string, sceneId: string, us
   });
 }
 
-export async function chatIteration(listingId: string, iterId: string, message: string): Promise<{
-  chat_messages: ChatMessage[];
-  saved_instructions: string[];
-}> {
-  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}/chat`, {
+export type ChatStreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "saved_instruction"; instruction: string }
+  | { type: "done"; chat_messages: ChatMessage[]; saved_instructions: string[] }
+  | { type: "error"; message: string };
+
+export async function chatIterationStream(
+  listingId: string,
+  iterId: string,
+  message: string,
+  onEvent: (evt: ChatStreamEvent) => void,
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}/chat`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
     body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `${res.status} ${res.statusText}`);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("no response stream");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const line = part.trim();
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload) as ChatStreamEvent);
+      } catch {
+        // ignore malformed chunk
+      }
+    }
+  }
+}
+
+export async function clearIterationChat(listingId: string, iterId: string): Promise<void> {
+  await authedFetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}/chat/clear`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function deleteIteration(listingId: string, iterId: string): Promise<void> {
+  await authedFetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function regenerateFromIteration(listingId: string, iterId: string, modelOverride?: string): Promise<{
+  submitted: Array<{ scene_id: string; iteration_id: string; task_id: string }>;
+}> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/render`, {
+    method: "POST",
+    body: JSON.stringify({ source_iteration_id: iterId, model_override: modelOverride }),
+  });
+}
+
+export async function pinChatMessage(listingId: string, sceneId: string, iterationId: string, messageIndex: number, instruction: string): Promise<{
+  scene: { id: string; refinement_notes: string | null };
+}> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}/pin-instruction`, {
+    method: "POST",
+    body: JSON.stringify({ instruction, iteration_id: iterationId, message_index: messageIndex }),
   });
 }
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Loader2, Star, Play, Sparkles, RotateCcw, MessageSquare, Pin, X, Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Star, Play, Sparkles, RotateCcw, MessageSquare, Pin, X, Send, Copy, Trash2, ChevronDown, ChevronRight, Eraser } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PairVisualization } from "./PairVisualization";
@@ -7,10 +7,13 @@ import {
   renderListing,
   rateIteration,
   refineScenePrompt,
-  chatIteration,
-  pinSceneInstruction,
+  chatIterationStream,
+  clearIterationChat,
+  pinChatMessage,
   setSceneRefinementNotes,
   setSceneUseEndFrame,
+  deleteIteration,
+  regenerateFromIteration,
   type LabListingScene,
   type LabListingIteration,
   type LabListingPhoto,
@@ -44,18 +47,204 @@ function Stars({ value, onChange, disabled }: { value: number | null; onChange: 
   );
 }
 
-function IterationRow({ listingId, sceneId, iter, onReload }: {
+function formatTime(ts: string): string {
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return ts;
+  }
+}
+
+function ChatPanel({ listingId, sceneId, iter, hasRefinementNotes, onRegenerate, onReload }: {
   listingId: string;
   sceneId: string;
+  iter: LabListingIteration;
+  hasRefinementNotes: boolean;
+  onRegenerate: () => Promise<void>;
+  onReload: () => void;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>(iter.chat_messages ?? []);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [streamingSaves, setStreamingSaves] = useState<string[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages.length, streamingText]);
+
+  async function send() {
+    const msg = input.trim();
+    if (!msg || busy) return;
+    setBusy(true);
+    setStreamingText("");
+    setStreamingSaves([]);
+    const optimisticUser: ChatMessage = { role: "user", content: msg, ts: new Date().toISOString() };
+    setMessages((m) => [...m, optimisticUser]);
+    setInput("");
+    try {
+      await chatIterationStream(listingId, iter.id, msg, (evt) => {
+        if (evt.type === "text") {
+          setStreamingText((prev) => prev + evt.delta);
+        } else if (evt.type === "saved_instruction") {
+          setStreamingSaves((prev) => [...prev, evt.instruction]);
+        } else if (evt.type === "done") {
+          setMessages(evt.chat_messages);
+          setStreamingText("");
+          setStreamingSaves([]);
+          if (evt.saved_instructions.length > 0) onReload();
+        } else if (evt.type === "error") {
+          setMessages((m) => [...m, { role: "assistant", content: `Error: ${evt.message}`, ts: new Date().toISOString() }]);
+          setStreamingText("");
+        }
+      });
+    } catch (err) {
+      setMessages((m) => [...m, { role: "assistant", content: `Error: ${err instanceof Error ? err.message : String(err)}`, ts: new Date().toISOString() }]);
+      setStreamingText("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    if (!confirm("Clear all chat messages for this iteration?")) return;
+    await clearIterationChat(listingId, iter.id);
+    setMessages([]);
+    onReload();
+  }
+
+  async function pinMessage(idx: number, content: string) {
+    await pinChatMessage(listingId, sceneId, iter.id, idx, content);
+    setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, pinned: true } : msg));
+    onReload();
+  }
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="label text-muted-foreground">Chat with this iteration</span>
+        {messages.length > 0 && (
+          <Button size="sm" variant="ghost" onClick={clear} title="Clear chat">
+            <Eraser className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+
+      <div ref={scrollRef} className="max-h-[400px] space-y-2 overflow-y-auto pr-1">
+        {messages.length === 0 && !streamingText && (
+          <p className="text-[11px] italic text-muted-foreground">Ask about this iteration or tell the system what to change next time. Claude Haiku can save directives that influence future renders of this scene.</p>
+        )}
+        {messages.map((m, i) => (
+          <MessageBubble
+            key={i}
+            msg={m}
+            index={i}
+            onPin={m.role === "user" && !m.pinned ? (content) => pinMessage(i, content) : undefined}
+          />
+        ))}
+        {streamingText && (
+          <MessageBubble
+            msg={{ role: "assistant", content: streamingText, ts: new Date().toISOString() }}
+            index={-1}
+            savedInstructions={streamingSaves}
+            streaming
+          />
+        )}
+        {busy && !streamingText && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full bg-foreground px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-background">AI</span>
+            <span className="inline-flex gap-1">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <Textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder="Ask or instruct... (Enter to send, Shift+Enter for newline)"
+          className="min-h-[44px] text-sm"
+          rows={1}
+        />
+        <Button size="sm" onClick={send} disabled={busy || !input.trim()}>
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+        </Button>
+      </div>
+
+      {hasRefinementNotes && (
+        <div className="mt-2 flex items-center justify-between border border-emerald-500/40 bg-emerald-500/10 p-2 text-xs text-emerald-800">
+          <span>Instructions saved for future renders</span>
+          <Button size="sm" variant="outline" onClick={onRegenerate} className="h-6 border-emerald-700 text-emerald-800 hover:bg-emerald-500/20">
+            <RotateCcw className="mr-1 h-3 w-3" /> Render with new instructions
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageBubble({ msg, index, onPin, savedInstructions, streaming }: {
+  msg: ChatMessage;
+  index: number;
+  onPin?: (content: string) => void;
+  savedInstructions?: string[];
+  streaming?: boolean;
+}) {
+  const isUser = msg.role === "user";
+  return (
+    <div className={`group flex items-start gap-2 text-xs ${isUser ? "justify-end" : ""}`} data-idx={index}>
+      {!isUser && (
+        <span className="mt-0.5 shrink-0 rounded-full bg-foreground px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-background">AI</span>
+      )}
+      <div className={`max-w-[85%] space-y-1 rounded px-2.5 py-2 ${isUser ? "bg-foreground text-background" : "bg-muted"}`}>
+        <div className="whitespace-pre-wrap">
+          {msg.content}
+          {streaming && <span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-current align-middle" />}
+        </div>
+        {savedInstructions && savedInstructions.map((s, i) => (
+          <div key={i} className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-800">
+            <Pin className="h-2.5 w-2.5 fill-current" /> Saved: “{s}”
+          </div>
+        ))}
+        {msg.pinned && isUser && (
+          <div className="inline-flex items-center gap-1 rounded bg-background/20 px-1.5 py-0.5 text-[10px]">
+            <Pin className="h-2.5 w-2.5 fill-current" /> Pinned as future instruction
+          </div>
+        )}
+        <div className="text-[9px] opacity-0 transition-opacity group-hover:opacity-60" title={msg.ts}>
+          {formatTime(msg.ts)}
+        </div>
+      </div>
+      {isUser && onPin && (
+        <button
+          type="button"
+          onClick={() => onPin(msg.content)}
+          title="Pin as instruction for future renders"
+          className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <Pin className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function IterationRow({ listingId, scene, iter, onReload }: {
+  listingId: string;
+  scene: LabListingScene;
   iter: LabListingIteration;
   onReload: () => void;
 }) {
   const [comment, setComment] = useState(iter.user_comment ?? "");
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatInput, setChatInput] = useState("");
-  const [chatBusy, setChatBusy] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(iter.chat_messages ?? []);
-  const [lastSaved, setLastSaved] = useState<string[]>([]);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   async function handleRate(n: number) {
     await rateIteration(listingId, iter.id, { rating: n });
@@ -68,29 +257,37 @@ function IterationRow({ listingId, sceneId, iter, onReload }: {
     onReload();
   }
 
-  async function sendChat() {
-    const msg = chatInput.trim();
-    if (!msg || chatBusy) return;
-    setChatBusy(true);
-    const optimistic: ChatMessage = { role: "user", content: msg, ts: new Date().toISOString() };
-    setMessages((m) => [...m, optimistic]);
-    setChatInput("");
+  async function regenerate(modelOverride?: string) {
+    setBusy(true);
     try {
-      const res = await chatIteration(listingId, iter.id, msg);
-      setMessages(res.chat_messages);
-      setLastSaved(res.saved_instructions);
-      if (res.saved_instructions.length > 0) onReload();
-    } catch (err) {
-      setMessages((m) => [...m, { role: "assistant", content: `Error: ${err instanceof Error ? err.message : String(err)}`, ts: new Date().toISOString() }]);
+      await regenerateFromIteration(listingId, iter.id, modelOverride);
+      onReload();
     } finally {
-      setChatBusy(false);
+      setBusy(false);
     }
   }
 
-  async function pinUserMessage(content: string) {
-    await pinSceneInstruction(listingId, sceneId, content);
+  async function renderWithNotes() {
+    setBusy(true);
+    try {
+      await renderListing(listingId, { scene_ids: [scene.id] });
+      onReload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyPrompt() {
+    try { await navigator.clipboard.writeText(iter.director_prompt); } catch { /* noop */ }
+  }
+
+  async function remove() {
+    if (!confirm(`Delete iteration #${iter.iteration_number}?`)) return;
+    await deleteIteration(listingId, iter.id);
     onReload();
   }
+
+  const otherModel = iter.model_used === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro";
 
   return (
     <div className="border border-border p-3">
@@ -118,6 +315,30 @@ function IterationRow({ listingId, sceneId, iter, onReload }: {
 
       {iter.clip_url && (
         <>
+          <div className="mt-3 flex flex-wrap gap-1">
+            <Button size="sm" variant="outline" onClick={() => regenerate()} disabled={busy} title="Render another iteration with this exact prompt">
+              {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCcw className="mr-1 h-3 w-3" />}
+              Regenerate
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => regenerate(otherModel)} disabled={busy} title={`Render with ${otherModel}`}>
+              Try {otherModel === "kling-v3-pro" ? "Kling" : "Wan"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPromptOpen((o) => !o)}>
+              {promptOpen ? <ChevronDown className="mr-1 h-3 w-3" /> : <ChevronRight className="mr-1 h-3 w-3" />}
+              Prompt
+            </Button>
+            <Button size="sm" variant="ghost" onClick={copyPrompt} title="Copy prompt to clipboard">
+              <Copy className="h-3 w-3" />
+            </Button>
+            <Button size="sm" variant="ghost" onClick={remove} title="Delete this iteration" className="text-destructive hover:text-destructive">
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+
+          {promptOpen && (
+            <pre className="mt-2 whitespace-pre-wrap rounded border border-border bg-muted p-2 font-mono text-[11px] text-foreground">{iter.director_prompt}</pre>
+          )}
+
           <div className="mt-3">
             <span className="label text-muted-foreground">Comment</span>
             <Textarea
@@ -125,62 +346,26 @@ function IterationRow({ listingId, sceneId, iter, onReload }: {
               onChange={(e) => setComment(e.target.value)}
               onBlur={saveComment}
               placeholder="What did you think? (saved on blur)"
-              className="mt-1 min-h-[60px] text-xs"
+              className="mt-1 min-h-[52px] text-xs"
             />
           </div>
 
-          <div className="mt-3 flex items-center justify-between">
+          <div className="mt-2">
             <Button size="sm" variant="ghost" onClick={() => setChatOpen((o) => !o)}>
               <MessageSquare className="mr-1 h-3 w-3" />
-              {chatOpen ? "Hide chat" : `Chat${messages.length > 0 ? ` (${messages.length})` : ""}`}
+              {chatOpen ? "Hide chat" : (iter.chat_messages.length > 0 ? `Chat (${iter.chat_messages.length})` : "Chat")}
             </Button>
           </div>
 
           {chatOpen && (
-            <div className="mt-2 border-t border-border pt-3">
-              {messages.length === 0 && (
-                <p className="text-[11px] text-muted-foreground italic">Ask about this iteration or tell the system what to change next time. The assistant can save instructions that influence future renders of this scene.</p>
-              )}
-              <div className="space-y-2">
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex items-start gap-2 text-xs ${m.role === "user" ? "justify-end" : ""}`}>
-                    {m.role === "assistant" && (
-                      <span className="mt-0.5 shrink-0 rounded-full bg-foreground text-background px-1.5 py-0.5 text-[9px] uppercase tracking-wider">AI</span>
-                    )}
-                    <div className={`max-w-[80%] whitespace-pre-wrap rounded px-2 py-1.5 ${m.role === "user" ? "bg-foreground text-background" : "bg-muted"}`}>
-                      {m.content}
-                    </div>
-                    {m.role === "user" && (
-                      <button
-                        type="button"
-                        onClick={() => pinUserMessage(m.content)}
-                        title="Pin as instruction for future renders"
-                        className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
-                      >
-                        <Pin className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {lastSaved.length > 0 && (
-                <div className="mt-2 border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-700">
-                  Saved for future renders: {lastSaved.join("; ")}
-                </div>
-              )}
-              <div className="mt-2 flex gap-2">
-                <Textarea
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendChat(); } }}
-                  placeholder="Ask or instruct... (Cmd/Ctrl+Enter to send)"
-                  className="min-h-[40px] text-xs"
-                />
-                <Button size="sm" onClick={sendChat} disabled={chatBusy || !chatInput.trim()}>
-                  {chatBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                </Button>
-              </div>
-            </div>
+            <ChatPanel
+              listingId={listingId}
+              sceneId={scene.id}
+              iter={iter}
+              hasRefinementNotes={Boolean(scene.refinement_notes)}
+              onRegenerate={renderWithNotes}
+              onReload={onReload}
+            />
           )}
         </>
       )}
@@ -362,7 +547,7 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
         )}
 
         {iterations.map((iter) => (
-          <IterationRow key={iter.id} listingId={listingId} sceneId={scene.id} iter={iter} onReload={onReload} />
+          <IterationRow key={iter.id} listingId={listingId} scene={scene} iter={iter} onReload={onReload} />
         ))}
       </div>
     </div>

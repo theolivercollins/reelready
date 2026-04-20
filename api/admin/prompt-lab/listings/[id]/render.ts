@@ -14,13 +14,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = String(req.query.id ?? "");
   if (!id) return res.status(400).json({ error: "id required" });
 
-  const body = (req.body ?? {}) as { scene_ids?: string[] | "all"; model_override?: string };
+  const body = (req.body ?? {}) as {
+    scene_ids?: string[] | "all";
+    model_override?: string;
+    source_iteration_id?: string;
+  };
   const supabase = getSupabase();
   const { data: listing } = await supabase.from("prompt_lab_listings").select("model_name").eq("id", id).maybeSingle();
   if (!listing) return res.status(404).json({ error: "listing not found" });
 
   let sceneIds: string[];
-  if (body.scene_ids === "all" || !body.scene_ids) {
+  let sourceIteration: { director_prompt: string } | null = null;
+  if (body.source_iteration_id) {
+    const { data: srcIter } = await supabase.from("prompt_lab_listing_scene_iterations")
+      .select("id, scene_id, director_prompt").eq("id", body.source_iteration_id).maybeSingle();
+    if (!srcIter) return res.status(404).json({ error: "source iteration not found" });
+    sceneIds = [srcIter.scene_id];
+    sourceIteration = { director_prompt: srcIter.director_prompt };
+  } else if (body.scene_ids === "all" || !body.scene_ids) {
     const { data } = await supabase.from("prompt_lab_listing_scenes").select("id").eq("listing_id", id);
     sceneIds = (data ?? []).map((s) => s.id);
   } else {
@@ -35,9 +46,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select("id, photo_id, end_image_url, director_prompt, refinement_notes, use_end_frame").eq("id", sceneId).maybeSingle();
     if (!scene) continue;
     const effectiveEndImage = scene.use_end_frame && scene.end_image_url ? scene.end_image_url : undefined;
-    const effectivePrompt = scene.refinement_notes
-      ? `${scene.director_prompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}`
-      : scene.director_prompt;
+    // When regenerating from a specific iteration, reuse THAT exact
+    // prompt — skip the refinement-notes concat since the source prompt
+    // may already reflect prior refinements (or user may explicitly want
+    // the same prompt verbatim).
+    const basePrompt = sourceIteration ? sourceIteration.director_prompt : scene.director_prompt;
+    const effectivePrompt = sourceIteration
+      ? basePrompt
+      : (scene.refinement_notes ? `${basePrompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}` : basePrompt);
     const { data: photo } = await supabase.from("prompt_lab_listing_photos")
       .select("image_url").eq("id", scene.photo_id).maybeSingle();
     if (!photo) continue;

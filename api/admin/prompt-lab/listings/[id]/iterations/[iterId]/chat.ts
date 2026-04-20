@@ -16,6 +16,10 @@ When the user expresses a change they want for future renders (slower motion, di
 
 Keep replies concise (1-3 sentences). Do not speculate about details you cannot see — you only have the director prompt, scene metadata, rating, and user comment; you do not see the actual pixels.`;
 
+function sse(res: VercelResponse, payload: unknown) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -58,63 +62,95 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     scene.refinement_notes ? `Existing future-render instructions: ${scene.refinement_notes}` : null,
   ].filter(Boolean).join("\n");
 
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
   const client = new Anthropic();
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 1024,
-    system: SYSTEM,
-    tools: [{
-      name: "save_future_instruction",
-      description: "Save a concise imperative instruction that should influence the next render of this scene. Use when the user expresses a change they want for future iterations.",
-      input_schema: {
-        type: "object",
-        properties: {
-          instruction: { type: "string", description: "A short imperative like 'Use slower camera motion' or 'Keep more empty space in the frame'" },
-        },
-        required: ["instruction"],
-      },
-    }],
-    messages: [
-      { role: "user", content: `Context for this iteration:\n${context}` },
-      ...prior.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user", content: userMessage },
-    ],
-  });
-
-  const savedInstructions: string[] = [];
   let assistantText = "";
-  for (const block of response.content) {
-    if (block.type === "text") assistantText += block.text;
-    if (block.type === "tool_use" && block.name === "save_future_instruction") {
-      const input = block.input as { instruction?: string };
-      if (input.instruction) savedInstructions.push(input.instruction.trim());
+  const savedInstructions: string[] = [];
+
+  try {
+    const stream = client.messages.stream({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: SYSTEM,
+      tools: [{
+        name: "save_future_instruction",
+        description: "Save a concise imperative instruction that should influence the next render of this scene. Use when the user expresses a change they want for future iterations.",
+        input_schema: {
+          type: "object",
+          properties: {
+            instruction: { type: "string", description: "A short imperative like 'Use slower camera motion' or 'Keep more empty space in the frame'" },
+          },
+          required: ["instruction"],
+        },
+      }],
+      messages: [
+        { role: "user", content: `Context for this iteration:\n${context}` },
+        ...prior.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: userMessage },
+      ],
+    });
+
+    stream.on("text", (delta) => {
+      assistantText += delta;
+      sse(res, { type: "text", delta });
+    });
+
+    const final = await stream.finalMessage();
+    for (const block of final.content) {
+      if (block.type === "tool_use" && block.name === "save_future_instruction") {
+        const input = block.input as { instruction?: string };
+        if (input.instruction) {
+          savedInstructions.push(input.instruction.trim());
+          sse(res, { type: "saved_instruction", instruction: input.instruction.trim() });
+        }
+      }
     }
+
+    if (savedInstructions.length > 0) {
+      const { data: latestScene } = await supabase
+        .from("prompt_lab_listing_scenes")
+        .select("refinement_notes")
+        .eq("id", scene.id)
+        .single();
+      const existing = latestScene?.refinement_notes?.trim() ?? "";
+      const joined = [existing, ...savedInstructions.map((s) => `- ${s}`)].filter(Boolean).join("\n");
+      await supabase.from("prompt_lab_listing_scenes")
+        .update({ refinement_notes: joined || null })
+        .eq("id", scene.id);
+    }
+
+    if (!assistantText && savedInstructions.length > 0) {
+      assistantText = `Saved for future renders: ${savedInstructions.join("; ")}`;
+      sse(res, { type: "text", delta: assistantText });
+    } else if (!assistantText) {
+      assistantText = "(no response)";
+      sse(res, { type: "text", delta: assistantText });
+    }
+
+    const assistantMsg: ChatMessage = {
+      role: "assistant",
+      content: assistantText,
+      ts: new Date().toISOString(),
+    };
+    const updated = [...prior, userMsg, assistantMsg];
+
+    await supabase.from("prompt_lab_listing_scene_iterations")
+      .update({ chat_messages: updated })
+      .eq("id", iterId);
+
+    sse(res, {
+      type: "done",
+      chat_messages: updated,
+      saved_instructions: savedInstructions,
+    });
+    res.end();
+  } catch (err) {
+    sse(res, { type: "error", message: err instanceof Error ? err.message : String(err) });
+    res.end();
   }
-
-  if (savedInstructions.length > 0) {
-    const existing = scene.refinement_notes?.trim() ?? "";
-    const joined = [existing, ...savedInstructions].filter(Boolean).join("\n- ");
-    const next = joined ? `- ${joined}` : null;
-    await supabase.from("prompt_lab_listing_scenes")
-      .update({ refinement_notes: next })
-      .eq("id", scene.id);
-  }
-
-  if (!assistantText && savedInstructions.length > 0) {
-    assistantText = `Saved for future renders: ${savedInstructions.join("; ")}`;
-  } else if (!assistantText) {
-    assistantText = "(no response)";
-  }
-
-  const assistantMsg: ChatMessage = { role: "assistant", content: assistantText, ts: new Date().toISOString() };
-  const updated = [...prior, userMsg, assistantMsg];
-
-  await supabase.from("prompt_lab_listing_scene_iterations")
-    .update({ chat_messages: updated })
-    .eq("id", iterId);
-
-  return res.status(200).json({
-    chat_messages: updated,
-    saved_instructions: savedInstructions,
-  });
 }
