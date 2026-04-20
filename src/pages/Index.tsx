@@ -123,6 +123,7 @@ const Index = () => {
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [authFirst, setAuthFirst] = useState("");
   const [authLast, setAuthLast] = useState("");
   const [authBrokerage, setAuthBrokerage] = useState("");
@@ -133,6 +134,7 @@ const Index = () => {
   const openAuth = (tab: "signin" | "signup") => {
     setAuthTab(tab);
     setAuthEmail("");
+    setAuthPassword("");
     setAuthFirst("");
     setAuthLast("");
     setAuthBrokerage("");
@@ -151,18 +153,31 @@ const Index = () => {
     setAuthError("");
     setAuthLoading(true);
     try {
-      const metadata = authTab === "signup"
-        ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
-        : undefined;
-      const { error } = await supabase.auth.signInWithOtp({
-        email: authEmail,
-        options: {
-          emailRedirectTo: AUTH_CALLBACK_URL,
-          data: metadata,
-        },
-      });
-      if (error) throw error;
-      setAuthSent(true);
+      // Sign-in with password takes precedence when the field is filled.
+      // Signup path + "Send magic link" path both still use signInWithOtp.
+      if (authTab === "signin" && authPassword) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+        // No magic-link confirmation screen; just close the dialog.
+        setAuthOpen(false);
+        setAuthPassword("");
+      } else {
+        const metadata = authTab === "signup"
+          ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
+          : undefined;
+        const { error } = await supabase.auth.signInWithOtp({
+          email: authEmail,
+          options: {
+            emailRedirectTo: AUTH_CALLBACK_URL,
+            data: metadata,
+          },
+        });
+        if (error) throw error;
+        setAuthSent(true);
+      }
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -758,6 +773,21 @@ const Index = () => {
                   </div>
                 </div>
 
+                {authTab === "signin" && (
+                  <div className="space-y-2">
+                    <Label className="label text-muted-foreground">
+                      Password <span className="text-muted-foreground/60">(optional — leave blank for magic link)</span>
+                    </Label>
+                    <Input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                )}
+
                 {authError && (
                   <p className="text-xs text-destructive">{authError}</p>
                 )}
@@ -767,7 +797,11 @@ const Index = () => {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      {authTab === "signup" ? "Create account" : "Send magic link"}
+                      {authTab === "signup"
+                        ? "Create account"
+                        : authPassword
+                          ? "Sign in"
+                          : "Send magic link"}
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}

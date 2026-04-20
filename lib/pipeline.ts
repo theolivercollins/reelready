@@ -46,6 +46,7 @@ import {
   type PromptQAResult,
 } from "./prompts/prompt-qa.js";
 import { resolveProductionPrompt } from "./prompts/resolve.js";
+import { resolveEndFrameUrl } from "./services/end-frame.js";
 import { selectProvider, getEnabledProviders } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
 import { classifyProviderError } from "./providers/errors.js";
@@ -418,6 +419,17 @@ async function runPropertyStyleGuide(propertyId: string): Promise<void> {
 
 // ─── STAGE 3: SCRIPTING ────────────────────────────────────────
 
+/** Look up a photo's image URL by its UUID. Returns null if not found. */
+async function getPhotoUrlById(photoId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("photos")
+    .select("file_url")
+    .eq("id", photoId)
+    .maybeSingle();
+  return (data as { file_url?: string | null } | null)?.file_url ?? null;
+}
+
 async function runScripting(propertyId: string): Promise<void> {
   await updatePropertyStatus(propertyId, "scripting");
   await log(propertyId, "scripting", "info", "Planning shots");
@@ -513,17 +525,41 @@ async function runScripting(propertyId: string): Promise<void> {
   const validPhotoIds = new Set(photos.map((p) => p.id));
   const validScenes = output.scenes.filter((s) => validPhotoIds.has(s.photo_id));
 
-  const insertedScenes = await insertScenes(
-    validScenes.map((s) => ({
-      property_id: propertyId,
-      photo_id: s.photo_id,
-      scene_number: s.scene_number,
-      camera_movement: s.camera_movement,
-      prompt: s.prompt,
-      duration_seconds: s.duration_seconds,
-      provider: s.provider_preference ?? undefined,
-    }))
+  // Phase 2.7: resolve end-frame URL for each scene before insert.
+  // Build a lookup from photo id → file_url from the already-fetched
+  // selected photos so we avoid extra DB round trips for the start photo.
+  const photoUrlById = new Map(photos.map((p) => [p.id, p.file_url ?? null]));
+
+  const sceneRows = await Promise.all(
+    validScenes.map(async (s) => {
+      const startPhotoUrl = photoUrlById.get(s.photo_id) ?? null;
+
+      let endImageUrl: string | null = null;
+      if (startPhotoUrl) {
+        // Phase 2.7: resolve the end-frame URL for Atlas's start+end keyframe
+        // interpolation. If the director paired a real photo, look it up. If
+        // not, resolveEndFrameUrl falls back to a sharp crop of the start.
+        const endPhotoUrl = s.end_photo_id
+          ? await getPhotoUrlById(s.end_photo_id)
+          : null;
+        endImageUrl = await resolveEndFrameUrl({ startPhotoUrl, endPhotoUrl });
+      }
+
+      return {
+        property_id: propertyId,
+        photo_id: s.photo_id,
+        scene_number: s.scene_number,
+        camera_movement: s.camera_movement,
+        prompt: s.prompt,
+        duration_seconds: s.duration_seconds,
+        provider: s.provider_preference ?? undefined,
+        end_photo_id: s.end_photo_id ?? null,
+        end_image_url: endImageUrl,
+      };
+    })
   );
+
+  const insertedScenes = await insertScenes(sceneRows);
 
   // Embed each newly-inserted scene so future similarity retrieval has a
   // populated pool. Fire-and-forget per scene with per-scene error capture
@@ -746,6 +782,7 @@ async function runGenerationSubmit(propertyId: string): Promise<void> {
           prompt: scene.prompt,
           durationSeconds: scene.duration_seconds,
           aspectRatio: "16:9",
+          endImageUrl: scene.end_image_url ?? undefined,
         });
 
         await supabase

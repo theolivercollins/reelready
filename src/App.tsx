@@ -30,6 +30,8 @@ import DashboardPromptLab from "./pages/dashboard/PromptLab";
 import DashboardDevelopment from "./pages/dashboard/Development";
 import DashboardPromptLabRecipes from "./pages/dashboard/PromptLabRecipes";
 import DashboardPromptProposals from "./pages/dashboard/PromptProposals";
+import DashboardKnowledgeMap from "./pages/dashboard/KnowledgeMap";
+import DashboardKnowledgeMapCell from "./pages/dashboard/KnowledgeMapCell";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -75,6 +77,8 @@ const App = () => (
                   <Route path="development/prompt-lab" element={<DashboardPromptLab />} />
                   <Route path="development/prompt-lab/recipes" element={<DashboardPromptLabRecipes />} />
                   <Route path="development/proposals" element={<DashboardPromptProposals />} />
+                  <Route path="development/knowledge-map" element={<DashboardKnowledgeMap />} />
+                  <Route path="development/knowledge-map/:cellKey" element={<DashboardKnowledgeMapCell />} />
                   <Route path="development/prompt-lab/:sessionId" element={<DashboardPromptLab />} />
                   <Route path="finances" element={<DashboardFinances />} />
                   <Route path="settings" element={<DashboardSettings />} />

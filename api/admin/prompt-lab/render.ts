@@ -5,6 +5,7 @@ export const maxDuration = 60;
 import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase } from "../../../lib/client.js";
 import { submitLabRender, ProviderCapacityError } from "../../../lib/prompt-lab.js";
+import { resolveEndFrameUrl } from "../../../lib/services/end-frame.js";
 
 // POST /api/admin/prompt-lab/render
 //   body: { iteration_id, provider? }
@@ -46,12 +47,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const imageUrl = (iteration.prompt_lab_sessions as { image_url: string })?.image_url;
   if (!imageUrl) return res.status(400).json({ error: "session image url missing" });
 
+  // Phase 2.7: resolve the end-frame URL for Atlas start+end keyframe
+  // interpolation. If the director paired another Lab session (via
+  // director_output_json.end_photo_id), look up that session's
+  // image_url. Otherwise resolveEndFrameUrl falls back to a sharp crop
+  // of the start photo.
+  const director = iteration.director_output_json as { end_photo_id?: string } | null;
+  let endPhotoUrl: string | null = null;
+  if (director?.end_photo_id) {
+    const { data: endSession } = await supabase
+      .from("prompt_lab_sessions")
+      .select("image_url")
+      .eq("id", director.end_photo_id)
+      .maybeSingle();
+    endPhotoUrl = endSession?.image_url ?? null;
+  }
+
+  const endImageUrl = await resolveEndFrameUrl({
+    startPhotoUrl: imageUrl,
+    endPhotoUrl,
+  });
+
+  // Persist onto the iteration so the dashboard can display the
+  // resolved URL and audit the end-frame decision.
+  await supabase
+    .from("prompt_lab_iterations")
+    .update({
+      end_photo_id: director?.end_photo_id ?? null,
+      end_image_url: endImageUrl,
+    })
+    .eq("id", iteration_id);
+
   try {
     const { jobId, provider } = await submitLabRender({
       imageUrl,
       scene: iteration.director_output_json,
       roomType: iteration.analysis_json?.room_type ?? "other",
       providerOverride: providerOverride === "kling" || providerOverride === "runway" ? providerOverride : null,
+      endImageUrl,
     });
 
     const { data: updated, error: uErr } = await supabase

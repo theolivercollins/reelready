@@ -12,8 +12,11 @@ import { runCalibration } from "../../../lib/judge/calibration.js";
 // and writes a calibration snapshot per cell. Returns the rows written.
 //
 // This endpoint can be slow — sampling 30 iterations × N cells × Claude.
-// Vercel default timeout applies; the caller should expect 30–300s
-// depending on how many cells are sampled.
+// Vercel serverless timeouts apply (10s hobby, 60s pro). Expect this
+// endpoint to time out on runs that touch more than ~2 cells at the
+// default sample cap. Callers SHOULD pass cell_keys to restrict scope.
+// For full-grid calibration, run against many cell_keys sequentially
+// from a local shell or move to a background job in Phase 3.
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {

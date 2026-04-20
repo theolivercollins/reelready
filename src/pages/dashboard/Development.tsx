@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight, GitPullRequest } from "lucide-react";
+import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight, GitPullRequest, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -109,6 +109,19 @@ const Development = () => {
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
             Rule mining across rated Lab iterations. Claude proposes specific edits to the DIRECTOR_SYSTEM grounded in winner/loser patterns. Admin approves per-change. Applied proposals become active lab_prompt_overrides (production unaffected).
+          </p>
+        </Link>
+        <Link
+          to="/dashboard/development/knowledge-map"
+          className="group border border-border bg-background p-6 transition hover:border-foreground"
+        >
+          <div className="flex items-center gap-3">
+            <MapIcon className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+            <div className="label text-muted-foreground group-hover:text-foreground">Knowledge map</div>
+            <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Every (room type × camera verb) cell colored by learning state. See at a glance which scenes the machine is great at (golden), okay at, weak at, and has never been tested in. Click any cell to drill into its iterations, recipes, overrides, and fail-tag patterns.
           </p>
         </Link>
       </div>

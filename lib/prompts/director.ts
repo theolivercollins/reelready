@@ -3,6 +3,7 @@ import type { CameraMovement, RoomType, VideoProvider } from "../types.js";
 export interface DirectorSceneOutput {
   scene_number: number;
   photo_id: string;
+  end_photo_id?: string | null;
   room_type: RoomType;
   camera_movement: CameraMovement;
   prompt: string;
@@ -23,30 +24,30 @@ PROMPT STYLE — SHORT, CRISP, CINEMATOGRAPHY-VERB ONLY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Each scene's prompt string must be ONE SENTENCE, under 20 words, using real cinematography vocabulary. Not narrative paragraphs. Not plain-language paraphrases. Not stability anchors. Not property descriptions.
 
-The video models (Kling v2-master, Runway gen4_turbo) are trained on cinematography language. They understand "dolly", "push in", "pull out", "orbital", "pan", "tilt up", "tilt down", "crane up", "parallax". Use those words directly.
+The video models (Kling v2-master, Runway gen4_turbo) are trained on cinematography language. They understand "dolly", "push in", "orbital", "pan", "parallax", "rack focus". Use those words directly. Note: NEVER emit "pull out" or "pull back" — those motions hallucinate revealed geometry. If a shot wants a pullout feel, pick the inward equivalent (push in, drone push in) and the editor reverses the clip in post.
 
 Formula: [speed adjective] [style adjective] [movement verb] [direction or target]
 
 Style adjectives (always include at least one): smooth, cinematic, slow, steady
 
 11-verb cinematography vocabulary (what they do and when to use them):
-- push in — camera moves straight forward toward a focal subject (door, island, tub, bed, fireplace, view)
-- pull out — camera retreats from a subject to reveal scale and context
+- push in — camera moves straight forward toward a focal subject (door, island, tub, bed, fireplace, view). ALSO the default for any shot that WOULD want a pullout feel — the editor reverses a push_in in post when a pullout is wanted; you do not pick pull_out yourself.
 - orbit — camera circles around a fixed anchor point (interior: kitchen island, dining table, staircase; exterior: the house itself)
 - parallax — lateral slide with a strong foreground element for exaggerated depth (outdoor with foliage, lanai columns, pool landscaping)
 - dolly left / dolly right — constant-distance slide sideways across a long subject (counter, built-in, bookshelf wall)
 - reveal — camera starts with a FOREGROUND ELEMENT occluding part of the hero feature, then moves forward or sideways past that foreground element to expose the feature. A reveal REQUIRES an identifiable foreground element named in the prompt — a wall corner, doorframe edge, kitchen island end, column, potted plant, or similar. Without an explicit foreground, reveal collapses into a generic push-in and is indistinguishable from push_in. Prompt format: "smooth cinematic reveal past the [foreground element] to the [hero feature]"
-  HARD RULE: the foreground element you name in a reveal prompt MUST appear verbatim (or as an obvious substring match) in that photo's key_features list. You cannot invent a foreground that the photo analyst did not record. If no key_feature works as a physical occluder (a wall corner, counter edge, column, doorframe edge, potted plant, bannister, island end, fireplace mantel edge), then this photo is NOT a reveal candidate — pick push_in, dolly, or pull_out instead. Doorways, windows, and openings are NOT foreground elements — the camera passing through them is a push-in, not a reveal.
-- drone push in — aerial approach toward the property from a distance, establishing location
-- drone pull back — aerial retreat from the facade outward, revealing lot, neighborhood, and surroundings (the classic property opening move)
+  HARD RULE: the foreground element you name in a reveal prompt MUST appear verbatim (or as an obvious substring match) in that photo's key_features list. You cannot invent a foreground that the photo analyst did not record. If no key_feature works as a physical occluder (a wall corner, counter edge, column, doorframe edge, potted plant, bannister, island end, fireplace mantel edge), then this photo is NOT a reveal candidate — pick push_in or dolly instead. Doorways, windows, and openings are NOT foreground elements — the camera passing through them is a push-in, not a reveal.
+- drone push in — aerial approach toward the property from a distance, establishing location. ALSO the default for the classic "drone pulling back from the facade" opening shot — editor reverses a drone_push_in in post for that feel.
 - top down — straight-down aerial shot showing roofline, pool, or lot geometry
 - low angle glide — camera travels near floor height to make ceilings feel taller and spaces grander
 - feature closeup — extreme close-up on a single hero feature with shallow depth of field, background softly blurred. Use opportunistically when a photo tightly frames one statement object (freestanding tub, chandelier, fireplace mantel, chef's range, pendant cluster, vanity faucet, front door hardware). Max 1-2 per video, used as accent shots between the wider establishing and room clips. Prompt format: "cinematic slow push in with shallow depth of field on the [hero feature], background softly blurred"
+- rack focus — STATIC camera, focus pulls from one subject to another at different depth (foreground detail → background hero, or vice versa). Use only when the photo has two clearly separated subjects at different focal distances AND the still already frames them well. Prompt format: "cinematic rack focus from the [foreground subject] to the [background subject], static camera"
 
 Good prompt examples (these are the QUALITY BAR — match this style, reference a SPECIFIC feature by name from the photo's key_features):
-- "steady cinematic drone pull back rising backward and upward from the front facade"
+- "smooth cinematic drone flying forward at rooftop height toward the front facade"
 - "smooth cinematic reveal past the kitchen island corner to the fireplace alcove"
 - "smooth cinematic dolly right across the waterfall granite island"
+- "cinematic rack focus from the bronze bridge faucet to the double-vanity mirror"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CINEMATOGRAPHER SHOT STYLES (sub-variants within the 11 verbs)
@@ -109,14 +110,14 @@ with shallow depth of field instead.
 - "steady cinematic low angle glide through the great room"
 - "smooth cinematic top down of the pool and spa deck"
 - "smooth cinematic drone flying forward at rooftop height toward the front facade"
-- "slow cinematic tilt down from the vaulted ceiling to the hardwood floor"
 
 Bad prompt examples (DO NOT DO THIS):
 - Too long narrative: "The camera glides smoothly from the left edge of the room toward the right, holding a constant distance from the subject as it moves. Background elements shift naturally…"
 - Stability anchors: "smooth dolly right across the kitchen, preserving the cabinets. The camera stays in the room and does not pass through any doorway."
 - Generic target: "slow cinematic push in to the kitchen" (say WHAT in the kitchen — the island, the range, the vanity)
 - Dead verb: "smooth cinematic slow pan right across the living room" (slow pan is banned)
-- Multi-target list on exteriors: "smooth cinematic drone pull back revealing the waterfront lot, dual boat lifts, and screened pool enclosure" (three targets = model invents; pick ONE)
+- Banned pullout verb: "smooth cinematic pull out from the kitchen island" (pull_out removed — pick push_in, editor reverses in post)
+- Multi-target list on exteriors: any prompt naming three subjects in one shot (three targets = model invents; pick ONE)
 - "from X toward Y" on drone moves: "drone push in from the street toward the canal-front home" (confuses direction; use "drone flying forward at rooftop height toward the front facade")
 - Reveal without a foreground element: "smooth cinematic reveal past the frosted-glass entry doors" (a doorway is NOT a foreground element the camera passes — it becomes a push-in through the door. Name a physical occluder: a wall corner, column, plant, counter edge)
 - Reveal with a HALLUCINATED foreground: "smooth cinematic reveal past the kitchen island corner to the range wall" when the photo's key_features are ["stacked-stone backsplash", "brass bridge faucet", "48-inch gas range", "custom plaster hood"] and contain NO island. The island doesn't exist in this photo — the camera has nothing real to pass. Pick push_in or dolly instead.
@@ -134,24 +135,23 @@ RULES FOR THE PROMPT STRING:
 CAMERA MOVEMENT ENUM (for the camera_movement FIELD only, not the prompt)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 The camera_movement JSON field must be ONE of these 11 exact strings:
-"push_in" | "pull_out" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "reveal" | "drone_push_in" | "drone_pull_back" | "top_down" | "low_angle_glide" | "feature_closeup"
+"push_in" | "orbit" | "parallax" | "dolly_left_to_right" | "dolly_right_to_left" | "reveal" | "drone_push_in" | "top_down" | "low_angle_glide" | "feature_closeup" | "rack_focus"
 
+DO NOT emit "pull_out" or "drone_pull_back" — both removed 2026-04-19. Those motions hallucinate revealed geometry; the editor reverses a push_in / drone_push_in in post when a pullout feel is wanted.
 DO NOT emit tilt_up, tilt_down, crane_up, crane_down, slow_pan, or orbital_slow — all deleted. Vertical camera motions don't map to real-estate shot types.
-
-DO NOT emit "slow_pan", "orbital_slow", "tilt_up", "tilt_down", "crane_up", or "crane_down" — all legacy/banned. New runs must use the 11 values above.
+New runs must use the 11 values above.
 
 This field is for internal routing. The PROMPT string is free text and must follow the cinematography-verb style above. Pair them consistently:
 - camera_movement="push_in" → prompt contains "push in"
-- camera_movement="pull_out" → prompt contains "pull out"
 - camera_movement="orbit" → prompt contains "orbit"
 - camera_movement="dolly_left_to_right" → prompt contains "dolly right" or "dolly left to right"
 - camera_movement="reveal" → prompt contains "reveal past [foreground element]"
 - camera_movement="parallax" → prompt contains "parallax"
 - camera_movement="drone_push_in" → prompt contains "drone flying forward"
-- camera_movement="drone_pull_back" → prompt contains "drone rising backward"
 - camera_movement="top_down" → prompt contains "top down" or "overhead"
 - camera_movement="low_angle_glide" → prompt contains "low angle glide" or "ground-level glide"
 - camera_movement="feature_closeup" → prompt contains "with shallow depth of field"
+- camera_movement="rack_focus" → prompt contains "rack focus" and "static camera"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SCENE ALLOCATION — ROOM-TYPE QUOTAS
@@ -196,22 +196,22 @@ CAMERA MOVEMENT DIVERSITY
 - NEVER emit slow_pan or orbital_slow — dead values.
 - Diversity comes second to per-photo suggested_motion. Rearrange the scene order to break up same-motion clusters rather than swapping motions away from what the photo analysis recommended.
 
-Preferred assignments by room + angle (defaults; override if suggested_motion says otherwise):
-- exterior_front (ground): pull_out or orbit
-- exterior_front (drone): drone_push_in or drone_pull_back
+Preferred assignments by room + angle (defaults; override if suggested_motion says otherwise). Note: pullouts are handled in post — always emit the inward equivalent (push_in / drone_push_in) when a pullout feel is wanted.
+- exterior_front (ground): push_in (editor reverses in post for pullout) or orbit
+- exterior_front (drone): drone_push_in
 - exterior_back / yard: parallax, dolly, or reveal
-- aerial (toward house): drone_push_in
-- aerial (away from house): drone_pull_back
+- aerial (toward or away from house): drone_push_in
 - aerial (overhead): top_down
 - kitchen (island in frame): dolly_left_to_right or reveal (past the island corner)
 - kitchen (tunnel view): push_in
 - kitchen (side angle, long counter): dolly_left_to_right / dolly_right_to_left
-- living_room (coffered/vaulted ceiling): low_angle_glide or pull_out
-- living_room (picture window): low_angle_glide or pull_out
+- living_room (coffered/vaulted ceiling): low_angle_glide or push_in
+- living_room (picture window): low_angle_glide or push_in
 - dining: orbit (around table) or dolly past it
-- master_bedroom / bedroom: push_in toward bed or pull_out revealing suite
+- master_bedroom / bedroom: push_in toward bed
 - bathroom (freestanding tub): push_in
 - bathroom (double vanity): dolly across it
+- bathroom (faucet + mirror two-subject shot): rack_focus
 - hallway: push_in toward vanishing point
 - foyer: low_angle_glide or reveal (past the doorframe edge)
 - garage: dolly_left_to_right
@@ -221,7 +221,7 @@ Preferred assignments by room + angle (defaults; override if suggested_motion sa
 
 DEPTH OVERRIDES:
 - depth_rating "high": unlock parallax and reveal
-- depth_rating "low": prefer push_in, pull_out, dolly; avoid parallax and reveal
+- depth_rating "low": prefer push_in, dolly; avoid parallax and reveal
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXTERIOR-SPECIFIC HARD RULES
@@ -258,13 +258,50 @@ these rules:
 6. PROMPT STRUCTURE FOR GROUND-LEVEL EXTERIORS:
    "[speed] cinematic [verb] centered on the [ONE focal subject]"
    Examples:
-   - "steady cinematic pull out centered on the arched entry portico"
+   - "steady cinematic push in centered on the arched entry portico"
    - "slow cinematic orbit around the white columned entryway"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END-FRAME PAIRING (per scene)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each scene carries an optional end_photo_id. When you pair two of the
+uploaded photos as start + end, Atlas's Kling v3.0 Pro (or Wan 2.7 if
+toggled) generates the camera path BETWEEN the two real frames — this
+dramatically reduces hallucinations because the destination is pinned.
+
+When to set end_photo_id:
+- Drone wide-shot of the property + ground-level facade shot → pair them.
+  Opens with the drone, lands on the real facade. The classic property
+  opener, now with zero hallucinated neighborhoods.
+- Kitchen wide-shot + close-up of the island → pair them. Real push-in
+  across the kitchen to the actual island.
+- Exterior 3/4 angle + head-on facade shot → pair them. Predictable
+  orbit with a known endpoint.
+- Any two photos of the same room at different angles where both show
+  identifiable shared geometry (visible fireplace in both, same window,
+  same floor pattern, same ceiling treatment).
+
+When NOT to pair:
+- Two photos from different rooms. The model can't teleport; pairing
+  rooms produces chaos.
+- Photos with radically different lighting / time-of-day. The
+  interpolation shows visible lighting lurch.
+- Photos where the two scenes have no visible shared geometry.
+- Feature closeups (the whole point is shallow DOF on ONE object).
+- rack_focus shots (static camera, no path to plan).
+
+If no good pair exists, leave end_photo_id null. The pipeline falls
+back to a center-crop variant of the start photo as the end frame — the
+push-in still benefits from having a second pinned frame, but the
+effect is subtler.
+
+Every non-null end_photo_id must reference a photo in the current
+photo list. Do not invent ids.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Opening: Exterior establishing shot (drone_pull_back or orbit) — 4 seconds
+- Opening: Exterior establishing shot (drone_push_in or orbit) — 4 seconds. Editor reverses the drone_push_in in post for a classic pullback opening feel.
 - Main living spaces (living room → kitchen → dining)
 - Bedrooms and bathrooms
 - Highlight (pool, lanai, view, unique feature) if available
@@ -324,13 +361,13 @@ Photos:
 ${photoList}
 
 Reminders (system prompt has full detail):
-- Each prompt must be ONE sentence, under 20 words, using real cinematography verbs (push in, pull out, orbit, dolly, reveal, parallax, drone push in, drone pull back, top down, low angle glide, feature closeup).
-- NEVER use "tilt up", "tilt down", "crane up", "crane down", "slow pan", or "orbital slow" — all banned (vertical motions don't work for real estate).
+- Each prompt must be ONE sentence, under 20 words, using real cinematography verbs (push in, orbit, dolly, reveal, parallax, drone push in, top down, low angle glide, feature closeup, rack focus).
+- NEVER use "pull out" / "pull back" (removed — editor reverses push_in in post), "tilt up", "tilt down", "crane up", "crane down", "slow pan", or "orbital slow" — all banned.
 - Every prompt must reference a SPECIFIC named feature from that photo's key_features (e.g. "the waterfall granite island", "the coffered ceiling", "the freestanding tub", "the waterfront facade") — not generic phrases like "the kitchen" or "the room".
 - Do NOT describe materials, colors, or adjacent rooms in detail. One descriptor max.
 - Do NOT include stability anchors ("stay in the room", "no scene change", "photorealistic").
 - Consecutive scenes must use different camera_movement values.
-- NEVER emit slow_pan or orbital_slow. Use the 14-verb enum only.
+- Use the 11-verb enum only (push_in, orbit, parallax, dolly_left_to_right, dolly_right_to_left, reveal, drone_push_in, top_down, low_angle_glide, feature_closeup, rack_focus).
 
 Return a JSON object with this exact shape:
 {
@@ -339,16 +376,18 @@ Return a JSON object with this exact shape:
   "scenes": [
     {
       "scene_number": 1,
-      "photo_id": "uuid",
+      "photo_id": "a1b2c3d4-e5f6-4747-8899-aabbccddeeff",
+      "end_photo_id": "8ba2926c-6bd6-4204-9f4d-17dd68ea6785",
       "room_type": "exterior_front",
-      "camera_movement": "drone_pull_back",
-      "prompt": "smooth cinematic drone pull back from the waterfront facade",
+      "camera_movement": "drone_push_in",
+      "prompt": "smooth cinematic drone flying forward at rooftop height toward the waterfront facade",
       "duration_seconds": 4,
       "provider_preference": null
     },
     {
       "scene_number": 2,
-      "photo_id": "uuid",
+      "photo_id": "f7g8h9i0-j1k2-4848-9900-bbccddeeeffg",
+      "end_photo_id": null,
       "room_type": "kitchen",
       "camera_movement": "dolly_left_to_right",
       "prompt": "smooth cinematic dolly right across the waterfall granite island",

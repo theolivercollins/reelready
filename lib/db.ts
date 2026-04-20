@@ -8,6 +8,7 @@ import type {
   RoomType,
   DepthRating,
   VideoProvider,
+  CameraMovement,
   LogStage,
   LogLevel,
 } from "./types.js";
@@ -22,6 +23,7 @@ export type {
   RoomType,
   DepthRating,
   VideoProvider,
+  CameraMovement,
   LogStage,
   LogLevel,
 };
@@ -366,7 +368,7 @@ export async function recordCostEvent(event: {
   propertyId: string;
   sceneId?: string | null;
   stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
-  provider: "anthropic" | "runway" | "kling" | "luma" | "higgsfield" | "shotstack" | "openai";
+  provider: "anthropic" | "runway" | "kling" | "luma" | "higgsfield" | "shotstack" | "openai" | "atlas";
   unitsConsumed?: number;
   unitType?: "tokens" | "credits" | "kling_units" | "renders" | null;
   costCents: number;
@@ -451,6 +453,8 @@ export async function insertScenes(
     prompt: string;
     duration_seconds: number;
     provider?: VideoProvider;
+    end_photo_id?: string | null;
+    end_image_url?: string | null;
   }>
 ): Promise<Scene[]> {
   const { data, error } = await getSupabase().from("scenes").insert(scenes).select();
