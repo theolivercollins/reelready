@@ -7,6 +7,7 @@ import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase } from "../../../lib/client.js";
 import { DIRECTOR_SYSTEM } from "../../../lib/prompts/director.js";
 import { DIRECTOR_PATCH_SYSTEM } from "../../../lib/prompts/director-patch.js";
+import { computeClaudeCost } from "../../../lib/utils/claude-cost.js";
 
 // POST /api/admin/prompt-lab/mine
 //   body: { days?: number }
@@ -140,10 +141,11 @@ ${JSON.stringify(evidence, null, 2)}
 
 Produce the JSON object per your instructions.`;
 
+  const MINE_MODEL = "claude-sonnet-4-6";
   try {
     const client = new Anthropic();
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: MINE_MODEL,
       max_tokens: 8192,
       system: DIRECTOR_PATCH_SYSTEM,
       messages: [{ role: "user", content: userMessage }],
@@ -157,6 +159,23 @@ Produce the JSON object per your instructions.`;
       rationale: string;
       changes: Array<{ change_id: string; intent: string; evidence_iteration_ids: string[]; evidence_summary: string }>;
     };
+
+    // Record token cost for rule mining (Sonnet 4.6).
+    try {
+      const cost = computeClaudeCost(response.usage as never, MINE_MODEL);
+      await supabase.from("cost_events").insert({
+        property_id: null,
+        scene_id: null,
+        stage: "rule_mining",
+        provider: "anthropic",
+        units_consumed: cost.totalTokens,
+        unit_type: "tokens",
+        cost_cents: Math.round(cost.costCents),
+        metadata: { scope: "lab_rule_mining", model: MINE_MODEL, iterations_count: iterations.length, days },
+      });
+    } catch (costErr) {
+      console.error("[mine] cost_events insert failed:", costErr);
+    }
 
     const { data: proposal, error: pErr } = await supabase
       .from("lab_prompt_proposals")

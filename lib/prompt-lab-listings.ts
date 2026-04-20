@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "./client.js";
+import { computeClaudeCost } from "./utils/claude-cost.js";
 import {
   analyzeSingleImage,
   retrieveMatchingRecipes,
@@ -190,13 +191,33 @@ export async function directListingScenes(listingId: string): Promise<void> {
     renderExemplarBlock(exemplars) +
     renderLoserBlock(losers);
 
+  const LISTING_DIRECTOR_MODEL = "claude-sonnet-4-6";
   const client = new Anthropic();
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: LISTING_DIRECTOR_MODEL,
     max_tokens: 8192,
     system: DIRECTOR_SYSTEM,
     messages: [{ role: "user", content: userPrompt }],
   });
+
+  // Record token cost for listing director (Sonnet 4.6).
+  try {
+    const supabaseForCost = getSupabase();
+    const cost = computeClaudeCost(response.usage as never, LISTING_DIRECTOR_MODEL);
+    await supabaseForCost.from("cost_events").insert({
+      property_id: null,
+      scene_id: null,
+      stage: "director",
+      provider: "anthropic",
+      units_consumed: cost.totalTokens,
+      unit_type: "tokens",
+      cost_cents: Math.round(cost.costCents),
+      metadata: { scope: "lab_listing_director", listing_id: listingId, model: LISTING_DIRECTOR_MODEL },
+    });
+  } catch (costErr) {
+    console.error("[directListingScenes] cost_events insert failed:", costErr);
+  }
+
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {

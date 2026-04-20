@@ -192,8 +192,9 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
     if (imageContents.length === 0) continue;
 
     try {
+      const ANALYSIS_MODEL = "claude-sonnet-4-6";
       const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: ANALYSIS_MODEL,
         max_tokens: 4096,
         system: PHOTO_ANALYSIS_SYSTEM,
         messages: [
@@ -208,7 +209,7 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
       });
 
       // Record actual token usage from Claude's response.
-      const usageCost = computeClaudeCost(response.usage as never);
+      const usageCost = computeClaudeCost(response.usage as never, ANALYSIS_MODEL);
       await recordCostEvent({
         propertyId,
         stage: "analysis",
@@ -366,8 +367,9 @@ async function runPropertyStyleGuide(propertyId: string): Promise<void> {
 
   try {
     const client = new Anthropic();
+    const STYLE_MODEL = "claude-sonnet-4-6";
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: STYLE_MODEL,
       max_tokens: 3000,
       system: STYLE_GUIDE_SYSTEM,
       messages: [
@@ -382,7 +384,7 @@ async function runPropertyStyleGuide(propertyId: string): Promise<void> {
     });
 
     // Record cost
-    const usage = computeClaudeCost(response.usage as never);
+    const usage = computeClaudeCost(response.usage as never, STYLE_MODEL);
     await recordCostEvent({
       propertyId,
       stage: "scripting",
@@ -506,8 +508,9 @@ async function runScripting(propertyId: string): Promise<void> {
       },
     );
   }
+  const DIRECTOR_MODEL = "claude-sonnet-4-6";
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: DIRECTOR_MODEL,
     max_tokens: 4096,
     system: effectiveDirector.body,
     messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) + learningBlock }],
@@ -574,7 +577,7 @@ async function runScripting(propertyId: string): Promise<void> {
     ),
   );
 
-  const scriptUsage = computeClaudeCost(response.usage as never);
+  const scriptUsage = computeClaudeCost(response.usage as never, DIRECTOR_MODEL);
   await recordCostEvent({
     propertyId,
     stage: "scripting",
@@ -583,7 +586,7 @@ async function runScripting(propertyId: string): Promise<void> {
     unitType: "tokens",
     costCents: scriptUsage.costCents,
     metadata: {
-      model: "claude-sonnet-4-6",
+      model: DIRECTOR_MODEL,
       scene_count: validScenes.length,
       mood: output.mood,
       ...scriptUsage.breakdown,
@@ -637,8 +640,9 @@ async function runPreflightQA(propertyId: string): Promise<void> {
         roomType: (photo.room_type as string) ?? "other",
       });
 
+      const QC_MODEL = "claude-sonnet-4-6";
       const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: QC_MODEL,
         max_tokens: 2048,
         system: PROMPT_QA_SYSTEM,
         messages: [
@@ -659,7 +663,7 @@ async function runPreflightQA(propertyId: string): Promise<void> {
         ],
       });
 
-      const usageCost = computeClaudeCost(response.usage as never);
+      const usageCost = computeClaudeCost(response.usage as never, QC_MODEL);
       await recordCostEvent({
         propertyId,
         sceneId: scene.id,
@@ -669,7 +673,7 @@ async function runPreflightQA(propertyId: string): Promise<void> {
         unitType: "tokens",
         costCents: usageCost.costCents,
         metadata: {
-          model: "claude-sonnet-4-6",
+          model: QC_MODEL,
           sub_stage: "preflight_qa",
           scene_number: scene.scene_number,
           ...usageCost.breakdown,

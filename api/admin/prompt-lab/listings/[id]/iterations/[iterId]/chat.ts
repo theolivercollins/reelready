@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireAdmin } from "../../../../../../../lib/auth.js";
 import { getSupabase } from "../../../../../../../lib/client.js";
+import { computeClaudeCost } from "../../../../../../../lib/utils/claude-cost.js";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -77,12 +78,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.flushHeaders?.();
 
   const client = new Anthropic();
+  const CHAT_MODEL = "claude-haiku-4-5-20251001";
   let assistantText = "";
   const savedInstructions: string[] = [];
 
   try {
     const stream = client.messages.stream({
-      model: "claude-haiku-4-5-20251001",
+      model: CHAT_MODEL,
       max_tokens: 2048,
       system: SYSTEM,
       tools: [
@@ -122,6 +124,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const final = await stream.finalMessage();
+
+    // Record token cost for this chat turn (Haiku 4.5 — cheaper than Sonnet).
+    const cost = computeClaudeCost(final.usage, CHAT_MODEL);
+    await supabase.from("cost_events").insert({
+      property_id: null,
+      scene_id: iter.scene_id,
+      stage: "chat",
+      provider: "anthropic",
+      units_consumed: cost.totalTokens,
+      unit_type: "tokens",
+      cost_cents: Math.round(cost.costCents),
+      metadata: { scope: "lab_listing_iteration_chat", iteration_id: iterId, scene_id: iter.scene_id, model: CHAT_MODEL },
+    });
+
     let promptUpdated: string | null = null;
     for (const block of final.content) {
       if (block.type === "tool_use" && block.name === "save_future_instruction") {

@@ -93,8 +93,9 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
   costCents: number;
 }> {
   const client = new Anthropic();
+  const ANALYZE_MODEL = "claude-sonnet-4-6";
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: ANALYZE_MODEL,
     max_tokens: 4096,
     system: PHOTO_ANALYSIS_SYSTEM,
     messages: [
@@ -112,7 +113,7 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
   if (!jsonMatch) throw new Error("Photo analyzer returned no JSON array");
   const results: PhotoAnalysisResult[] = JSON.parse(jsonMatch[0]);
   if (!results[0]) throw new Error("Photo analyzer returned empty array");
-  const usageCost = computeClaudeCost(response.usage as never);
+  const usageCost = computeClaudeCost(response.usage as never, ANALYZE_MODEL);
   return { analysis: results[0], costCents: Math.round(usageCost.costCents) };
 }
 
@@ -349,8 +350,9 @@ export async function directSinglePhoto(
     renderPreviousAttemptsBlock(previousAttempts) +
     renderRecipeBlock(recipes);
   const { body: directorSystem } = await resolveDirectorSystem();
+  const DIRECT_MODEL = "claude-sonnet-4-6";
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: DIRECT_MODEL,
     max_tokens: 2048,
     system: directorSystem,
     messages: [{ role: "user", content: userPrompt }],
@@ -361,7 +363,7 @@ export async function directSinglePhoto(
   const parsed: DirectorOutput = JSON.parse(jsonMatch[0]);
   const scene = parsed.scenes?.[0];
   if (!scene) throw new Error("Director returned no scenes");
-  const usageCost = computeClaudeCost(response.usage as never);
+  const usageCost = computeClaudeCost(response.usage as never, DIRECT_MODEL);
   return { scene, costCents: Math.round(usageCost.costCents) };
 }
 
@@ -420,8 +422,9 @@ Remember: the revised output must comply with the full DIRECTOR_SYSTEM rules (be
 ---
 ${(await resolveDirectorSystem()).body}`;
 
+  const REFINE_MODEL = "claude-sonnet-4-6";
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: REFINE_MODEL,
     max_tokens: 1024,
     system: REFINE_SYSTEM,
     messages: [{ role: "user", content: userMessage }],
@@ -444,7 +447,7 @@ ${(await resolveDirectorSystem()).body}`;
     duration_seconds: parsed.duration_seconds ?? 4,
     provider_preference: null,
   };
-  const usageCost = computeClaudeCost(response.usage as never);
+  const usageCost = computeClaudeCost(response.usage as never, REFINE_MODEL);
   return { scene, rationale: parsed.rationale ?? "", costCents: Math.round(usageCost.costCents) };
 }
 
