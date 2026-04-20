@@ -78,7 +78,7 @@ export type SceneStatus =
   | "failed"
   | "needs_review";
 
-export type VideoProvider = "runway" | "kling" | "luma" | "higgsfield";
+export type VideoProvider = "runway" | "kling" | "luma" | "higgsfield" | "atlas";
 
 export type LogStage =
   | "intake"
@@ -137,6 +137,7 @@ export interface Scene {
   duration_seconds: number;
   status: SceneStatus;
   provider: VideoProvider | null;
+  provider_task_id: string | null;
   generation_cost_cents: number | null;
   generation_time_ms: number | null;
   clip_url: string | null;

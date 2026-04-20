@@ -8,7 +8,6 @@ const baseParams: GenerateClipParams = {
   prompt: "slow cinematic push in",
   durationSeconds: 5,
   aspectRatio: "16:9",
-  cameraMovement: "push_in",
 };
 
 describe("buildAtlasRequestBody", () => {
@@ -23,7 +22,7 @@ describe("buildAtlasRequestBody", () => {
     expect(body.prompt).toBe("slow cinematic push in");
     expect(body.duration).toBe(5);
     // Wan-only field must not be present on Kling submissions.
-    expect((body as Record<string, unknown>).last_image).toBeUndefined();
+    expect((body as unknown as Record<string, unknown>).last_image).toBeUndefined();
   });
 
   it("maps GenerateClipParams to the Wan 2.7 body with last_image", () => {
@@ -35,7 +34,7 @@ describe("buildAtlasRequestBody", () => {
     expect(body.image).toBe("https://cdn.example.com/start.jpg");
     expect(body.last_image).toBe("https://cdn.example.com/end.jpg");
     // Kling-only field must not leak onto Wan submissions.
-    expect((body as Record<string, unknown>).end_image).toBeUndefined();
+    expect((body as unknown as Record<string, unknown>).end_image).toBeUndefined();
   });
 
   it("omits the end-frame field when endImageUrl is missing", () => {
@@ -43,7 +42,7 @@ describe("buildAtlasRequestBody", () => {
       { ...baseParams, endImageUrl: undefined },
       ATLAS_MODELS["kling-v3-pro"],
     );
-    expect((body as Record<string, unknown>).end_image).toBeUndefined();
+    expect((body as unknown as Record<string, unknown>).end_image).toBeUndefined();
   });
 
   it("throws when sourceImageUrl is missing — Atlas requires a hosted URL", () => {
