@@ -181,13 +181,16 @@ Development landing (`/dashboard/development`) shows:
 
 ## Known bugs / gotchas
 
-- **`scene_ratings` cascade on rerun** (production) — rerun deletes scenes, cascades rating rows. Denormalization onto rating rows is a planned TODO.
-- **Failover too aggressive** — excludes provider on any exception. Should only exclude on permanent errors (401/402/400).
 - **Runway ignores non-push motion** — router avoids sending those to Runway now; fallback path could still misroute.
-- **Stale `needs_review` Kling scenes from earlier property** — manual retry endpoint still not built for production.
-- **Shotstack cost not in `cost_events`** — still TODO.
 - **File-revert mystery** — unresolved. All Shotstack MVP files + the entire Lab build survived multiple sessions; probably dormant or specific to certain paths.
 - **Prompt QA dead code** — `lib/prompts/prompt-qa.ts` + body of `runPreflightQA` in pipeline.ts still present. Never called. Prune later.
+
+### Resolved 2026-04-20
+
+- **`scene_ratings` cascade on rerun** → migration 014 denormalizes onto the rating row; FK is `ON DELETE SET NULL`; ratings now survive rerun.
+- **Failover too aggressive** → `classifyProviderError` in `lib/providers/errors.ts` classifies errors; only permanent (400/401/402/403/404/422) causes failover. Capacity + 5xx stay on the same provider and let the cron retry.
+- **Stale `needs_review` Kling scenes** → `POST /api/scenes/:id/resubmit` + the Pipeline/PropertyDetail buttons clear `provider_task_id` and resubmit (with optional provider override).
+- **Shotstack cost missing from `cost_events`** → `runAssembly` logs one row per aspect-ratio render. `SHOTSTACK_CENTS_PER_RENDER` env tunes it. Migration 017 widens the CHECK constraint.
 
 ---
 
@@ -245,12 +248,10 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## Immediate next actions (start here next session)
 
-1. **Use the Lab.** Upload 10+ kitchen photos across a few batches, rate aggressively, let recipes accumulate. The learning loop needs data to start compounding.
-2. **Validate a recipe match end-to-end** — upload a kitchen-island photo, rate 5★, promote (or auto-promote), upload a second kitchen-island photo, confirm the recipe chip appears and the director uses the template.
-3. **Rule mining dry run** — once there are ~15 rated Lab iterations, hit the Proposals page, run mining, review the diff. See if Claude's suggestions track your intuition.
-4. **Retry-scene endpoint for PRODUCTION** — the stuck Kling scenes from property `6f508e16` still need a manual retry. Not built yet.
-5. **scene_ratings denormalization for PRODUCTION** — still the highest-value fix for the production learning loop. Hasn't been touched this session.
-6. **Promote-to-prod flow** — when a Lab override proves itself, there needs to be an explicit "apply this to production's DIRECTOR_SYSTEM" button. Right now Lab changes stay Lab-only, which is safe but inert for customers.
+1. **Generate Lab data.** The learning loop is still bottlenecked on rated iterations — target 30+ across a few archetypes so recipes accumulate and the promote-to-prod readiness gate (≥10 renders, avg ≥4, winners ≥2× losers) becomes reachable.
+2. **Validate the end-to-end Lab→prod loop.** (a) Upload a kitchen photo, rate 5★, confirm auto-promote to recipe. (b) Upload a similar kitchen photo, confirm the recipe chip appears and the director reuses the template. (c) Run rule mining → apply a proposal → confirm the override shows up under "Active Lab overrides" on /proposals. (d) Click Promote to prod → confirm a new `prompt_revisions` row with `source='lab_promotion'` → run the production pipeline on a property → verify the log line `Director prompt resolved from lab promotion v<N>`.
+3. **Clear the `6f508e16` backlog.** Open the property detail page, click Resubmit or Try <other provider> on every needs_review scene. The cron will pick up the new task_ids.
+4. **Scene rating recovery.** Nothing to do in code — but the 7+ ratings lost before the denormalization are gone. Any new ratings now survive reruns automatically.
 
 ---
 

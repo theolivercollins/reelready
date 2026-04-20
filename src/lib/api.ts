@@ -223,11 +223,31 @@ export async function approveScene(id: string): Promise<void> {
   return apiFetch(`/api/scenes/${id}/approve`, { method: 'POST' });
 }
 
-export async function retryScene(id: string, prompt: string): Promise<void> {
+export async function retryScene(
+  id: string,
+  prompt: string,
+  options?: { provider?: 'runway' | 'kling'; camera_movement?: string },
+): Promise<{ ok: boolean; provider?: string; jobId?: string; willRetryViaCron?: boolean; message?: string }> {
   return apiFetch(`/api/scenes/${id}/retry`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, ...(options ?? {}) }),
+  });
+}
+
+export async function resubmitScene(
+  id: string,
+  options?: {
+    prompt?: string;
+    provider?: 'runway' | 'kling';
+    camera_movement?: string;
+    duration_seconds?: number;
+  },
+): Promise<{ ok: boolean; provider?: string; jobId?: string; willRetryViaCron?: boolean; message?: string }> {
+  return apiFetch(`/api/scenes/${id}/resubmit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options ?? {}),
   });
 }
 

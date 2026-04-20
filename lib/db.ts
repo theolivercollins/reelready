@@ -114,6 +114,52 @@ export async function upsertSceneRating(input: {
   rated_by?: string | null;
 }): Promise<SceneRating> {
   const supabase = getSupabase();
+
+  // Snapshot the scene + photo context into the denormalized rating
+  // columns so the rating survives a cascade delete when the property
+  // is rerun. migration 014 flipped the FK to ON DELETE SET NULL; the
+  // unified retrieval RPCs (match_rated_examples / match_loser_examples)
+  // read the denorm columns first, falling back to the live join only
+  // when they're null.
+  const { data: sceneRow } = await supabase
+    .from("scenes")
+    .select("prompt, camera_movement, duration_seconds, provider, clip_url, embedding, embedding_model, photo_id")
+    .eq("id", input.scene_id)
+    .maybeSingle();
+  let photoRow: {
+    room_type: string | null;
+    key_features: string[] | null;
+    composition: string | null;
+    aesthetic_score: number | null;
+    depth_rating: string | null;
+  } | null = null;
+  if (sceneRow?.photo_id) {
+    const { data } = await supabase
+      .from("photos")
+      .select("room_type, key_features, composition, aesthetic_score, depth_rating")
+      .eq("id", sceneRow.photo_id)
+      .maybeSingle();
+    photoRow = (data as typeof photoRow) ?? null;
+  }
+
+  const denorm: Record<string, unknown> = sceneRow
+    ? {
+        rated_prompt: sceneRow.prompt ?? null,
+        rated_camera_movement: sceneRow.camera_movement ?? null,
+        rated_duration_seconds: sceneRow.duration_seconds ?? null,
+        rated_provider: sceneRow.provider ?? null,
+        rated_clip_url: sceneRow.clip_url ?? null,
+        rated_embedding: sceneRow.embedding ?? null,
+        rated_embedding_model: sceneRow.embedding_model ?? null,
+        rated_room_type: photoRow?.room_type ?? null,
+        rated_photo_key_features: photoRow?.key_features ?? null,
+        rated_composition: photoRow?.composition ?? null,
+        rated_aesthetic_score: photoRow?.aesthetic_score ?? null,
+        rated_depth_rating: photoRow?.depth_rating ?? null,
+        rated_snapshot_at: new Date().toISOString(),
+      }
+    : {};
+
   const { data, error } = await supabase
     .from("scene_ratings")
     .upsert(
@@ -125,6 +171,7 @@ export async function upsertSceneRating(input: {
         tags: input.tags ?? null,
         rated_by: input.rated_by ?? null,
         updated_at: new Date().toISOString(),
+        ...denorm,
       },
       { onConflict: "scene_id" },
     )
@@ -168,13 +215,16 @@ export async function fetchRatedExamples(params: {
   const sinceIso = new Date(Date.now() - sinceDays * 86400000).toISOString();
   const supabase = getSupabase();
 
-  // Fetch ratings first, then look up scene + photo details in a second
-  // query so we avoid fragile nested PostgREST joins across multiple
-  // relationships. Keeps the code defensive against schema drift and
-  // lets us tolerate scenes that were deleted since the rating was made.
+  // After migration 014 scene_ratings carries denormalized copies of the
+  // prompt/camera_movement/room_type/provider so a rerun that deletes
+  // the scene does not lose the training signal. We pull those denorm
+  // columns first and only fall back to the live scene + photo join
+  // when the denorm columns are null (legacy pre-backfill rows).
   let ratingsQuery = supabase
     .from("scene_ratings")
-    .select("rating, comment, tags, scene_id, created_at")
+    .select(
+      "rating, comment, tags, scene_id, created_at, rated_prompt, rated_camera_movement, rated_room_type, rated_provider",
+    )
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
     .limit(params.limit ?? 20);
@@ -186,45 +236,86 @@ export async function fetchRatedExamples(params: {
     rating: number;
     comment: string | null;
     tags: string[] | null;
-    scene_id: string;
+    scene_id: string | null;
     created_at: string;
+    rated_prompt: string | null;
+    rated_camera_movement: string | null;
+    rated_room_type: string | null;
+    rated_provider: string | null;
   }>;
   if (ratings.length === 0) return [];
 
-  // Fetch the scene rows (prompt, camera_movement, provider, photo_id).
-  const sceneIds = ratings.map(r => r.scene_id);
-  const { data: sceneRows } = await supabase
-    .from("scenes")
-    .select("id, camera_movement, prompt, provider, photo_id")
-    .in("id", sceneIds);
-  const sceneMap = new Map((sceneRows ?? []).map((s: { id: string } & Record<string, unknown>) => [s.id, s]));
+  // Rows that still need a live join (denorm columns are null AND the
+  // scene still exists). Legacy rows pre-migration-014 fall through to
+  // this path; new rows carry all needed fields inline.
+  const needsJoin = ratings.filter(
+    (r) => r.scene_id && (!r.rated_prompt || !r.rated_camera_movement),
+  );
+  let sceneMap = new Map<string, { camera_movement: string; prompt: string; provider: string | null; photo_id: string }>();
+  let photoMap = new Map<string, string>();
+  if (needsJoin.length > 0) {
+    const sceneIds = Array.from(new Set(needsJoin.map((r) => r.scene_id as string)));
+    const { data: sceneRows } = await supabase
+      .from("scenes")
+      .select("id, camera_movement, prompt, provider, photo_id")
+      .in("id", sceneIds);
+    sceneMap = new Map(
+      (sceneRows ?? []).map(
+        (s: { id: string } & Record<string, unknown>) => [
+          s.id,
+          s as unknown as { camera_movement: string; prompt: string; provider: string | null; photo_id: string },
+        ],
+      ),
+    );
 
-  // Fetch the photo room_types for those scenes.
-  const photoIds = Array.from(new Set((sceneRows ?? []).map((s: { photo_id: string }) => s.photo_id).filter(Boolean)));
-  const { data: photoRows } = photoIds.length
-    ? await supabase.from("photos").select("id, room_type").in("id", photoIds)
-    : { data: [] as Array<{ id: string; room_type: string }> };
-  const photoMap = new Map((photoRows ?? []).map((p: { id: string; room_type: string }) => [p.id, p.room_type]));
+    const photoIds = Array.from(
+      new Set(
+        (sceneRows ?? [])
+          .map((s: { photo_id: string }) => s.photo_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    if (photoIds.length > 0) {
+      const { data: photoRows } = await supabase
+        .from("photos")
+        .select("id, room_type")
+        .in("id", photoIds);
+      photoMap = new Map(
+        (photoRows ?? []).map((p: { id: string; room_type: string }) => [p.id, p.room_type]),
+      );
+    }
+  }
 
-  return ratings.flatMap(r => {
-    const scene = sceneMap.get(r.scene_id) as undefined | {
-      camera_movement: string;
-      prompt: string;
-      provider: string | null;
-      photo_id: string;
-    };
-    if (!scene) return []; // scene deleted — skip
-    return [{
-      rating: r.rating,
-      comment: r.comment,
-      tags: r.tags,
-      scene: {
-        room_type: photoMap.get(scene.photo_id) ?? "other",
-        camera_movement: scene.camera_movement,
-        prompt: scene.prompt,
-        provider: scene.provider,
+  return ratings.flatMap((r) => {
+    // Prefer denormalized columns — they survive cascade delete.
+    let prompt = r.rated_prompt;
+    let cameraMovement = r.rated_camera_movement;
+    let roomType = r.rated_room_type;
+    let provider = r.rated_provider;
+    if ((!prompt || !cameraMovement) && r.scene_id) {
+      const scene = sceneMap.get(r.scene_id);
+      if (scene) {
+        prompt = prompt ?? scene.prompt;
+        cameraMovement = cameraMovement ?? scene.camera_movement;
+        provider = provider ?? scene.provider;
+        roomType = roomType ?? photoMap.get(scene.photo_id) ?? null;
+      }
+    }
+    // Row is unusable if there's still no prompt after falling back.
+    if (!prompt || !cameraMovement) return [];
+    return [
+      {
+        rating: r.rating,
+        comment: r.comment,
+        tags: r.tags,
+        scene: {
+          room_type: roomType ?? "other",
+          camera_movement: cameraMovement,
+          prompt,
+          provider: provider ?? null,
+        },
       },
-    }];
+    ];
   });
 }
 
@@ -275,9 +366,9 @@ export async function recordCostEvent(event: {
   propertyId: string;
   sceneId?: string | null;
   stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
-  provider: "anthropic" | "runway" | "kling" | "luma";
+  provider: "anthropic" | "runway" | "kling" | "luma" | "higgsfield" | "shotstack" | "openai";
   unitsConsumed?: number;
-  unitType?: "tokens" | "credits" | "kling_units" | null;
+  unitType?: "tokens" | "credits" | "kling_units" | "renders" | null;
   costCents: number;
   metadata?: Record<string, unknown>;
 }): Promise<void> {

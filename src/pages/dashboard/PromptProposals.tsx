@@ -1,20 +1,30 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, ArrowLeft, Check, X, AlertTriangle, Play, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ArrowLeft, Check, X, AlertTriangle, Play, ChevronDown, ChevronUp, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listProposals, reviewProposal, runMining, type LabProposal } from "@/lib/proposalsApi";
+import {
+  listProposals,
+  reviewProposal,
+  runMining,
+  listPromotableOverrides,
+  promoteOverrideToProd,
+  type LabProposal,
+  type OverrideReadiness,
+} from "@/lib/proposalsApi";
 
 const PromptProposals = () => {
   const [proposals, setProposals] = useState<LabProposal[] | null>(null);
+  const [overrides, setOverrides] = useState<OverrideReadiness[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mining, setMining] = useState(false);
   const [days, setDays] = useState(60);
 
   async function reload() {
     try {
-      const r = await listProposals();
-      setProposals(r.proposals);
+      const [p, o] = await Promise.all([listProposals(), listPromotableOverrides()]);
+      setProposals(p.proposals);
+      setOverrides(o.overrides);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -23,6 +33,15 @@ const PromptProposals = () => {
   useEffect(() => {
     reload();
   }, []);
+
+  async function handlePromote(overrideId: string, force: boolean) {
+    try {
+      await promoteOverrideToProd(overrideId, { force });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   async function handleMine() {
     setMining(true);
@@ -85,6 +104,81 @@ const PromptProposals = () => {
           <span>{error}</span>
         </div>
       )}
+
+      {/* Active overrides — promote to production. Lab overrides stay
+          Lab-scoped until one is manually promoted here; promotion
+          writes a new prompt_revisions row that the next production
+          pipeline run picks up via resolveProductionPrompt. */}
+      <section className="border border-border p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <Rocket className="h-4 w-4" />
+          <h3 className="text-base font-semibold">Active Lab overrides → production</h3>
+        </div>
+        {overrides === null ? (
+          <div className="py-6 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" /></div>
+        ) : overrides.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No active Lab overrides. Apply a proposal below to create one.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {overrides.map((o) => (
+              <div key={o.override_id} className="flex flex-wrap items-center justify-between gap-3 border border-border p-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="label text-muted-foreground">{o.prompt_name}</span>
+                    <span
+                      className={`rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                        o.ready_for_promotion
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {o.ready_for_promotion ? "Ready" : "Needs more data"}
+                    </span>
+                    <span className="tabular text-[11px] text-muted-foreground">
+                      hash {o.body_hash.slice(0, 8)} · since {new Date(o.override_created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="tabular mt-2 flex flex-wrap gap-4 text-[11px] text-muted-foreground">
+                    <span>rendered: {o.rendered_count ?? 0}</span>
+                    <span>rated: {o.rated_count ?? 0}</span>
+                    <span>avg: {o.avg_rating != null ? Number(o.avg_rating).toFixed(2) : "—"}</span>
+                    <span>winners/losers: {o.winners ?? 0}/{o.losers ?? 0}</span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handlePromote(o.override_id, false)}
+                    disabled={!o.ready_for_promotion}
+                    title={
+                      o.ready_for_promotion
+                        ? "Writes a new prompt_revisions row. Next prod pipeline run uses this body."
+                        : "Needs ≥10 renders, avg ≥4.0, winners ≥2× losers."
+                    }
+                  >
+                    <Rocket className="mr-1 h-3.5 w-3.5" /> Promote to prod
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (window.confirm(
+                        "Force-promote overrides the readiness gate. Only do this if you're confident in the change despite limited data. Continue?",
+                      )) {
+                        handlePromote(o.override_id, true);
+                      }
+                    }}
+                  >
+                    Force
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {proposals === null ? (
         <div className="py-20 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></div>
