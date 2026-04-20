@@ -13,14 +13,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  // Preview deployments bypass admin auth to enable smoke testing from
-  // curl / browser fetch without a Supabase session. Production is still
-  // gated. Revert this block before merging to main if the bypass is no
-  // longer wanted.
-  if (process.env.VERCEL_ENV !== "preview") {
-    const auth = await requireAdmin(req, res);
-    if (!auth) return;
-  }
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
 
   const { iteration_id } = (req.body ?? {}) as { iteration_id?: string };
   if (!iteration_id || typeof iteration_id !== "string") {

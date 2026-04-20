@@ -23,11 +23,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  // Preview-only bypass — see api/admin/judge/score.ts for notes.
-  if (process.env.VERCEL_ENV !== "preview") {
-    const auth = await requireAdmin(req, res);
-    if (!auth) return;
-  }
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
 
   const body = (req.body ?? {}) as {
     per_cell_sample_cap?: number;
