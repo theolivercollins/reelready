@@ -107,6 +107,19 @@ export function parseAtlasSubmitResponse(resp: AtlasSubmitResponse): string {
   return id;
 }
 
+export function extractAtlasOutputUrl(
+  outputs: Array<string | { url?: string }> | { url?: string } | string | null | undefined,
+): string | null {
+  if (!outputs) return null;
+  if (typeof outputs === "string") return outputs;
+  if (Array.isArray(outputs)) {
+    const first = outputs[0];
+    if (typeof first === "string") return first;
+    return first?.url ?? null;
+  }
+  return outputs.url ?? null;
+}
+
 export class AtlasProvider implements IVideoProvider {
   name = "atlas" as const;
   private apiKey: string;
@@ -168,7 +181,7 @@ export class AtlasProvider implements IVideoProvider {
       code: number;
       data?: {
         status?: string;
-        outputs?: Array<{ url?: string }> | { url?: string } | null;
+        outputs?: Array<string | { url?: string }> | { url?: string } | string | null;
       } | null;
     };
     const status = parsed.data?.status ?? "unknown";
@@ -180,8 +193,7 @@ export class AtlasProvider implements IVideoProvider {
     }
     // Success variants Atlas might use
     if (status === "succeeded" || status === "completed" || status === "success") {
-      const outputs = parsed.data?.outputs;
-      const url = Array.isArray(outputs) ? outputs[0]?.url : (outputs as { url?: string } | null | undefined)?.url;
+      const url = extractAtlasOutputUrl(parsed.data?.outputs);
       if (!url) return { status: "failed", error: `Atlas job ${jobId} finished without an output URL` };
       return {
         status: "complete",
