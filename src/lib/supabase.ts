@@ -35,15 +35,15 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 /**
  * Canonical magic-link callback URL.
  *
- * Hardcoded to the production domain in production so Supabase can never
- * redirect to a stale preview origin (which would break the session
- * regardless of flow type). Local dev still uses the current origin so
- * vite dev server sign-in keeps working.
+ * Uses the current origin on localhost and .vercel.app previews so magic-link
+ * sign-in returns to the same URL it started from. The implicit flow above is
+ * immune to cross-origin mismatch, so this is safe. Requires Supabase Auth →
+ * URL Configuration → Redirect URLs to allow https://*.vercel.app/auth/callback
+ * for preview deployments to succeed.
  */
 export const AUTH_CALLBACK_URL =
-  typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")
-    ? "https://listingelevate.com/auth/callback"
-    : typeof window !== "undefined" && window.location.hostname === "localhost"
-      ? `${window.location.origin}/auth/callback`
-      : "https://listingelevate.com/auth/callback";
+  typeof window !== "undefined" &&
+  (window.location.hostname.endsWith(".vercel.app") || window.location.hostname === "localhost")
+    ? `${window.location.origin}/auth/callback`
+    : "https://listingelevate.com/auth/callback";
 
