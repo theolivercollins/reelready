@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Loader2, Gavel } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase";
 
 type RunState =
   | { status: "idle" }
@@ -10,12 +11,16 @@ type RunState =
   | { status: "error"; message: string };
 
 async function callJson(path: string, init?: RequestInit): Promise<{ data: unknown; elapsedMs: number }> {
+  // Admin endpoints gate on Authorization: Bearer <supabase access token>,
+  // matching the pattern in src/lib/devApi.ts / promptLabApi.ts. Pull the
+  // current session and attach it.
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {};
+  if (init?.body) headers["Content-Type"] = "application/json";
+  if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
   const t0 = performance.now();
-  const res = await fetch(path, {
-    credentials: "include",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
+  const res = await fetch(path, { ...init, headers });
   const elapsedMs = Math.round(performance.now() - t0);
   const text = await res.text();
   let data: unknown;
