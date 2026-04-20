@@ -24,7 +24,7 @@
 
 - **Full Prompt Lab redesign from scratch.** IA refresh only. Existing flows keep their mental model.
 - **Multi-agent parallelism.** MVP is one autonomous agent at a time.
-- **A new video-generation provider.** We work with Kling + Runway + Luma + (maybe) Higgsfield. A cheaper provider is a later optimization.
+- **A new video-generation provider.** We work with Kling + Runway + (maybe) Luma + (maybe) Higgsfield. A cheaper provider is a later optimization.
 - **Automated promote-to-prod.** Every prod override stays gated by Oliver.
 - **Prod pipeline consumption of failure-tags.** Only approved director-body overrides flow to prod; raw failure-tag data stays Lab-scoped.
 
@@ -402,6 +402,25 @@ Load-bearing. Blocks everything else.
 - New video-gen provider integration (Higgsfield, self-hosted SVD, etc.)
 - Cross-property "listing personality" tuning
 - Mobile-responsive dashboard
+
+---
+
+## Future Work (post-MVP, do NOT build during this project)
+
+### Eliminate pullouts at render time; synthesize via Shotstack reverse
+
+**Hypothesis (Oliver, 2026-04-19):** pullout-style camera moves (`pull_out`, `drone_pull_back`) trigger hallucinations — the generator invents geometry that wasn't in the source image because it has to "fill in" what's being revealed as the camera retreats. Push-ins don't have this problem because they zoom into existing pixels.
+
+**Proposed fix (to be designed later):**
+1. Recipe / director change: stop generating pullout-style clips at the provider level. The director plans the scene in terms of push_in variants only.
+2. Assembly-time reversal: at the Shotstack assembly stage, if the scene's *intended* motion was a pullout, reverse the rendered push_in clip. Visually: a push_in played backwards ≈ a pullout.
+3. Knowledge-map implication: the `pull_out` and `drone_pull_back` columns may fold into their push counterparts once this lands (reducing the grid from 14×12 = 168 cells to ~14×10 = 140 cells). Decide during that design cycle.
+
+**Why deferred:** autonomous iteration + knowledge map must exist first. Those give us the data to confirm the hallucination hypothesis empirically (compare fail-tag rates between push_in and pull_out cells) before we commit to a provider-level recipe change.
+
+**Trigger to pick this up:** after Phase 4 is shipped and the knowledge map has ≥20 rated iterations in at least one pullout cell.
+
+**Dependency:** builds on the already-discussed "Shotstack reverse clips for rhythm" idea — see `docs/SHOTSTACK-INTEGRATION-PLAN.md`.
 
 ---
 
