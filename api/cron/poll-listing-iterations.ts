@@ -30,6 +30,41 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           .from("prompt_lab_listing_scene_iterations")
           .update({ status: "failed", render_error: status.error ?? "unknown" })
           .eq("id", iter.id);
+
+        // CI.4: Record cost even for failed renders — over-attribute rather
+        // than under-attribute. Provider invoices may charge for the attempt.
+        // Native Kling: 0¢ (pre-paid credits; Kling refunds on failure).
+        const nativeKlingFailed = isNativeKling(iter.model_used);
+        const failedCostCents = nativeKlingFailed ? 0 : atlasClipCostCents(iter.model_used);
+        try {
+          await supabase.from("cost_events").insert({
+            property_id: null,
+            scene_id: null,
+            stage: "generation",
+            provider: nativeKlingFailed ? "kling" : "atlas",
+            units_consumed: 1,
+            unit_type: "renders",
+            cost_cents: failedCostCents,
+            metadata: nativeKlingFailed
+              ? {
+                  scope: "lab_listing",
+                  scene_id: iter.scene_id,
+                  iteration_id: iter.id,
+                  model: iter.model_used,
+                  billing: "prepaid_credits_failed_refunded",
+                  render_outcome: "failed",
+                }
+              : {
+                  scope: "lab_listing",
+                  scene_id: iter.scene_id,
+                  iteration_id: iter.id,
+                  model: iter.model_used,
+                  render_outcome: "failed",
+                },
+          });
+        } catch (costErr) {
+          console.error("[poll-listing-iterations] failed cost_events insert:", costErr);
+        }
         failed += 1;
         continue;
       }

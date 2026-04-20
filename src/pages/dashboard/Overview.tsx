@@ -10,11 +10,12 @@ import {
   AreaChart,
   Area,
 } from "recharts";
-import { AlertTriangle, Loader2, ArrowRight, TrendingUp, TrendingDown } from "lucide-react";
+import { AlertTriangle, Loader2, ArrowRight, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatCents, formatDuration, getRelativeTime } from "@/lib/types";
 import type { Property, DailyStat } from "@/lib/types";
-import { fetchProperties, fetchDailyStats, fetchStatsOverview } from "@/lib/api";
+import { fetchProperties, fetchDailyStats, fetchStatsOverview, fetchCostBreakdown } from "@/lib/api";
+import type { CostBreakdown, CostBreakdownRow } from "@/lib/api";
 import { motion } from "framer-motion";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -36,6 +37,8 @@ function Delta({ value, positiveIsGood = true }: { value: number; positiveIsGood
   );
 }
 
+type CostTab = "provider" | "model" | "scope";
+
 const Overview = () => {
   const [completedProps, setCompletedProps] = useState<Property[]>([]);
   const [inProgressProps, setInProgressProps] = useState<Property[]>([]);
@@ -51,6 +54,9 @@ const Overview = () => {
     avgCostPerVideoCents: number;
     successRate: number;
   } | null>(null);
+  const [costBreakdown, setCostBreakdown] = useState<CostBreakdown | null>(null);
+  const [costTab, setCostTab] = useState<CostTab>("provider");
+  const [costExpanded, setCostExpanded] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,11 +64,12 @@ const Overview = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [completedRes, allRes, dailyRes, overviewRes] = await Promise.all([
+        const [completedRes, allRes, dailyRes, overviewRes, breakdownRes] = await Promise.all([
           fetchProperties({ status: "complete", limit: 20 }),
           fetchProperties({ limit: 100 }),
           fetchDailyStats(14),
           fetchStatsOverview(),
+          fetchCostBreakdown().catch(() => null),
         ]);
         if (cancelled) return;
         setCompletedProps(completedRes.properties);
@@ -71,6 +78,7 @@ const Overview = () => {
         setInProgressProps(allRes.properties.filter((p) => active.has(p.status)));
         setDailyStatsData(dailyRes.stats);
         setStats(overviewRes);
+        setCostBreakdown(breakdownRes);
         setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -423,6 +431,123 @@ const Overview = () => {
             ))}
           </ul>
         </div>
+      </section>
+
+      {/* ─── Cost breakdown ─── */}
+      <section>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="label text-muted-foreground">— Cost drill-down</span>
+            <h3 className="mt-3 text-xl font-semibold tracking-[-0.01em]">Spend by provider / model / scope</h3>
+          </div>
+          <button
+            onClick={() => setCostExpanded((v) => !v)}
+            className="label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {costExpanded ? (
+              <><ChevronUp className="h-3 w-3" /> Collapse</>
+            ) : (
+              <><ChevronDown className="h-3 w-3" /> Expand</>
+            )}
+          </button>
+        </div>
+
+        {costExpanded && (
+          <div className="mt-10 border border-border">
+            {/* Tab bar */}
+            <div className="flex border-b border-border">
+              {(["provider", "model", "scope"] as CostTab[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setCostTab(tab)}
+                  className={`label px-6 py-4 capitalize transition-colors ${
+                    costTab === tab
+                      ? "border-b-2 border-foreground text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  By {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-secondary/30">
+                    <th className="label px-6 py-3 text-left text-muted-foreground font-normal">
+                      {costTab === "provider" ? "Provider" : costTab === "model" ? "Model" : "Scope"}
+                    </th>
+                    <th className="label px-4 py-3 text-right text-muted-foreground font-normal">Today</th>
+                    <th className="label px-4 py-3 text-right text-muted-foreground font-normal">7d</th>
+                    <th className="label px-4 py-3 text-right text-muted-foreground font-normal">30d</th>
+                    <th className="label px-4 py-3 text-right text-muted-foreground font-normal">Events (30d)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const rows: CostBreakdownRow[] =
+                      costTab === "provider"
+                        ? (costBreakdown?.byProvider ?? [])
+                        : costTab === "model"
+                        ? (costBreakdown?.byModel ?? [])
+                        : (costBreakdown?.byScope ?? []);
+                    if (!costBreakdown) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-10 text-center text-xs text-muted-foreground">
+                            Loading breakdown…
+                          </td>
+                        </tr>
+                      );
+                    }
+                    if (rows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-10 text-center text-xs text-muted-foreground">
+                            No cost events in the last 30 days
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return rows.map((row, i) => (
+                      <tr
+                        key={row.key}
+                        className={`border-b border-border transition-colors hover:bg-secondary/40 ${
+                          i % 2 === 0 ? "" : "bg-secondary/10"
+                        }`}
+                      >
+                        <td className="px-6 py-4 font-medium">{row.key}</td>
+                        <td className="tabular px-4 py-4 text-right text-xs">
+                          {row.today.cents > 0 ? formatCents(row.today.cents) : <span className="text-muted-foreground/40">—</span>}
+                        </td>
+                        <td className="tabular px-4 py-4 text-right text-xs">
+                          {row.week.cents > 0 ? formatCents(row.week.cents) : <span className="text-muted-foreground/40">—</span>}
+                        </td>
+                        <td className="tabular px-4 py-4 text-right text-sm font-semibold">
+                          {formatCents(row.month.cents)}
+                        </td>
+                        <td className="tabular px-4 py-4 text-right text-xs text-muted-foreground">
+                          {row.month.events.toLocaleString()}
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer nudge */}
+            <p className="border-t border-border px-6 py-4 text-[11px] text-muted-foreground/60">
+              Numbers look off? Run{" "}
+              <code className="rounded bg-secondary px-1 py-0.5 font-mono text-[10px]">
+                npx tsx scripts/cost-reconcile.ts --since &lt;date&gt;
+              </code>{" "}
+              and cross-check against your provider invoices. Drift &gt;5% should be investigated before high-volume work.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* ─── Active pipeline ─── */}

@@ -144,6 +144,39 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           .from("prompt_lab_iterations")
           .update({ render_error: outcome.error })
           .eq("id", row.id);
+
+        // CI.4: Record cost for failed renders — over-attribute rather than
+        // under-attribute until provider invoices confirm failure billing.
+        // Kling pre-paid credits are likely refunded on failure → 0¢.
+        const isKlingFailedLab = row.provider === "kling";
+        const labFailedCents = isKlingFailedLab ? 0 : (outcome.costCents ?? 0);
+        try {
+          await supabase.from("cost_events").insert({
+            property_id: null,
+            scene_id: null,
+            stage: "generation",
+            provider: row.provider,
+            units_consumed: 1,
+            unit_type: isKlingFailedLab ? "kling_units" : "renders",
+            cost_cents: labFailedCents,
+            metadata: isKlingFailedLab
+              ? {
+                  scope: "lab",
+                  iteration_id: row.id,
+                  session_id: row.session_id,
+                  billing: "prepaid_credits_failed_refunded",
+                  render_outcome: "failed",
+                }
+              : {
+                  scope: "lab",
+                  iteration_id: row.id,
+                  session_id: row.session_id,
+                  render_outcome: "failed",
+                },
+          });
+        } catch (costErr) {
+          console.error("[poll-lab-renders] failed cost_events insert:", costErr);
+        }
         results.push({ id: row.id, phase: "finalize", status: "failed", err: outcome.error });
         continue;
       }

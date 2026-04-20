@@ -127,7 +127,7 @@ Legacy: `match_lab_iterations` (unused since unified embeddings shipped).
 | `KLING_CONCURRENCY_LIMIT` | `4` | Max concurrent Kling jobs (Lab + prod) |
 | `KLING_CENTS_PER_UNIT` | `0` | Cost estimate per Kling unit |
 | `RUNWAY_CENTS_PER_CREDIT` | `1` | Cost estimate per Runway credit |
-| `SHOTSTACK_CENTS_PER_RENDER` | `10` | Flat cost estimate per Shotstack render |
+| `SHOTSTACK_CENTS_PER_MINUTE` | `20` | Shotstack cost per output-minute (rounded up). Ingest plan = 20¢, Create plan = 50¢. Replaces deprecated `SHOTSTACK_CENTS_PER_RENDER`. |
 | `SHOTSTACK_ENV` | `stage` | `stage` or `production` |
 | `GENERATION_CONCURRENCY` | `4` | Max parallel generation submits in pipeline |
 | `QC_AUTO_APPROVE_ALL` | `false` | Skip QC approval (dead code path, but env checked) |

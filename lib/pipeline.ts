@@ -914,7 +914,7 @@ async function runAssembly(propertyId: string): Promise<void> {
 
   if (shotstackEnabled) {
     try {
-      const { ShotstackProvider, pollAssemblyUntilComplete } = await import(
+      const { ShotstackProvider, pollAssemblyUntilComplete, shotstackCostCents } = await import(
         "./providers/shotstack.js"
       );
       const provider = new ShotstackProvider();
@@ -953,23 +953,27 @@ async function runAssembly(propertyId: string): Promise<void> {
       }
       horizontalUrl = horizontalResult.videoUrl;
 
-      // Shotstack flat per-render estimate. Real cost depends on output
-      // duration + resolution; SHOTSTACK_CENTS_PER_RENDER env lets us
-      // tune it without a deploy. Default 10¢/render (20¢ for a
-      // horizontal + vertical pair).
-      const shotstackCents = Math.round(
-        parseFloat(process.env.SHOTSTACK_CENTS_PER_RENDER ?? "10"),
+      // Shotstack bills per output-minute rounded up. Use the duration
+      // returned by the render API (ground truth); fall back to summing
+      // the input clip durations if the API didn't return a value.
+      const timelineDurationSeconds = clipInputs.reduce(
+        (sum, c) => sum + c.durationSeconds,
+        0,
       );
+      const horizontalDuration =
+        horizontalResult.durationSeconds ?? timelineDurationSeconds;
+      const horizontalCents = shotstackCostCents(horizontalDuration);
       await recordCostEvent({
         propertyId,
         stage: "assembly",
         provider: "shotstack",
         unitsConsumed: 1,
         unitType: "renders",
-        costCents: shotstackCents,
+        costCents: horizontalCents,
         metadata: {
           aspect_ratio: "16:9",
           clip_count: clipInputs.length,
+          output_duration_seconds: horizontalDuration,
           render_time_ms: horizontalResult.renderTimeMs ?? null,
           job_id: horizontalJob.jobId,
         },
@@ -988,16 +992,20 @@ async function runAssembly(propertyId: string): Promise<void> {
       }
       verticalUrl = verticalResult.videoUrl;
 
+      const verticalDuration =
+        verticalResult.durationSeconds ?? timelineDurationSeconds;
+      const verticalCents = shotstackCostCents(verticalDuration);
       await recordCostEvent({
         propertyId,
         stage: "assembly",
         provider: "shotstack",
         unitsConsumed: 1,
         unitType: "renders",
-        costCents: shotstackCents,
+        costCents: verticalCents,
         metadata: {
           aspect_ratio: "9:16",
           clip_count: clipInputs.length,
+          output_duration_seconds: verticalDuration,
           render_time_ms: verticalResult.renderTimeMs ?? null,
           job_id: verticalJob.jobId,
         },

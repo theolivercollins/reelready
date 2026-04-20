@@ -77,6 +77,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await supabase.from('scenes').update({ status: 'needs_review' }).eq('id', scene.id);
           await log(scene.property_id, 'generation', 'error',
             `Scene ${scene.scene_number}: ${scene.provider} task ${scene.provider_task_id} failed: ${status.error ?? 'unknown'}`, undefined, scene.id);
+
+          // CI.4: Record cost for failed renders — over-attribute rather than
+          // under-attribute until provider invoices confirm failure policy.
+          // Kling pre-paid credits are likely refunded on failure → 0¢.
+          const isKlingFailed = scene.provider === 'kling';
+          const failedCostCents = isKlingFailed ? 0 : (status.costCents ?? 0);
+          try {
+            await recordCostEvent({
+              propertyId: scene.property_id,
+              sceneId: scene.id,
+              stage: 'generation',
+              provider: scene.provider as Parameters<typeof recordCostEvent>[0]['provider'],
+              unitsConsumed: 1,
+              unitType: isKlingFailed ? 'kling_units' : null,
+              costCents: failedCostCents,
+              metadata: {
+                scene_number: scene.scene_number,
+                duration_seconds: scene.duration_seconds,
+                render_outcome: 'failed',
+                ...(isKlingFailed ? { billing: 'prepaid_credits_failed_refunded' } : {}),
+                source: 'cron',
+              },
+            });
+          } catch (costErr) {
+            const costMsg = costErr instanceof Error ? costErr.message : String(costErr);
+            await log(scene.property_id, 'generation', 'warn',
+              `Scene ${scene.scene_number}: failed cost_events insert: ${costMsg}`, undefined, scene.id);
+          }
           failedCount++;
           continue;
         }

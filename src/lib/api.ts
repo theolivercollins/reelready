@@ -219,6 +219,23 @@ export async function fetchDailyStats(days?: number): Promise<{ stats: DailyStat
   return apiFetch(`/api/stats/daily${qs}`);
 }
 
+export interface CostBucket { events: number; cents: number; }
+export interface CostBreakdownRow {
+  key: string;
+  today: CostBucket;
+  week: CostBucket;
+  month: CostBucket;
+}
+export interface CostBreakdown {
+  byProvider: CostBreakdownRow[];
+  byModel: CostBreakdownRow[];
+  byScope: CostBreakdownRow[];
+}
+
+export async function fetchCostBreakdown(): Promise<CostBreakdown> {
+  return apiFetch('/api/stats/cost-breakdown');
+}
+
 export async function approveScene(id: string): Promise<void> {
   return apiFetch(`/api/scenes/${id}/approve`, { method: 'POST' });
 }

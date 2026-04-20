@@ -302,6 +302,40 @@ export class ShotstackProvider implements IVideoAssemblyProvider {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Cost helpers
+// ---------------------------------------------------------------------------
+
+// Shotstack bills per output-minute, rounded UP. A 37s video bills as 1 minute.
+// Default to the "Ingest" plan rate; override via env for higher-tier plans.
+const SHOTSTACK_CENTS_PER_MINUTE = parseInt(
+  process.env.SHOTSTACK_CENTS_PER_MINUTE ?? "20",
+  10,
+);
+
+/** Compute Shotstack cost in cents for a rendered output of the given duration.
+ *  Rounds duration up to the nearest minute (Shotstack's billing granularity).
+ *
+ *  Deprecation shim: if SHOTSTACK_CENTS_PER_RENDER is set in the environment
+ *  (legacy flat-rate config), its value is returned directly with a warn log
+ *  so old deployments don't silently change cost estimates on redeploy.
+ *  Remove this shim once all environments use SHOTSTACK_CENTS_PER_MINUTE.
+ */
+export function shotstackCostCents(outputDurationSeconds: number): number {
+  const legacyFlat = process.env.SHOTSTACK_CENTS_PER_RENDER;
+  if (legacyFlat !== undefined) {
+    const flat = parseFloat(legacyFlat);
+    console.warn(
+      `[shotstack] SHOTSTACK_CENTS_PER_RENDER is deprecated — ` +
+        `switch to SHOTSTACK_CENTS_PER_MINUTE (default 20¢/min). ` +
+        `Using legacy flat value: ${flat}¢`,
+    );
+    return Math.round(flat);
+  }
+  const minutes = Math.ceil(outputDurationSeconds / 60);
+  return minutes * SHOTSTACK_CENTS_PER_MINUTE;
+}
+
 export async function pollAssemblyUntilComplete(
   provider: IVideoAssemblyProvider,
   job: AssemblyJob,
