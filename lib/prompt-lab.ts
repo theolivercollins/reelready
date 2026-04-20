@@ -500,6 +500,7 @@ export async function submitLabRender(params: {
   scene: DirectorSceneOutput;
   roomType: RoomType;
   providerOverride?: "kling" | "runway" | null;
+  endImageUrl?: string | null;
 }): Promise<{ jobId: string; provider: string }> {
   let provider: IVideoProvider;
   if (params.providerOverride === "kling" || params.providerOverride === "runway") {
@@ -531,6 +532,7 @@ export async function submitLabRender(params: {
     prompt: params.scene.prompt,
     durationSeconds: params.scene.duration_seconds >= 7 ? 10 : 5,
     aspectRatio: "16:9",
+    endImageUrl: params.endImageUrl ?? undefined,
   });
   return { jobId: job.jobId, provider: provider.name };
 }
