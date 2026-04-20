@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 
 export function V2ThemeToggle() {
-  const initial = typeof window !== "undefined"
-    ? (localStorage.getItem("le-theme") as "light" | "dark" | null) ?? "dark"
+  const initial = typeof window !== "undefined" && typeof window.localStorage?.getItem === "function"
+    ? (window.localStorage.getItem("le-theme") as "light" | "dark" | null) ?? "dark"
     : "dark";
   const [theme, setTheme] = useState<"light" | "dark">(initial);
 
@@ -12,7 +12,9 @@ export function V2ThemeToggle() {
       el.setAttribute("data-theme", theme);
     });
     document.documentElement.setAttribute("data-v2-theme", theme);
-    localStorage.setItem("le-theme", theme);
+    if (typeof window.localStorage?.setItem === "function") {
+      window.localStorage.setItem("le-theme", theme);
+    }
   }, [theme]);
 
   return (
