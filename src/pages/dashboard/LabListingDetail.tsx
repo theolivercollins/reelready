@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, RefreshCw, Play, Archive } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Play, Archive, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SceneCard } from "@/components/lab/SceneCard";
+import { ShotPlanTable } from "@/components/lab/ShotPlanTable";
 import {
   getListing,
   directListing,
@@ -23,6 +24,8 @@ export default function LabListingDetail() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  const [photosOpen, setPhotosOpen] = useState(false);
 
   async function reload() {
     if (!id) return;
@@ -34,6 +37,9 @@ export default function LabListingDetail() {
       setPhotos(data.photos);
       setScenes(data.scenes);
       setIterations(data.iterations);
+      if (!selectedSceneId && data.scenes.length > 0) {
+        setSelectedSceneId(data.scenes[0].id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -93,26 +99,43 @@ export default function LabListingDetail() {
     window.location.href = "/dashboard/development/lab";
   }
 
+  const stats = useMemo(() => {
+    const rendered = scenes.filter((s) =>
+      iterations.some((i) => i.scene_id === s.id && (i.status === "rendered" || i.status === "rated"))
+    ).length;
+    const totalCents = iterations.reduce((sum, i) => sum + (i.cost_cents ?? 0), 0);
+    const byModel = iterations.reduce<Record<string, number>>((acc, i) => {
+      acc[i.model_used] = (acc[i.model_used] ?? 0) + (i.cost_cents ?? 0);
+      return acc;
+    }, {});
+    return { rendered, totalCents, byModel };
+  }, [scenes, iterations]);
+
+  const selectedScene = scenes.find((s) => s.id === selectedSceneId) ?? null;
+  const selectedIterations = selectedScene
+    ? iterations.filter((i) => i.scene_id === selectedScene.id).sort((a, b) => a.iteration_number - b.iteration_number)
+    : [];
+
   if (loading && !listing) return <div className="p-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   if (!listing) return <p className="p-8 text-sm text-muted-foreground">Listing not found.</p>;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-5">
       <div>
         <Link to="/dashboard/development/lab" className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-3 w-3" /> back to listings
         </Link>
-        <div className="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-semibold tracking-[-0.02em]">{listing.name}</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      </div>
+
+      <div className="border border-border bg-background">
+        <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-2xl font-semibold tracking-[-0.02em]">{listing.name}</h2>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <span className="border border-border px-2 py-0.5 uppercase tracking-wider">{listing.status}</span>
               <span className="border border-border px-2 py-0.5 uppercase tracking-wider">{listing.model_name}</span>
-              <span>{photos.length} photos</span>
-              <span>{scenes.length} scenes</span>
-              <span>${(listing.total_cost_cents / 100).toFixed(2)} spent</span>
+              {listing.notes && <span className="truncate italic">{listing.notes}</span>}
             </div>
-            {listing.notes && <p className="mt-2 text-sm text-muted-foreground">{listing.notes}</p>}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={reload}>
@@ -129,47 +152,73 @@ export default function LabListingDetail() {
             <Button variant="ghost" size="sm" onClick={archive}><Archive className="h-3 w-3" /></Button>
           </div>
         </div>
+        <div className="grid grid-cols-2 border-t border-border text-xs sm:grid-cols-4 lg:grid-cols-5">
+          <Stat label="Scenes" value={`${stats.rendered} / ${scenes.length}`} sub="rendered" />
+          <Stat label="Iterations" value={String(iterations.filter((i) => !i.archived).length)} sub={iterations.length !== iterations.filter((i) => !i.archived).length ? `${iterations.length} total` : undefined} />
+          <Stat label="Cost" value={`$${(stats.totalCents / 100).toFixed(2)}`} sub={Object.entries(stats.byModel).map(([m, c]) => `${m}: $${(c / 100).toFixed(2)}`).join(" • ") || undefined} />
+          <Stat label="Photos" value={String(photos.length)} sub={
+            <button type="button" onClick={() => setPhotosOpen((o) => !o)} className="inline-flex items-center gap-1 underline-offset-2 hover:underline">
+              <Images className="h-3 w-3" /> {photosOpen ? "hide" : "show"}
+            </button>
+          } />
+          <Stat label="Created" value={new Date(listing.created_at).toLocaleDateString()} sub={new Date(listing.created_at).toLocaleTimeString()} />
+        </div>
+        {photosOpen && (
+          <div className="border-t border-border px-5 py-3">
+            <div className="grid grid-cols-6 gap-1 md:grid-cols-10 lg:grid-cols-12">
+              {photos.map((p) => (
+                <div key={p.id} className="relative aspect-video overflow-hidden border border-border bg-muted">
+                  <img src={p.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  <span className="absolute bottom-0.5 left-0.5 bg-black/60 px-1 py-0.5 text-[8px] uppercase tracking-wider text-white">
+                    {p.photo_index}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <div className="border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
-      <section>
-        <span className="label text-muted-foreground">Photos</span>
-        <div className="mt-3 grid grid-cols-4 gap-2 md:grid-cols-6 lg:grid-cols-8">
-          {photos.map((p) => (
-            <div key={p.id} className="relative aspect-video overflow-hidden border border-border bg-muted">
-              <img src={p.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-              <span className="absolute bottom-1 left-1 bg-black/60 px-1.5 py-0.5 text-[8px] uppercase tracking-wider text-white">
-                {p.photo_index} · {(p.analysis_json as { room_type?: string } | null)?.room_type ?? "—"}
-              </span>
-            </div>
-          ))}
+      {scenes.length === 0 ? (
+        <div className="border border-border bg-background p-8 text-center text-sm text-muted-foreground">
+          {listing.status === "analyzing" || listing.status === "directing"
+            ? "Director is planning scenes…"
+            : "No scenes yet. Click Re-direct to run the director."}
         </div>
-      </section>
+      ) : (
+        <>
+          <ShotPlanTable
+            scenes={scenes}
+            iterations={iterations}
+            photos={photos}
+            selectedSceneId={selectedSceneId}
+            onSelect={setSelectedSceneId}
+          />
 
-      <section>
-        <span className="label text-muted-foreground">Scenes</span>
-        <div className="mt-3 space-y-4">
-          {scenes.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              {listing.status === "analyzing" || listing.status === "directing"
-                ? "Director is planning scenes…"
-                : "No scenes yet. Click Re-direct to run the director."}
-            </p>
-          )}
-          {scenes.map((s) => (
+          {selectedScene && (
             <SceneCard
-              key={s.id}
               listingId={id}
-              scene={s}
-              iterations={iterations.filter((i) => i.scene_id === s.id).sort((a, b) => a.iteration_number - b.iteration_number)}
+              scene={selectedScene}
+              iterations={selectedIterations}
               photos={photos}
               defaultModel={listing.model_name}
               onReload={reload}
             />
-          ))}
-        </div>
-      </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
+  return (
+    <div className="border-r border-border px-5 py-3 last:border-r-0">
+      <div className="label text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-lg font-semibold tabular-nums">{value}</div>
+      {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
     </div>
   );
 }
