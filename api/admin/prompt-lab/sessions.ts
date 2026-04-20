@@ -4,7 +4,7 @@ import { getSupabase } from "../../../lib/client.js";
 
 // GET  /api/admin/prompt-lab/sessions        — list sessions
 // POST /api/admin/prompt-lab/sessions        — create session from already-uploaded image
-//        body: { image_url, image_path, label?, archetype? }
+//        body: { image_url, image_path, label?, archetype?, batch_label?, cell_key? }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = await requireAdmin(req, res);
@@ -99,16 +99,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { image_url, image_path, label, archetype, batch_label } = (req.body ?? {}) as {
+    const { image_url, image_path, label, archetype, batch_label, cell_key } = (req.body ?? {}) as {
       image_url?: string;
       image_path?: string;
       label?: string;
       archetype?: string;
       batch_label?: string;
+      cell_key?: string | null;
     };
     if (!image_url || !image_path) {
       return res.status(400).json({ error: "image_url and image_path required" });
     }
+    const cellKey = typeof cell_key === "string" && cell_key.includes("-")
+      ? cell_key
+      : null;
     const { data, error } = await supabase
       .from("prompt_lab_sessions")
       .insert({
@@ -118,6 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         label: label ?? null,
         archetype: archetype ?? null,
         batch_label: batch_label?.trim() || null,
+        cell_key: cellKey,
       })
       .select()
       .single();
