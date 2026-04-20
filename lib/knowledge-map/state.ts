@@ -13,8 +13,15 @@ export interface CellStateInputs {
 export function classifyCellState(x: CellStateInputs): CellState {
   if (x.sample_size <= 0) return "untested";
   if (x.five_star_count >= 2) return "golden";
-  if (x.avg_rating !== null && x.avg_rating <= 2.0) return "weak";
-  if (x.sample_size > 0 && x.loser_count / x.sample_size >= 0.5) return "weak";
+  // Single `weak` check with || mirrors the SQL CASE in migration 019
+  // (both predicates under one WHEN clause). Keeping them combined here
+  // makes divergence between TS and SQL harder to introduce.
+  if (
+    (x.avg_rating !== null && x.avg_rating <= 2.0) ||
+    (x.sample_size > 0 && x.loser_count / x.sample_size >= 0.5)
+  ) {
+    return "weak";
+  }
   if (x.avg_rating !== null && x.avg_rating >= 4.0) return "strong";
   return "okay";
 }

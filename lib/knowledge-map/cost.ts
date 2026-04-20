@@ -49,6 +49,10 @@ export async function getCostRollup(opts: { sinceDaysBack?: number } = {}): Prom
     judgeTotal += Number((j as { cost_cents?: number }).cost_cents ?? 0);
   }
 
+  // Judge calls are not currently written to cost_events (Phase 1 stores
+  // them only on lab_judge_scores.cost_cents). Sum is safe today. If
+  // Phase 3 starts writing judge cost to cost_events, remove judgeTotal
+  // from the total_cents sum here to avoid double-counting.
   return {
     total_cents: totalCents + judgeTotal,
     by_provider_and_stage: Array.from(grouped.values()).sort((a, b) => b.cost_cents - a.cost_cents),

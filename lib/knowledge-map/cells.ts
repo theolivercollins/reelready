@@ -193,7 +193,14 @@ export async function getCellDrillDown(cellKey: string): Promise<CellDrillDown |
         created_at: r.created_at,
       };
     })
-    .filter((o) => o.prompt_name.includes(cellKey) || o.prompt_name.includes(roomType) || o.prompt_name.includes(cameraMovement));
+    // Match overrides whose prompt_name is either the exact cell_key, or
+    // contains BOTH the room_type AND the camera_movement. Single-term
+    // substring matches (e.g. just "orbit") would falsely attach
+    // unrelated overrides to this cell's drill-down.
+    .filter((o) =>
+      o.prompt_name.includes(cellKey) ||
+      (o.prompt_name.includes(roomType) && o.prompt_name.includes(cameraMovement))
+    );
 
   // 6. Total cost — Lab judge cost for this cell's iterations +
   //    generation cost from cost_events scoped to property_ids that
