@@ -231,7 +231,8 @@ function IterationRow({ listingId, scene, iter, onReload }: {
                 onSend={(m, cb) => chatIterationStream(listingId, iter.id, m, cb)}
                 onClear={async () => { await clearIterationChat(listingId, iter.id); onReload(); }}
                 onPinMessage={pinMessage}
-                emptyHint="Ask about this iteration or tell the system what to change next time. Claude Haiku can save directives that influence future renders of this scene."
+                onServerChange={onReload}
+                emptyHint="Ask about this iteration or tell the system what to change. Claude Haiku can save directives AND rewrite the director prompt directly when you ask."
                 placeholder="Ask or instruct... (Enter to send, Shift+Enter for newline)"
                 headerLabel="Chat with this iteration"
               />
@@ -432,7 +433,8 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
               onSend={(m, cb) => chatSceneStream(listingId, scene.id, m, cb)}
               onClear={async () => { await clearSceneChat(listingId, scene.id); onReload(); }}
               onPinMessage={pinSceneMessage}
-              emptyHint="No iterations yet. Tell the system what this scene should emphasize, what to avoid, how it should feel. Instructions get saved for the first render."
+              onServerChange={onReload}
+              emptyHint="No iterations yet. Tell the system what this scene should emphasize. Claude can save instructions AND rewrite the director prompt directly."
               placeholder="Describe what you want... (Enter to send, Shift+Enter for newline)"
               headerLabel="Chat with this scene"
             />

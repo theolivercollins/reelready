@@ -161,6 +161,7 @@ export async function setSceneUseEndFrame(listingId: string, sceneId: string, us
 export type ChatStreamEvent =
   | { type: "text"; delta: string }
   | { type: "saved_instruction"; instruction: string }
+  | { type: "prompt_updated"; new_prompt: string }
   | { type: "done"; chat_messages: ChatMessage[]; saved_instructions: string[] }
   | { type: "error"; message: string };
 

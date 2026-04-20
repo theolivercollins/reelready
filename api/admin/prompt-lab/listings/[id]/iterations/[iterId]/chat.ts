@@ -10,11 +10,19 @@ interface ChatMessage {
   pinned?: boolean;
 }
 
-const SYSTEM = `You are reviewing a single rendered video clip from a real-estate listing walkthrough. The user generated it from a static photo using Kling 3.0 Pro or Wan 2.7, guided by a "director prompt" you will be shown. Your job is to help the user understand why this iteration turned out the way it did and to collect specific directives that should influence the NEXT render of this same scene.
+const SYSTEM = `You help the user iterate on a real-estate listing video clip rendered from a static photo using Kling 3.0 Pro or Wan 2.7. You will see the director prompt that produced the clip, the scene metadata, rating, user comment, and any existing future-render instructions.
 
-When the user expresses a change they want for future renders (slower motion, different camera angle, tighter framing, etc.), call the save_future_instruction tool with a concise imperative that a video prompt writer can act on. Be decisive — if the user says "I want slower motion" just save "Use slower camera motion" without asking for confirmation. You can save multiple instructions in one turn.
+You have TWO tools — use them proactively:
 
-Keep replies concise (1-3 sentences). Do not speculate about details you cannot see — you only have the director prompt, scene metadata, rating, and user comment; you do not see the actual pixels.`;
+1. save_future_instruction(instruction) — append a concise directive to the scene's refinement notes. These get applied alongside the director prompt on the NEXT render. Use for small tweaks: "Use slower camera motion", "Emphasize the range-wall tile", "Keep the fireplace in frame longer".
+
+2. update_director_prompt(new_prompt) — rewrite the scene's director prompt entirely. Use when the user wants a structural change: different subject, different camera movement, different framing, or when accumulated refinement notes have grown messy and should be folded cleanly into a single new prompt. Preserve the "LOCKED-OFF CAMERA..." stability preamble if it was there. Write the new prompt as a single paragraph of concrete visual language, not bullet points.
+
+Be decisive. If the user says "make it slower," call save_future_instruction with "Use slower camera motion" — don't ask for confirmation. If the user says "rewrite the prompt to focus on the marble island," call update_director_prompt with a clean new prompt.
+
+You can call multiple tools in one turn (e.g., save an instruction AND rewrite the prompt). After tool calls, add a brief 1-2 sentence confirmation of what you changed.
+
+Keep replies tight. The user can see the video themselves — don't narrate what you can't see; focus on translating their intent into concrete prompt/instruction changes.`;
 
 function sse(res: VercelResponse, payload: unknown) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -75,19 +83,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const stream = client.messages.stream({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: SYSTEM,
-      tools: [{
-        name: "save_future_instruction",
-        description: "Save a concise imperative instruction that should influence the next render of this scene. Use when the user expresses a change they want for future iterations.",
-        input_schema: {
-          type: "object",
-          properties: {
-            instruction: { type: "string", description: "A short imperative like 'Use slower camera motion' or 'Keep more empty space in the frame'" },
+      tools: [
+        {
+          name: "save_future_instruction",
+          description: "Append a concise directive to the scene's refinement notes. Applied alongside the existing director prompt on the next render.",
+          input_schema: {
+            type: "object",
+            properties: {
+              instruction: { type: "string", description: "A short imperative like 'Use slower camera motion' or 'Keep more empty space in the frame'" },
+            },
+            required: ["instruction"],
           },
-          required: ["instruction"],
         },
-      }],
+        {
+          name: "update_director_prompt",
+          description: "Rewrite the scene's director prompt entirely. Use when the user wants a structural change or when refinement notes should be folded cleanly into a single new prompt.",
+          input_schema: {
+            type: "object",
+            properties: {
+              new_prompt: { type: "string", description: "The complete new director prompt. Preserve the 'LOCKED-OFF CAMERA...' stability preamble if present. Single paragraph of concrete visual language." },
+            },
+            required: ["new_prompt"],
+          },
+        },
+      ],
       messages: [
         { role: "user", content: `Context for this iteration:\n${context}` },
         ...prior.map((m) => ({ role: m.role, content: m.content })),
@@ -101,12 +122,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const final = await stream.finalMessage();
+    let promptUpdated: string | null = null;
     for (const block of final.content) {
       if (block.type === "tool_use" && block.name === "save_future_instruction") {
         const input = block.input as { instruction?: string };
         if (input.instruction) {
           savedInstructions.push(input.instruction.trim());
           sse(res, { type: "saved_instruction", instruction: input.instruction.trim() });
+        }
+      }
+      if (block.type === "tool_use" && block.name === "update_director_prompt") {
+        const input = block.input as { new_prompt?: string };
+        if (input.new_prompt) {
+          promptUpdated = input.new_prompt.trim();
         }
       }
     }
@@ -124,11 +152,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", scene.id);
     }
 
-    if (!assistantText && savedInstructions.length > 0) {
-      assistantText = `Saved for future renders: ${savedInstructions.join("; ")}`;
-      sse(res, { type: "text", delta: assistantText });
-    } else if (!assistantText) {
-      assistantText = "(no response)";
+    if (promptUpdated) {
+      await supabase.from("prompt_lab_listing_scenes")
+        .update({ director_prompt: promptUpdated })
+        .eq("id", scene.id);
+      sse(res, { type: "prompt_updated", new_prompt: promptUpdated });
+    }
+
+    if (!assistantText) {
+      const parts: string[] = [];
+      if (promptUpdated) parts.push("Director prompt rewritten");
+      if (savedInstructions.length > 0) parts.push(`saved: ${savedInstructions.join("; ")}`);
+      assistantText = parts.length > 0 ? parts.join(". ") : "(no response)";
       sse(res, { type: "text", delta: assistantText });
     }
 

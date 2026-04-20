@@ -10,13 +10,14 @@ interface ChatMessage {
   pinned?: boolean;
 }
 
-const SYSTEM = `You are helping a user shape a not-yet-rendered video scene for a real-estate listing walkthrough. You will see the scene's room type, camera movement, and director prompt. Your job is to:
+const SYSTEM = `You help the user shape a not-yet-rendered video scene for a real-estate listing walkthrough. You will see the scene's room type, camera movement, and director prompt.
 
-1. Answer questions about what the scene WILL look like based on the director prompt
-2. Accept directives the user wants applied to the FIRST render (slower motion, different framing, specific subject emphasis)
-3. When the user gives a directive, call save_future_instruction with a concise imperative that a prompt writer can act on. Be decisive — don't ask for confirmation.
+You have TWO tools — use them proactively:
 
-Keep replies concise (1-3 sentences). The user hasn't seen any output yet, so focus on intent-shaping not critique.`;
+1. save_future_instruction(instruction) — append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the FIRST render.
+2. update_director_prompt(new_prompt) — rewrite the scene's director prompt entirely. Use when the user wants a structural change or refinement notes should be folded cleanly. Preserve the "LOCKED-OFF CAMERA..." stability preamble if present. Write a single paragraph of concrete visual language.
+
+Be decisive. Don't ask for confirmation on small tweaks. You can call multiple tools in one turn. After calling tools, add a brief 1-2 sentence confirmation of what you changed.`;
 
 function sse(res: VercelResponse, payload: unknown) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -68,19 +69,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const stream = client.messages.stream({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: SYSTEM,
-      tools: [{
-        name: "save_future_instruction",
-        description: "Save a concise imperative instruction that should shape the first render of this scene.",
-        input_schema: {
-          type: "object",
-          properties: {
-            instruction: { type: "string", description: "A short imperative like 'Emphasize the countertop marble veining' or 'Use a tighter 35mm framing'" },
+      tools: [
+        {
+          name: "save_future_instruction",
+          description: "Append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the first render.",
+          input_schema: {
+            type: "object",
+            properties: {
+              instruction: { type: "string", description: "A short imperative like 'Emphasize the marble veining' or 'Use a tighter 35mm framing'" },
+            },
+            required: ["instruction"],
           },
-          required: ["instruction"],
         },
-      }],
+        {
+          name: "update_director_prompt",
+          description: "Rewrite the scene's director prompt entirely. Preserve the 'LOCKED-OFF CAMERA...' stability preamble if present.",
+          input_schema: {
+            type: "object",
+            properties: {
+              new_prompt: { type: "string", description: "The complete new director prompt as a single paragraph." },
+            },
+            required: ["new_prompt"],
+          },
+        },
+      ],
       messages: [
         { role: "user", content: `Context for this scene:\n${context}` },
         ...prior.map((m) => ({ role: m.role, content: m.content })),
@@ -94,12 +108,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const final = await stream.finalMessage();
+    let promptUpdated: string | null = null;
     for (const block of final.content) {
       if (block.type === "tool_use" && block.name === "save_future_instruction") {
         const input = block.input as { instruction?: string };
         if (input.instruction) {
           savedInstructions.push(input.instruction.trim());
           sse(res, { type: "saved_instruction", instruction: input.instruction.trim() });
+        }
+      }
+      if (block.type === "tool_use" && block.name === "update_director_prompt") {
+        const input = block.input as { new_prompt?: string };
+        if (input.new_prompt) {
+          promptUpdated = input.new_prompt.trim();
         }
       }
     }
@@ -112,11 +133,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", sceneId);
     }
 
-    if (!assistantText && savedInstructions.length > 0) {
-      assistantText = `Saved for first render: ${savedInstructions.join("; ")}`;
-      sse(res, { type: "text", delta: assistantText });
-    } else if (!assistantText) {
-      assistantText = "(no response)";
+    if (promptUpdated) {
+      await supabase.from("prompt_lab_listing_scenes")
+        .update({ director_prompt: promptUpdated })
+        .eq("id", sceneId);
+      sse(res, { type: "prompt_updated", new_prompt: promptUpdated });
+    }
+
+    if (!assistantText) {
+      const parts: string[] = [];
+      if (promptUpdated) parts.push("Director prompt rewritten");
+      if (savedInstructions.length > 0) parts.push(`saved: ${savedInstructions.join("; ")}`);
+      assistantText = parts.length > 0 ? parts.join(". ") : "(no response)";
       sse(res, { type: "text", delta: assistantText });
     }
 

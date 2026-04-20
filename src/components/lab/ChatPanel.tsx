@@ -9,6 +9,7 @@ interface ChatPanelProps {
   onSend: (message: string, onEvent: (evt: ChatStreamEvent) => void) => Promise<void>;
   onClear: () => Promise<void>;
   onPinMessage?: (index: number, content: string) => Promise<void>;
+  onServerChange?: () => void;
   emptyHint: string;
   placeholder: string;
   headerLabel: string;
@@ -19,12 +20,13 @@ function formatTime(ts: string): string {
   catch { return ts; }
 }
 
-export function ChatPanel({ messages: initialMessages, onSend, onClear, onPinMessage, emptyHint, placeholder, headerLabel }: ChatPanelProps) {
+export function ChatPanel({ messages: initialMessages, onSend, onClear, onPinMessage, onServerChange, emptyHint, placeholder, headerLabel }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [streamingSaves, setStreamingSaves] = useState<string[]>([]);
+  const [promptRewritten, setPromptRewritten] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMessages(initialMessages); }, [initialMessages]);
@@ -43,13 +45,16 @@ export function ChatPanel({ messages: initialMessages, onSend, onClear, onPinMes
     setMessages((m) => [...m, optimistic]);
     setInput("");
     try {
+      let changed = false;
       await onSend(msg, (evt) => {
         if (evt.type === "text") setStreamingText((p) => p + evt.delta);
-        else if (evt.type === "saved_instruction") setStreamingSaves((p) => [...p, evt.instruction]);
+        else if (evt.type === "saved_instruction") { setStreamingSaves((p) => [...p, evt.instruction]); changed = true; }
+        else if (evt.type === "prompt_updated") { setPromptRewritten(evt.new_prompt); changed = true; }
         else if (evt.type === "done") {
           setMessages(evt.chat_messages);
           setStreamingText("");
           setStreamingSaves([]);
+          if (changed && onServerChange) onServerChange();
         } else if (evt.type === "error") {
           setMessages((m) => [...m, { role: "assistant", content: `Error: ${evt.message}`, ts: new Date().toISOString() }]);
           setStreamingText("");
@@ -80,6 +85,13 @@ export function ChatPanel({ messages: initialMessages, onSend, onClear, onPinMes
         )}
       </div>
 
+      {promptRewritten && (
+        <div className="mb-2 border border-indigo-500/40 bg-indigo-500/10 p-2 text-[11px] text-indigo-800">
+          <div className="font-semibold">Director prompt rewritten</div>
+          <pre className="mt-1 whitespace-pre-wrap font-mono text-[10px]">{promptRewritten}</pre>
+          <button type="button" onClick={() => setPromptRewritten(null)} className="mt-1 underline-offset-2 hover:underline">dismiss</button>
+        </div>
+      )}
       <div ref={scrollRef} className="max-h-[400px] space-y-2 overflow-y-auto pr-1">
         {messages.length === 0 && !streamingText && (
           <p className="text-[11px] italic text-muted-foreground">{emptyHint}</p>
