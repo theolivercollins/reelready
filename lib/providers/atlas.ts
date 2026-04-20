@@ -41,9 +41,18 @@ export interface AtlasSubmitBody {
   duration: number;
   aspect_ratio?: string;
   cfg_scale?: number;
+  negative_prompt?: string;
   end_image?: string;
   last_image?: string;
 }
+
+// Kling v3-pro introduces noticeable camera shake/vibration on push-ins
+// and orbits that v2 did not. This negative-prompt string is applied to
+// every Atlas render by default. Separate from the positive prompt
+// stabilization language we inject upstream — both levers together
+// reduce shake more than either alone.
+export const ATLAS_DEFAULT_NEGATIVE_PROMPT =
+  "shaky camera, handheld, wobble, vibration, jitter, camera shake, rolling shutter, unstable motion";
 
 // Pure builder — easy to test. Callers pass the descriptor that matches
 // the env's ATLAS_VIDEO_MODEL so we only have one switch statement in
@@ -62,6 +71,7 @@ export function buildAtlasRequestBody(
     prompt: params.prompt,
     duration,
     aspect_ratio: params.aspectRatio,
+    negative_prompt: ATLAS_DEFAULT_NEGATIVE_PROMPT,
   };
   if (params.endImageUrl && model.endFrameField) {
     body[model.endFrameField] = params.endImageUrl;

@@ -11,11 +11,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!auth) return;
   const iterId = String(req.query.iterId ?? "");
   if (!iterId) return res.status(400).json({ error: "iterId required" });
-  const body = (req.body ?? {}) as { rating?: number | null; tags?: string[] | null; comment?: string | null };
+  const body = (req.body ?? {}) as {
+    rating?: number | null;
+    tags?: string[] | null;
+    comment?: string | null;
+    reasons?: string[] | null;
+    archived?: boolean;
+  };
   const patch: Record<string, unknown> = {};
   if (body.rating === null || typeof body.rating === "number") patch.rating = body.rating;
   if (body.tags === null || Array.isArray(body.tags)) patch.tags = body.tags;
   if (body.comment === null || typeof body.comment === "string") patch.user_comment = body.comment;
+  if (Array.isArray(body.reasons)) patch.rating_reasons = body.reasons;
+  if (typeof body.archived === "boolean") patch.archived = body.archived;
   if (typeof body.rating === "number") patch.status = "rated";
   const supabase = getSupabase();
   const { data, error } = await supabase.from("prompt_lab_listing_scene_iterations")

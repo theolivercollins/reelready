@@ -3,6 +3,13 @@ import { requireAdmin } from "../../../../../lib/auth.js";
 import { getSupabase } from "../../../../../lib/client.js";
 import { AtlasProvider } from "../../../../../lib/providers/atlas.js";
 
+// Kling v3 needs explicit stabilization language in the positive prompt
+// — "smooth / steady / cinematic" alone is insufficient. This prefix
+// pairs with the ATLAS_DEFAULT_NEGATIVE_PROMPT in the provider to force
+// a locked camera feel across every render.
+const CAMERA_STABILITY_PREFIX =
+  "LOCKED-OFF CAMERA on a gimbal-stabilized Steadicam rig. Smooth motorized dolly motion only. Zero camera shake, zero handheld jitter, tripod-stable framing. ";
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -51,9 +58,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // may already reflect prior refinements (or user may explicitly want
     // the same prompt verbatim).
     const basePrompt = sourceIteration ? sourceIteration.director_prompt : scene.director_prompt;
-    const effectivePrompt = sourceIteration
+    const promptWithNotes = sourceIteration
       ? basePrompt
       : (scene.refinement_notes ? `${basePrompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}` : basePrompt);
+    // Prefix the stabilization directive only if it's not already
+    // present (user may have edited the prompt manually to remove it,
+    // or a regenerated iteration already carries it from before).
+    const effectivePrompt = promptWithNotes.includes("LOCKED-OFF CAMERA")
+      ? promptWithNotes
+      : `${CAMERA_STABILITY_PREFIX}${promptWithNotes}`;
     const { data: photo } = await supabase.from("prompt_lab_listing_photos")
       .select("image_url").eq("id", scene.photo_id).maybeSingle();
     if (!photo) continue;

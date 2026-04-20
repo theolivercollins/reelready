@@ -50,6 +50,7 @@ export interface LabListingScene {
   director_intent: Record<string, unknown>;
   refinement_notes: string | null;
   use_end_frame: boolean;
+  chat_messages: ChatMessage[];
   created_at: string;
 }
 
@@ -75,6 +76,8 @@ export interface LabListingIteration {
   status: string;
   render_error: string | null;
   chat_messages: ChatMessage[];
+  rating_reasons: string[];
+  archived: boolean;
   created_at: string;
 }
 
@@ -132,6 +135,8 @@ export async function rateIteration(listingId: string, iterId: string, input: {
   rating?: number | null;
   tags?: string[] | null;
   comment?: string | null;
+  reasons?: string[] | null;
+  archived?: boolean;
 }): Promise<{ iteration: LabListingIteration }> {
   return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}/rate`, {
     method: "POST",
@@ -204,6 +209,56 @@ export async function chatIterationStream(
 
 export async function clearIterationChat(listingId: string, iterId: string): Promise<void> {
   await authedFetch(`/api/admin/prompt-lab/listings/${listingId}/iterations/${iterId}/chat/clear`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function chatSceneStream(
+  listingId: string,
+  sceneId: string,
+  message: string,
+  onEvent: (evt: ChatStreamEvent) => void,
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `${res.status} ${res.statusText}`);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("no response stream");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const line = part.trim();
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload) as ChatStreamEvent);
+      } catch {
+        // ignore malformed chunk
+      }
+    }
+  }
+}
+
+export async function clearSceneChat(listingId: string, sceneId: string): Promise<void> {
+  await authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}/chat/clear`, {
     method: "POST",
     body: JSON.stringify({}),
   });
