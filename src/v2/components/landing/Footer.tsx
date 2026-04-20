@@ -1,27 +1,42 @@
+import { LELogoMark } from "@/v2/components/primitives/LELogoMark";
+
+/**
+ * Footer — pixel-faithful port of landing.jsx lines 582-606.
+ *
+ * Uses inert <span>s for the link list (matching the design) because
+ * the legal/route targets (/terms, /privacy) do not exist in this
+ * shell. Left slot holds the white logo mark for the dark background.
+ */
 export function Footer() {
   return (
     <footer
       style={{
-        background: "transparent",
-        color: "rgba(255,255,255,0.62)",
         padding: "40px 48px",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-        fontSize: 13,
+        borderTop: "1px solid var(--le-border)",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        fontSize: 12,
+        color: "var(--le-text-muted)",
         fontFamily: "var(--le-font-sans)",
+        gap: 24,
+        flexWrap: "wrap",
       }}
     >
-      <div style={{ maxWidth: 1440, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-        <div className="le-display" style={{ fontSize: 18, color: "#fff" }}>
-          Listing <em>Elevate</em>
-        </div>
-        <nav style={{ display: "flex", gap: 24 }}>
-          <a href="#process" style={{ color: "rgba(255,255,255,0.62)" }}>Process</a>
-          <a href="#showcase" style={{ color: "rgba(255,255,255,0.62)" }}>Showcase</a>
-          <a href="#pricing" style={{ color: "rgba(255,255,255,0.62)" }}>Pricing</a>
-          <a href="#faq" style={{ color: "rgba(255,255,255,0.62)" }}>FAQ</a>
-        </nav>
-        <div>© 2026 Listing Elevate, Inc.</div>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <LELogoMark size={14} variant="light" />
       </div>
+      <div style={{ display: "flex", gap: 28 }}>
+        <span>Process</span>
+        <span>Showcase</span>
+        <span>Pricing</span>
+        <span>FAQ</span>
+        <span>Terms</span>
+        <span>Privacy</span>
+      </div>
+      <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 11 }}>
+        © 2026 Listing Elevate, Inc.
+      </span>
     </footer>
   );
 }
