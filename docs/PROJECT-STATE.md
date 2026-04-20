@@ -1,6 +1,6 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-19** — post unified embeddings, negative signal, Kling concurrency guard, re-render, organize mode.
+Last updated: **2026-04-19** — post production-readiness merge (scene_ratings denorm, error classification, Lab→prod promotion, resubmit endpoint, cost_events widened).
 
 Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
 
@@ -196,16 +196,21 @@ Development landing (`/dashboard/development`) shows:
 
 ## Known bugs / gotchas
 
-- **`scene_ratings` cascade on rerun** (production) — rerun deletes scenes, cascades rating rows. Denormalization onto rating rows is a planned TODO.
-- **Failover too aggressive** — excludes provider on any exception. Should only exclude on permanent errors (401/402/400).
 - **Runway ignores non-push motion** — router avoids sending those to Runway now; fallback path could still misroute.
-- **Stale `needs_review` Kling scenes from earlier property** — manual retry endpoint still not built for production.
-- **Shotstack cost not in `cost_events`** — still TODO.
 - **Production pipeline base64 image input** — 4 places in `lib/pipeline.ts` still use base64 instead of URL. Lab is fixed; prod is not.
 - **File-revert mystery** — unresolved. All Shotstack MVP files + the entire Lab build survived multiple sessions; probably dormant or specific to certain paths.
 - **Prompt QA dead code** — `lib/prompts/prompt-qa.ts` + body of `runPreflightQA` in pipeline.ts still present. Never called. Prune later.
 
-### Fixed since last refresh (2026-04-15 through 2026-04-19)
+### Fixed since last refresh (2026-04-19 production-readiness merge)
+
+- **`scene_ratings` cascade on rerun** — migration 014: denorm columns backfilled, FK switched to ON DELETE SET NULL, RPCs rebuilt with coalesce fallback. Oliver's "lost 7+ ratings" bug is fixed.
+- **Failover too aggressive** — `lib/providers/errors.ts` classifies errors as permanent/capacity/transient/unknown. Only permanent errors trigger failover; capacity + transient retry same provider.
+- **Shotstack cost not in `cost_events`** — migration 017 widened CHECK constraints for shotstack + openai providers. `recordCostEvent` now logs Shotstack renders.
+- **Stale `needs_review` scenes (production)** — `api/scenes/[id]/resubmit.ts` provides manual single-scene resubmission with prompt editing + provider forcing. Dashboard resubmit buttons on PropertyDetail + Pipeline pages.
+- **Refiner rationale contaminating losers retrieval** — migration 015: `refiner_rationale` column split from `user_comment`.
+- **Lab→prod promotion flow missing** — BUILT. `api/admin/prompt-lab/promote-to-prod.ts` + `lib/prompts/resolve.ts` (`resolveProductionPrompt`). Migration 016: readiness view, promotion audit columns, source tracking on prompt_revisions.
+
+### Fixed earlier (2026-04-15 through 2026-04-19)
 
 - **Lab analyze >5MB photos** — `analyzeSingleImage` switched from base64 to URL-based Claude vision input.
 - **Lab render >5MB photos** — `GenerateClipParams` extended with `sourceImageUrl`; Runway + Kling prefer URL over base64.
@@ -216,6 +221,18 @@ Development landing (`/dashboard/development`) shows:
 ---
 
 ## What shipped 2026-04-15 through 2026-04-19 — reverse chronological
+
+### Production-readiness merge (2026-04-19, commit 65dcc7d)
+- **Migration 014: scene_ratings denormalization** — denorm columns (rated_prompt, rated_camera_movement, rated_room_type, rated_provider, rated_photo_key_features, rated_embedding, etc.), backfill from live join, FK→ON DELETE SET NULL, RPCs rebuilt with coalesce fallback. `rated_photo_key_features` typed as `jsonb` to match `photos.key_features`.
+- **Migration 015: Lab ML integrity** — `refiner_rationale` column split from `user_comment` (stops contaminating losers retrieval), unique index on recipes per `source_iteration_id`, `prompt_lab_iterations_complete` convenience view.
+- **Migration 016: Lab→prod promotion** — `lab_prompt_override_readiness` view (≥10 renders, avg ≥4★, winners ≥2× losers), promotion audit columns on `lab_prompt_overrides`, `source` + `source_override_id` on `prompt_revisions`.
+- **Migration 017: cost_events widened** — CHECK constraints accept shotstack + openai providers and 'renders' unit_type.
+- **`lib/providers/errors.ts`** — classifies provider errors as permanent/capacity/transient/unknown. Only permanent triggers failover; capacity + transient retry same provider.
+- **`lib/prompts/resolve.ts`** — `resolveProductionPrompt(promptName, baseline)` reads Lab-promoted revisions from `prompt_revisions`. Production DIRECTOR_SYSTEM no longer hardcoded.
+- **`api/scenes/[id]/resubmit.ts`** — manual single-scene resubmission with prompt editing + provider forcing.
+- **`api/admin/prompt-lab/promote-to-prod.ts`** — GET lists overrides with readiness stats, POST promotes override to production `prompt_revisions`.
+- **`lib/pipeline.ts`** — smart failover loop in `runGenerationSubmit` (permanent→failover, capacity/transient→retry), Shotstack cost tracking via `recordCostEvent`, `resolveProductionPrompt` for director.
+- **Dashboard UI** — resubmit buttons on PropertyDetail + Pipeline pages for `needs_review` scenes.
 
 ### Organize mode + archive (2026-04-17)
 - "Organize" button toggles multi-select mode with checkboxes on session cards
@@ -320,6 +337,10 @@ Development landing (`/dashboard/development`) shows:
 | 011 | `match_loser_examples` | RPC for low-rated (<=2★) Lab + prod retrieval |
 | 012 | `render_queued_at` | `render_queued_at` column on prompt_lab_iterations |
 | 013 | `session_archived` | `archived boolean` on prompt_lab_sessions |
+| 014 | `scene_ratings_denorm` | Denorm columns on scene_ratings, FK→ON DELETE SET NULL, RPCs rebuilt with coalesce fallback. Fixes "lost ratings on rerun" bug |
+| 015 | `lab_ml_integrity` | `refiner_rationale` column (split from user_comment), unique index on recipes per source_iteration_id, `prompt_lab_iterations_complete` view |
+| 016 | `director_prod_promotion` | `lab_prompt_override_readiness` view (≥10 renders, avg ≥4★, winners ≥2× losers), promotion audit columns on lab_prompt_overrides, source + source_override_id on prompt_revisions |
+| 017 | `cost_events_shotstack` | CHECK constraints widened for shotstack + openai providers; unit_type widened for 'renders' |
 
 SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the live path.
 
@@ -327,14 +348,12 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## Immediate next actions (start here next session)
 
-1. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness. Unblock when ready.
-2. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built.
-3. **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed; prod needs the same treatment.
-4. **Retry-scene endpoint for PRODUCTION** — stuck Kling scenes from property `6f508e16` still need a manual retry. Not built yet.
-5. **scene_ratings denormalization for PRODUCTION** — still the highest-value fix for the production learning loop.
-6. **Lab → production promotion flow** — Lab changes stay Lab-only. Need explicit "promote to production DIRECTOR_SYSTEM" path.
-7. **Structured failure tags on ratings** — proposed, not built. Would give the learning loop richer signal than star ratings alone.
-8. **Use the Lab** — continue rating aggressively; every 5★ now auto-promotes to recipe (dedup removed).
+1. **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed; prod needs the same treatment.
+2. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness. Unblock when ready.
+3. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built.
+4. **Structured failure tags on ratings** — proposed, not built. Would give the learning loop richer signal than star ratings alone.
+5. **Use the Lab** — continue rating aggressively; every 5★ now auto-promotes to recipe (dedup removed). Lab→prod promotion is now live.
+6. **Client-side photo compression** — resize to 2048px / JPEG 85 before upload to cut transfer + storage cost.
 
 ---
 
@@ -350,12 +369,16 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 | `lib/prompt-lab.ts` | Lab core helpers (NEW) |
 | `lib/embeddings.ts` | OpenAI embeddings wrapper (NEW) |
 | `lib/providers/router.ts` | Camera-movement-first routing |
+| `lib/providers/errors.ts` | Error classification: permanent/capacity/transient/unknown (NEW) |
 | `lib/providers/runway.ts` / `kling.ts` | Generation providers |
 | `lib/providers/shotstack.ts` | Assembly provider (active if key) |
+| `lib/prompts/resolve.ts` | `resolveProductionPrompt` — reads Lab-promoted revisions at runtime (NEW) |
 | `lib/db.ts` | DB helpers including recordCostEvent, upsertSceneRating, fetchRatedExamples, recordPromptRevisionIfChanged |
 | `api/pipeline/[propertyId].ts` | Production pipeline entrypoint |
 | `api/cron/poll-scenes.ts` | Production cron backstop |
 | `api/cron/poll-lab-renders.ts` | Lab render cron (NEW) |
+| `api/scenes/[id]/resubmit.ts` | Manual single-scene resubmission with prompt editing + provider forcing (NEW) |
+| `api/admin/prompt-lab/promote-to-prod.ts` | Lab→prod promotion: readiness stats + promote override to prompt_revisions (NEW) |
 | `api/admin/prompt-lab/*` | Lab endpoints |
 | `api/admin/dev-notes.ts` | Development dashboard session notes |
 | `src/pages/dashboard/PromptLab.tsx` | Main Lab UI |
@@ -373,4 +396,4 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## One-liner for next session
 
-> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **Prompt Lab** now has unified embeddings (Lab + prod), negative signal retrieval, Kling concurrency guard with render queue, re-render with different provider, organize mode + archive, and recipe auto-promote on every 5★. Lab changes stay Lab-only — nothing flows back to production yet. Next: spatial grounding (designed, paused), prod base64→URL fix, prod retry-scene endpoint, Lab→prod promotion flow, scene_ratings denormalization.
+> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **Production-readiness merge (65dcc7d)** shipped: scene_ratings denorm (ratings survive rerun), smart error-classified failover, Shotstack cost tracking, single-scene resubmit endpoint, Lab→prod promotion flow (`resolveProductionPrompt`), refiner rationale split, cost_events widened. **Prompt Lab** has unified embeddings, negative signal, Kling concurrency guard, re-render, organize + archive, recipe auto-promote. Lab→prod promotion is now live. Next: prod base64→URL fix, spatial grounding (paused), Shotstack reverse clips, structured failure tags.

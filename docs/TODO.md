@@ -4,25 +4,15 @@ See `docs/PROJECT-STATE.md` for full project state and `docs/PROMPT-LAB-PLAN.md`
 
 ## Critical (blocking quality)
 
-- [ ] **Retry-scene endpoint (production)** — stuck Kling scenes at `needs_review` from property `6f508e16` can't be resubmitted without re-running the whole pipeline. Needs `POST /api/scenes/:id/resubmit` + dashboard button.
-
-- [ ] **scene_ratings denormalization (production)** — ratings FK cascade-deletes on rerun. Denormalize `rated_prompt`, `rated_camera_movement`, `rated_room_type`, `rated_provider` onto the rating row and switch FK to `ON DELETE SET NULL`. Oliver has lost 7+ ratings to this.
-
 - [ ] **Production pipeline base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64 image data to providers. Lab is fixed (URL-based for both Claude vision and Runway/Kling). Apply the same pattern to prod.
 
-- [ ] **Failover error classification (production)** — `lib/pipeline.ts` excludes provider on ANY error. Only 401/402/400 should trigger failover; 5xx and rate-limit errors should retry.
-
 ## High priority
-
-- [ ] **Lab → production promotion** — once a `lab_prompt_overrides` row stabilizes (10+ renders at 4+★), expose an explicit "promote to production DIRECTOR_SYSTEM" button that writes a new `prompt_revisions` entry. Production currently has no path to benefit from Lab learning.
 
 - [ ] **Spatial grounding** — designed in `docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`. Would give the director coordinate-level composition awareness for motion planning. PAUSED — unblock when ready. Plan at `docs/superpowers/plans/2026-04-15-spatial-grounding.md`.
 
 - [ ] **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos. Discussed but not built. Would improve pacing of final stitched output.
 
 - [ ] **Structured failure tags on ratings** — proposed, not built. Would give the learning loop richer signal than star ratings alone (e.g. "motion_too_fast", "wrong_framing", "hallucinated_element").
-
-- [ ] **Shotstack cost tracking** — renders don't log a `cost_events` row. Add per-render flat estimate (~$0.10).
 
 - [ ] **Client-side photo compression** — resize to 2048px / JPEG 85 before upload to cut transfer + storage cost.
 
@@ -59,6 +49,20 @@ See `docs/PROJECT-STATE.md` for full project state and `docs/PROMPT-LAB-PLAN.md`
 - [ ] **Visual-embedding option for Lab** — embed the IMAGE not just the analysis text. Higher fidelity, more cost.
 
 - [ ] **Clean up `match_lab_iterations` RPC** — unused since unified embeddings shipped. Still in DB.
+
+## Done 2026-04-19 (production-readiness merge, commit 65dcc7d)
+
+- [x] scene_ratings denormalization — migration 014: denorm columns, FK→ON DELETE SET NULL, RPCs rebuilt with coalesce. Fixes "lost 7+ ratings" bug
+- [x] Failover error classification — `lib/providers/errors.ts`: permanent/capacity/transient/unknown. Only permanent triggers failover
+- [x] Shotstack cost tracking — migration 017 widened CHECK constraints; `recordCostEvent` logs Shotstack renders
+- [x] Retry-scene endpoint (production) — `api/scenes/[id]/resubmit.ts` + dashboard resubmit buttons
+- [x] Lab→prod promotion flow — `promote-to-prod.ts` + `resolveProductionPrompt` in `lib/prompts/resolve.ts` + migration 016
+- [x] Refiner rationale split — migration 015: `refiner_rationale` column, stops contaminating losers retrieval
+- [x] Lab ML integrity — migration 015: unique index on recipes per source_iteration_id, `prompt_lab_iterations_complete` view
+- [x] cost_events widened — migration 017: shotstack + openai providers, 'renders' unit_type
+- [x] Smart failover loop in pipeline.ts — permanent→failover, capacity/transient→retry
+- [x] Dashboard resubmit buttons — PropertyDetail + Pipeline pages for needs_review scenes
+- [x] Migrations 014–017
 
 ## Done 2026-04-15 through 2026-04-19
 
