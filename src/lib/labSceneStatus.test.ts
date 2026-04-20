@@ -108,3 +108,24 @@ describe("resolveSceneStatus", () => {
     expect(resolveSceneStatus(input).kind).toBe("failed");
   });
 });
+
+describe("priority ordering for table rows", () => {
+  const PRIORITY = {
+    needs_rating: 0,
+    failed: 1,
+    iterating: 2,
+    needs_first_render: 3,
+    rendering: 4,
+    done: 5,
+    archived: 6,
+  } as const;
+
+  it("priorities are strictly increasing from needs_rating to archived", () => {
+    const kinds: Array<keyof typeof PRIORITY> = [
+      "needs_rating", "failed", "iterating", "needs_first_render", "rendering", "done", "archived",
+    ];
+    for (let i = 0; i < kinds.length - 1; i++) {
+      expect(PRIORITY[kinds[i]]).toBeLessThan(PRIORITY[kinds[i + 1]]);
+    }
+  });
+});
