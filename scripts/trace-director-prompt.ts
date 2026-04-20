@@ -14,6 +14,20 @@
  * Output: /tmp/director-trace-<id>.md
  */
 
+import * as fs from "fs";
+import * as path from "path";
+
+// Minimal .env loader — same pattern as scripts/backfill-*.ts.
+const envPath = path.join(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/i);
+    if (m && !process.env[m[1]]) {
+      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  }
+}
+
 import { getSupabase } from "../lib/client.js";
 
 type Mode = { kind: "listing"; id: string } | { kind: "property"; id: string };
