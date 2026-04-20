@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Loader2, Gavel } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, Gavel, Star, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
@@ -10,10 +10,33 @@ type RunState =
   | { status: "ok"; data: unknown; elapsedMs: number }
   | { status: "error"; message: string };
 
+interface GalleryItem {
+  id: string;
+  session_id: string;
+  session_label: string | null;
+  session_image_url: string | null;
+  iteration_number: number | null;
+  rating: number | null;
+  provider: string | null;
+  clip_url: string | null;
+  room_type: string | null;
+  camera_movement: string | null;
+  created_at: string;
+  judge_score: number | null;
+  judge_confidence: number | null;
+}
+
+type FilterKey = "rated" | "fives" | "losers" | "all" | "unrated";
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "rated", label: "Rated" },
+  { key: "fives", label: "5★ only" },
+  { key: "losers", label: "≤2★" },
+  { key: "unrated", label: "Unrated" },
+  { key: "all", label: "All" },
+];
+
 async function callJson(path: string, init?: RequestInit): Promise<{ data: unknown; elapsedMs: number }> {
-  // Admin endpoints gate on Authorization: Bearer <supabase access token>,
-  // matching the pattern in src/lib/devApi.ts / promptLabApi.ts. Pull the
-  // current session and attach it.
   const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = {};
   if (init?.body) headers["Content-Type"] = "application/json";
@@ -30,7 +53,7 @@ async function callJson(path: string, init?: RequestInit): Promise<{ data: unkno
     data = text;
   }
   if (!res.ok) {
-    const msg = (data && typeof data === "object" && "error" in data && typeof (data as { error?: unknown }).error === "string")
+    const msg = data && typeof data === "object" && "error" in data && typeof (data as { error?: unknown }).error === "string"
       ? (data as { error: string }).error
       : `${res.status} ${res.statusText}`;
     throw new Error(msg);
@@ -60,26 +83,122 @@ function Section({ title, description, children }: { title: string; description:
   );
 }
 
+function Stars({ rating }: { rating: number | null }) {
+  if (rating === null) return <span className="text-[11px] text-muted-foreground">unrated</span>;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`h-3 w-3 ${n <= rating ? "fill-foreground text-foreground" : "text-muted-foreground/30"}`}
+        />
+      ))}
+    </span>
+  );
+}
+
+function GalleryCard({
+  item,
+  onScore,
+  scoring,
+}: {
+  item: GalleryItem;
+  onScore: (id: string) => void;
+  scoring: boolean;
+}) {
+  const thumb = item.session_image_url;
+  return (
+    <div className="group relative flex flex-col border border-border bg-background overflow-hidden">
+      <div className="aspect-video bg-muted">
+        {thumb ? (
+          <img src={thumb} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">no image</div>
+        )}
+        {item.clip_url && (
+          <span className="absolute top-2 left-2 bg-black/70 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white">
+            {item.provider ?? "clip"}
+          </span>
+        )}
+        {item.judge_score !== null && (
+          <span className="absolute top-2 right-2 bg-emerald-600/90 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white">
+            judged {item.judge_score.toFixed(2)}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5 p-3">
+        <div className="flex items-center justify-between">
+          <Stars rating={item.rating} />
+          <span className="text-[10px] text-muted-foreground">#{item.iteration_number ?? "?"}</span>
+        </div>
+        <div className="truncate text-[11px] text-muted-foreground">
+          {[item.room_type, item.camera_movement].filter(Boolean).join(" · ") || "—"}
+        </div>
+        <div className="truncate text-[10px] text-muted-foreground/70">
+          {item.session_label ?? item.session_id.slice(0, 8)}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-1 h-7 text-xs"
+          onClick={() => onScore(item.id)}
+          disabled={scoring}
+        >
+          {scoring ? <Loader2 className="h-3 w-3 animate-spin" /> : "Score"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function JudgeSmoke() {
-  const [iterationId, setIterationId] = useState("");
+  const [filter, setFilter] = useState<FilterKey>("rated");
+  const [items, setItems] = useState<GalleryItem[] | null>(null);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+
   const [cellKey, setCellKey] = useState("kitchen-push_in");
   const [sampleCap, setSampleCap] = useState("10");
 
+  const [scoringId, setScoringId] = useState<string | null>(null);
   const [scoreState, setScoreState] = useState<RunState>({ status: "idle" });
   const [calibrateState, setCalibrateState] = useState<RunState>({ status: "idle" });
   const [statusState, setStatusState] = useState<RunState>({ status: "idle" });
 
-  async function runScore() {
-    if (!iterationId.trim()) return;
+  async function loadGallery(f: FilterKey = filter) {
+    setGalleryLoading(true);
+    setGalleryError(null);
+    try {
+      const { data } = await callJson(`/api/admin/judge/iterations?filter=${f}&limit=60`);
+      const parsed = data as { iterations: GalleryItem[] };
+      setItems(parsed.iterations);
+    } catch (err) {
+      setGalleryError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGalleryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadGallery(filter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  async function runScore(id: string) {
+    setScoringId(id);
     setScoreState({ status: "loading" });
     try {
       const { data, elapsedMs } = await callJson("/api/admin/judge/score", {
         method: "POST",
-        body: JSON.stringify({ iteration_id: iterationId.trim() }),
+        body: JSON.stringify({ iteration_id: id }),
       });
       setScoreState({ status: "ok", data, elapsedMs });
+      // Refresh gallery so the "judged" badge appears on the scored card.
+      loadGallery(filter);
     } catch (err) {
       setScoreState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setScoringId(null);
     }
   }
 
@@ -120,39 +239,68 @@ export default function JudgeSmoke() {
           Phase 1 Claude rubric judge
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Exercise the new judge without touching a terminal. Score a single rated iteration, run a narrow calibration on one cell, or read the current calibration status across all cells. All three hit the admin endpoints (<code className="font-mono text-xs">/api/admin/judge/*</code>) with your logged-in session.
+          Click any iteration below to run the Claude rubric judge on it. See how the judge scores your existing ratings — 4-axis rubric, composite score, confidence, rationale, and suggested failure tags.
         </p>
       </div>
 
       <Section
         title="1. Score an iteration"
-        description="Runs scoreIteration — fetches neighbors, calls Claude Sonnet 4.6, parses the rubric, upserts to lab_judge_scores. Idempotent. ~$0.01–0.03 per call."
+        description="Click any card to run scoreIteration. Each call costs ~$0.01–0.03 of Claude. Idempotent — re-scoring overwrites the last result."
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-end">
-          <div className="flex-1 space-y-2">
-            <label className="text-xs text-muted-foreground">Iteration ID</label>
-            <Input
-              value={iterationId}
-              onChange={(e) => setIterationId(e.target.value)}
-              placeholder="uuid of a rated iteration from Prompt Lab"
-              className="font-mono text-xs"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Grab one by opening a session in Prompt Lab — the URL path ends in the session id; iteration ids come back from the API.
-            </p>
-          </div>
-          <Button onClick={runScore} disabled={scoreState.status === "loading" || !iterationId.trim()}>
-            {scoreState.status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Score"}
+        <div className="flex flex-wrap items-center gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setFilter(f.key)}
+              className={`border px-3 py-1 text-[11px] uppercase tracking-[0.14em] transition-colors ${
+                filter === f.key
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-background text-muted-foreground hover:border-foreground hover:text-foreground"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto h-7 text-xs"
+            onClick={() => loadGallery(filter)}
+            disabled={galleryLoading}
+          >
+            {galleryLoading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+            Refresh
           </Button>
         </div>
+
+        {galleryError && <p className="mt-4 text-xs text-destructive">Error loading gallery: {galleryError}</p>}
+
+        {items && items.length === 0 && !galleryLoading && (
+          <p className="mt-6 text-sm text-muted-foreground">No iterations match this filter.</p>
+        )}
+
+        {items && items.length > 0 && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {items.map((item) => (
+              <GalleryCard
+                key={item.id}
+                item={item}
+                onScore={runScore}
+                scoring={scoringId === item.id}
+              />
+            ))}
+          </div>
+        )}
+
         {scoreState.status === "error" && (
-          <p className="mt-3 text-xs text-destructive">Error: {scoreState.message}</p>
+          <p className="mt-4 text-xs text-destructive">Score error: {scoreState.message}</p>
         )}
         {scoreState.status === "ok" && (
-          <>
-            <p className="mt-3 text-[11px] text-muted-foreground">{scoreState.elapsedMs}ms</p>
+          <div className="mt-4">
+            <p className="text-[11px] text-muted-foreground">Last score: {scoreState.elapsedMs}ms</p>
             <JsonView value={scoreState.data} />
-          </>
+          </div>
         )}
       </Section>
 
@@ -198,7 +346,7 @@ export default function JudgeSmoke() {
 
       <Section
         title="3. Read calibration status"
-        description="Pulls v_judge_calibration_status — the latest calibration snapshot per cell, plus an aggregate summary including the sample-weighted within-one-star agreement and the number of cells in auto vs advisory mode."
+        description="Pulls v_judge_calibration_status — the latest calibration snapshot per cell, plus aggregate summary (sample-weighted within-one-star agreement, cells in auto vs advisory mode)."
       >
         <Button onClick={runStatus} disabled={statusState.status === "loading"}>
           {statusState.status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Status"}
