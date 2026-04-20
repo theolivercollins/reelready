@@ -6,7 +6,10 @@ import { AtlasProvider } from "../../../../../lib/providers/atlas.js";
 // Kling v3 needs explicit stabilization language in the positive prompt
 // — "smooth / steady / cinematic" alone is insufficient. This prefix
 // pairs with the ATLAS_DEFAULT_NEGATIVE_PROMPT in the provider to force
-// a locked camera feel across every render.
+// a locked camera feel across every v3 render.
+// DQ.2: Applied only to kling-v3* models. v2.x and o3-pro produce stable
+// motion without it — prepending 180 chars of fluff to those models adds
+// noise without benefit.
 const CAMERA_STABILITY_PREFIX =
   "LOCKED-OFF CAMERA on a gimbal-stabilized Steadicam rig. Smooth motorized dolly motion only. Zero camera shake, zero handheld jitter, tripod-stable framing. ";
 
@@ -60,26 +63,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select("id, photo_id, end_image_url, director_prompt, refinement_notes, use_end_frame").eq("id", sceneId).maybeSingle();
     if (!scene) continue;
     const effectiveEndImage = scene.use_end_frame && scene.end_image_url ? scene.end_image_url : undefined;
-    // When regenerating from a specific iteration, reuse THAT exact
-    // prompt — skip the refinement-notes concat since the source prompt
-    // may already reflect prior refinements (or user may explicitly want
-    // the same prompt verbatim).
-    const basePrompt = sourceIteration ? sourceIteration.director_prompt : scene.director_prompt;
-    const promptWithNotes = sourceIteration
-      ? basePrompt
-      : (scene.refinement_notes ? `${basePrompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}` : basePrompt);
-    // Prefix the stabilization directive only if it's not already
-    // present (user may have edited the prompt manually to remove it,
-    // or a regenerated iteration already carries it from before).
-    const effectivePrompt = promptWithNotes.includes("LOCKED-OFF CAMERA")
-      ? promptWithNotes
-      : `${CAMERA_STABILITY_PREFIX}${promptWithNotes}`;
+
+    // DQ.3: Detect paired scenes. A scene is "paired" when use_end_frame
+    // is true AND an end_image_url has been set. Paired scenes should
+    // route to kling-v2-1-pair (the SKU purpose-built for start+end frame
+    // rendering) UNLESS the caller explicitly supplied body.models[] —
+    // that's the Compare-models flow where the user is intentionally
+    // testing multiple models and we must respect their selections verbatim.
+    const isPaired = !!(scene.use_end_frame && scene.end_image_url);
+
+    // DQ.5: Refinement-notes rewrite pass. If the scene has accumulated
+    // notes, rewrite the director_prompt to incorporate them and clear
+    // the notes — instead of appending them as a separate block (which
+    // produces 400–500 char prompts that confuse video models).
+    // Skip entirely when regenerating from a source iteration (the source
+    // prompt already reflects prior refinements, or the user wants it verbatim).
+    let basePrompt = sourceIteration ? sourceIteration.director_prompt : scene.director_prompt;
+    if (!sourceIteration && scene.refinement_notes && scene.refinement_notes.trim().length > 0) {
+      try {
+        const { rewritePromptWithDirectives } = await import("../../../../../lib/refine-prompt.js");
+        const { rewritten } = await rewritePromptWithDirectives({
+          basePrompt,
+          directives: scene.refinement_notes,
+          isPaired,
+        });
+        basePrompt = rewritten;
+        await supabase.from("prompt_lab_listing_scenes")
+          .update({ director_prompt: rewritten, refinement_notes: null })
+          .eq("id", sceneId);
+      } catch (rewriteErr) {
+        console.warn(`[render DQ.5] rewrite failed, falling back to concat:`, rewriteErr);
+        basePrompt = scene.refinement_notes
+          ? `${basePrompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}`
+          : basePrompt;
+      }
+    }
+
     const { data: photo } = await supabase.from("prompt_lab_listing_photos")
       .select("image_url").eq("id", scene.photo_id).maybeSingle();
     if (!photo) continue;
 
     const modelsForScene = modelsToRender.length > 0 ? modelsToRender : [listing.model_name];
     for (const modelKey of modelsForScene) {
+      // DQ.3: Auto-route paired scenes to kling-v2-1-pair — the SKU
+      // purpose-built for start+end frame rendering. Only applies when
+      // the caller did NOT supply body.models[] (the Compare-models flow);
+      // in that flow the user has intentionally chosen specific models and
+      // we must not override them.
+      const resolvedModel = isPaired && (!body.models || body.models.length === 0)
+        ? "kling-v2-1-pair"
+        : modelKey;
+
+      // DQ.2: Stability prefix only helps v3 (known shake issue).
+      // v2.x and o3 produce stable motion natively — prepending 180 chars
+      // of fluff to those models wastes prompt space without benefit.
+      const needsStabilityPrefix = resolvedModel.startsWith("kling-v3");
+      const effectivePrompt = needsStabilityPrefix && !basePrompt.includes("LOCKED-OFF CAMERA")
+        ? `${CAMERA_STABILITY_PREFIX}${basePrompt}`
+        : basePrompt;
+
       const { data: existing } = await supabase.from("prompt_lab_listing_scene_iterations")
         .select("iteration_number").eq("scene_id", sceneId)
         .order("iteration_number", { ascending: false }).limit(1).maybeSingle();
@@ -89,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         scene_id: sceneId,
         iteration_number: iterationNumber,
         director_prompt: effectivePrompt,
-        model_used: modelKey,
+        model_used: resolvedModel,
         status: "submitting",
       }).select().single();
       if (iterErr || !iter) continue;
@@ -102,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           prompt: effectivePrompt,
           durationSeconds: 5,
           aspectRatio: "16:9",
-          modelOverride: modelKey,
+          modelOverride: resolvedModel,
         });
         await supabase.from("prompt_lab_listing_scene_iterations")
           .update({ provider_task_id: job.jobId, status: "rendering" }).eq("id", iter.id);
