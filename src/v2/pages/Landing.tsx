@@ -19,10 +19,10 @@ function LandingShell() {
       data-v2-root
       className="le-root"
       data-theme={theme}
-      style={{ minHeight: "100vh", background: "var(--le-bg)" }}
+      style={{ minHeight: "100vh", background: "var(--le-bg)", position: "relative" }}
     >
+      <Nav />
       <div className="le-midnight-wash" data-theme="dark" style={{ position: "relative" }}>
-        <Nav />
         <Hero />
       </div>
       <Process />
