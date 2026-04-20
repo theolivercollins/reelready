@@ -1,8 +1,14 @@
 import type { RoomType, VideoProvider, CameraMovement } from "../db.js";
 import type { IVideoProvider } from "./provider.interface.js";
-import { RunwayProvider } from "./runway.js";
-import { KlingProvider } from "./kling.js";
-import { LumaProvider } from "./luma.js";
+import { AtlasProvider } from "./atlas.js";
+// Legacy imports kept for future re-routing. Currently unreferenced —
+// Atlas handles every scene as of Phase 2.7 (2026-04-19). If a future
+// experiment shows Atlas Kling underperforms on a specific scene type
+// (e.g., orbital exteriors), uncomment below and add a narrow early-
+// return in the router function for that case.
+// import { RunwayProvider } from "./runway.js";
+// import { KlingProvider } from "./kling.js";
+// import { LumaProvider } from "./luma.js";
 
 // Router strategy — movement first, room type as tiebreaker.
 //
@@ -93,48 +99,13 @@ export function getEnabledProviders(): VideoProvider[] {
 }
 
 export function selectProvider(
-  roomType: RoomType,
-  cameraMovement: CameraMovement | null,
-  preference: VideoProvider | null,
-  excludeProviders: VideoProvider[] = [],
+  _roomType: RoomType,
+  _cameraMovement: CameraMovement | null,
+  _preference: VideoProvider | null,
+  _excludeProviders: VideoProvider[] = [],
 ): IVideoProvider {
-  const enabled = getEnabledProviders();
-  const available = enabled.filter((p) => !excludeProviders.includes(p));
-
-  if (available.length === 0) {
-    throw new Error(
-      "No video generation providers available. Configure at least one API key.",
-    );
-  }
-
-  // 1. Explicit director preference wins if still available.
-  if (preference && available.includes(preference)) {
-    return getProviderInstance(preference);
-  }
-
-  // 2. Movement-first routing. If we have a camera_movement, use the
-  // movement → provider map above.
-  if (cameraMovement) {
-    let provider = MOVEMENT_PROVIDER[cameraMovement];
-
-    // Override: orbit on wide exterior / aerial shots goes to Runway,
-    // which handles those sweeping outdoor arcs better than Kling.
-    if (cameraMovement === "orbit" || cameraMovement === "orbital_slow") {
-      const override = EXTERIOR_ORBIT_OVERRIDE[roomType];
-      if (override) provider = override;
-    }
-
-    if (available.includes(provider)) {
-      return getProviderInstance(provider);
-    }
-  }
-
-  // 3. Absolute fallback — priority order over whatever is available.
-  for (const fallback of FALLBACK_ORDER) {
-    if (available.includes(fallback)) {
-      return getProviderInstance(fallback);
-    }
-  }
-
-  return getProviderInstance(available[0]);
+  // Atlas handles 100% of video generation as of Phase 2.7 (2026-04-19).
+  // Model selection (Kling v3.0 Pro vs Wan 2.7) is handled inside
+  // AtlasProvider via ATLAS_VIDEO_MODEL environment variable.
+  return new AtlasProvider();
 }
