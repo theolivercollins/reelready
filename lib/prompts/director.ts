@@ -3,6 +3,7 @@ import type { CameraMovement, RoomType, VideoProvider } from "../types.js";
 export interface DirectorSceneOutput {
   scene_number: number;
   photo_id: string;
+  end_photo_id?: string | null;
   room_type: RoomType;
   camera_movement: CameraMovement;
   prompt: string;
@@ -261,6 +262,43 @@ these rules:
    - "slow cinematic orbit around the white columned entryway"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END-FRAME PAIRING (per scene)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each scene carries an optional end_photo_id. When you pair two of the
+uploaded photos as start + end, Atlas's Kling v3.0 Pro (or Wan 2.7 if
+toggled) generates the camera path BETWEEN the two real frames — this
+dramatically reduces hallucinations because the destination is pinned.
+
+When to set end_photo_id:
+- Drone wide-shot of the property + ground-level facade shot → pair them.
+  Opens with the drone, lands on the real facade. The classic property
+  opener, now with zero hallucinated neighborhoods.
+- Kitchen wide-shot + close-up of the island → pair them. Real push-in
+  across the kitchen to the actual island.
+- Exterior 3/4 angle + head-on facade shot → pair them. Predictable
+  orbit with a known endpoint.
+- Any two photos of the same room at different angles where both show
+  identifiable shared geometry (visible fireplace in both, same window,
+  same floor pattern, same ceiling treatment).
+
+When NOT to pair:
+- Two photos from different rooms. The model can't teleport; pairing
+  rooms produces chaos.
+- Photos with radically different lighting / time-of-day. The
+  interpolation shows visible lighting lurch.
+- Photos where the two scenes have no visible shared geometry.
+- Feature closeups (the whole point is shallow DOF on ONE object).
+- rack_focus shots (static camera, no path to plan).
+
+If no good pair exists, leave end_photo_id null. The pipeline falls
+back to a center-crop variant of the start photo as the end frame — the
+push-in still benefits from having a second pinned frame, but the
+effect is subtler.
+
+Every non-null end_photo_id must reference a photo in the current
+photo list. Do not invent ids.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Opening: Exterior establishing shot (drone_push_in or orbit) — 4 seconds. Editor reverses the drone_push_in in post for a classic pullback opening feel.
@@ -338,7 +376,8 @@ Return a JSON object with this exact shape:
   "scenes": [
     {
       "scene_number": 1,
-      "photo_id": "uuid",
+      "photo_id": "a1b2c3d4-e5f6-4747-8899-aabbccddeeff",
+      "end_photo_id": "8ba2926c-6bd6-4204-9f4d-17dd68ea6785",
       "room_type": "exterior_front",
       "camera_movement": "drone_push_in",
       "prompt": "smooth cinematic drone flying forward at rooftop height toward the waterfront facade",
@@ -347,7 +386,8 @@ Return a JSON object with this exact shape:
     },
     {
       "scene_number": 2,
-      "photo_id": "uuid",
+      "photo_id": "f7g8h9i0-j1k2-4848-9900-bbccddeeeffg",
+      "end_photo_id": null,
       "room_type": "kitchen",
       "camera_movement": "dolly_left_to_right",
       "prompt": "smooth cinematic dolly right across the waterfall granite island",
