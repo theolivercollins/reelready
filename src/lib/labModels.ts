@@ -21,6 +21,16 @@ export interface LabModelInfo {
 
 export const LAB_MODELS: LabModelInfo[] = [
   {
+    key: "kling-v2-native",
+    slug: "kling-native-v2.0",  // informational; not used by Atlas
+    label: "Kling 2.0 (native — pre-paid credits)",
+    shortLabel: "v2 Native",
+    priceCents: 0,
+    priceLabel: "free (credits)",
+    supportsEndFrame: false,  // native v2.0 image-to-video doesn't pair
+    note: "Uses your pre-paid Kling credits directly. Burn before Atlas bills. No end-frame support.",
+  },
+  {
     key: "kling-v3-pro",
     slug: "kwaivgi/kling-v3.0-pro/image-to-video",
     label: "Kling 3.0 Pro",

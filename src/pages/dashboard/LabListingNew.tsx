@@ -14,6 +14,7 @@ export default function LabListingNew() {
   const [model, setModel] = useState<string>("kling-v2-6-pro");
 
   const MODEL_OPTIONS: Array<{ key: string; label: string; price: string }> = [
+    { key: "kling-v2-native", label: "Kling 2.0 (native — pre-paid credits)", price: "free (credits)" },
     { key: "kling-v3-pro", label: "Kling 3.0 Pro", price: "$0.095" },
     { key: "kling-v3-std", label: "Kling 3.0 Std", price: "$0.071" },
     { key: "kling-v2-6-pro", label: "Kling 2.6 Pro", price: "$0.060" },

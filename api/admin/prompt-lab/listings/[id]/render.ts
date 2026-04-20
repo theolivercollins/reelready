@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../../../../lib/auth.js";
 import { getSupabase } from "../../../../../lib/client.js";
 import { AtlasProvider } from "../../../../../lib/providers/atlas.js";
+import { pickProvider, isNativeKling } from "../../../../../lib/providers/dispatch.js";
 import { sanitizeDirectorPrompt } from "../../../../../lib/sanitize-prompt.js";
 
 // Kling v3 needs explicit stabilization language in the positive prompt
@@ -56,7 +57,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sceneIds = body.scene_ids;
   }
 
-  const provider = new AtlasProvider();
   const results: Array<{ scene_id: string; iteration_id: string; task_id: string }> = [];
 
   for (const sceneId of sceneIds) {
@@ -113,14 +113,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const modelsForScene = modelsToRender.length > 0 ? modelsToRender : [listing.model_name];
     for (const modelKey of modelsForScene) {
-      // DQ.3: Auto-route paired scenes to kling-v2-1-pair — the SKU
-      // purpose-built for start+end frame rendering. Only applies when
-      // the caller did NOT supply body.models[] (the Compare-models flow);
-      // in that flow the user has intentionally chosen specific models and
-      // we must not override them.
+      // DQ.3 + DM.4 ordering note: Paired auto-route runs FIRST, provider
+      // dispatch runs SECOND. So a caller that requests "kling-v2-native"
+      // on a paired scene (scene.use_end_frame=true + end_image_url set)
+      // gets auto-routed to "kling-v2-1-pair" (Atlas) here — before
+      // pickProvider() sees the model key. This is correct: native Kling
+      // v2.0 doesn't support end-frame (supportsEndFrame=false in
+      // labModels), and v2-1-pair on Atlas is the purpose-built SKU.
+      // Auto-route only runs when body.models[] was NOT supplied — the
+      // Compare-models flow must respect explicit user selections.
       const resolvedModel = isPaired && (!body.models || body.models.length === 0)
         ? "kling-v2-1-pair"
         : modelKey;
+
+      // DM.3: Pick the provider per-model. `kling-v2-native` routes to
+      // KlingProvider (pre-paid credits); everything else → Atlas.
+      const provider = pickProvider(resolvedModel);
 
       // DQ.2: Stability prefix only helps v3 (known shake issue).
       // v2.x and o3 produce stable motion natively — prepending 180 chars
@@ -158,6 +166,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .update({ provider_task_id: job.jobId, status: "rendering" }).eq("id", iter.id);
         results.push({ scene_id: sceneId, iteration_id: iter.id, task_id: job.jobId });
       } catch (err) {
+        // DM.3 failover: native Kling credit-exhaustion → Atlas v2-master.
+        // We detect credit-like error messages (402, "insufficient",
+        // "balance", "quota", "credit") and retry ONCE on Atlas with the
+        // closest-equivalent SKU. model_used is updated to reflect the
+        // actual SKU that rendered the clip so cost reporting is truthful.
+        const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+        const isCreditError = msg.includes("402") || msg.includes("insufficient") || msg.includes("balance") || msg.includes("quota") || msg.includes("credit");
+        if (isNativeKling(resolvedModel) && isCreditError) {
+          console.warn(`[render] native Kling credits exhausted — failing over to Atlas kling-v2-master for iteration ${iter.id}`);
+          try {
+            const fallbackProvider = new AtlasProvider();
+            const fallbackModel = "kling-v2-master";
+            const job = await fallbackProvider.generateClip({
+              sourceImage: Buffer.from(""),
+              sourceImageUrl: photo.image_url,
+              endImageUrl: effectiveEndImage,
+              prompt: effectivePrompt,
+              durationSeconds: 5,
+              aspectRatio: "16:9",
+              modelOverride: fallbackModel,
+            });
+            await supabase.from("prompt_lab_listing_scene_iterations")
+              .update({ model_used: fallbackModel, provider_task_id: job.jobId, status: "rendering" })
+              .eq("id", iter.id);
+            results.push({ scene_id: sceneId, iteration_id: iter.id, task_id: job.jobId });
+            continue;
+          } catch (fallbackErr) {
+            await supabase.from("prompt_lab_listing_scene_iterations")
+              .update({ status: "failed", render_error: `native Kling credit-exhausted; Atlas failover also failed: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}` })
+              .eq("id", iter.id);
+            continue;
+          }
+        }
+        // Non-credit error (or non-native model) — original failure handling.
         await supabase.from("prompt_lab_listing_scene_iterations")
           .update({ status: "failed", render_error: err instanceof Error ? err.message : String(err) })
           .eq("id", iter.id);

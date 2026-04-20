@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSupabase } from "../../lib/client.js";
-import { AtlasProvider, atlasClipCostCents } from "../../lib/providers/atlas.js";
+import { atlasClipCostCents } from "../../lib/providers/atlas.js";
+import { pickProvider, isNativeKling } from "../../lib/providers/dispatch.js";
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
@@ -13,11 +14,14 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
 
   if (!rendering || rendering.length === 0) return res.status(200).json({ polled: 0 });
 
-  const provider = new AtlasProvider();
   let finalized = 0;
   let failed = 0;
 
   for (const iter of rendering) {
+    // DM.3: Pick provider per-iteration. Native Kling iterations
+    // (model_used='kling-v2-native') poll through KlingProvider; all
+    // other Atlas SKUs continue through AtlasProvider.
+    const provider = pickProvider(iter.model_used);
     try {
       const status = await provider.checkStatus(iter.provider_task_id!);
       if (status.status === "processing") continue;
@@ -35,7 +39,9 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       // default-model price regardless of which SKU rendered. Atlas
       // bills per-second × clip duration; atlasClipCostCents wraps
       // the ATLAS_MODELS lookup + default 5s clip multiplier.
-      const costCents = atlasClipCostCents(iter.model_used);
+      // Native Kling: $0 (pre-paid credits — no per-clip cash cost).
+      const nativeKling = isNativeKling(iter.model_used);
+      const costCents = nativeKling ? 0 : atlasClipCostCents(iter.model_used);
 
       await supabase
         .from("prompt_lab_listing_scene_iterations")
@@ -46,25 +52,25 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         })
         .eq("id", iter.id);
 
-      if (costCents > 0) {
-        // Direct cost_events insert — recordCostEvent's addPropertyCost
-        // path needs a real property_id, which Lab listings don't have.
-        // property_id is nullable on cost_events (ON DELETE SET NULL in
-        // migration 014), so a direct insert works cleanly.
-        try {
-          await supabase.from("cost_events").insert({
-            property_id: null,
-            scene_id: null,
-            stage: "generation",
-            provider: "atlas",
-            units_consumed: 1,
-            unit_type: "renders",
-            cost_cents: costCents,
-            metadata: { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used },
-          });
-        } catch (costErr) {
-          console.error("[poll-listing-iterations] cost_events insert failed:", costErr);
-        }
+      // Per the cost-tracking directive, every API call logs an event
+      // even if cost is zero. Native Kling records provider='kling',
+      // cost_cents=0, metadata.billing='prepaid_credits' so we retain
+      // a per-render audit trail even when cash cost is 0.
+      try {
+        await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "generation",
+          provider: nativeKling ? "kling" : "atlas",
+          units_consumed: 1,
+          unit_type: "renders",
+          cost_cents: costCents,
+          metadata: nativeKling
+            ? { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used, billing: "prepaid_credits" }
+            : { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used },
+        });
+      } catch (costErr) {
+        console.error("[poll-listing-iterations] cost_events insert failed:", costErr);
       }
       finalized += 1;
     } catch (err) {

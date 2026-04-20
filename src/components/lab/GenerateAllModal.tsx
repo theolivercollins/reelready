@@ -15,7 +15,7 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, usedModels = [], onG
   const usedSet = new Set(usedModels);
   const visibleModels = LAB_MODELS.filter((m) => !m.hidden);
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(visibleModels.filter((m) => m.key !== "kling-v2-master" && !usedSet.has(m.key)).map((m) => m.key))
+    new Set(visibleModels.filter((m) => m.key !== "kling-v2-master" && m.key !== "kling-v2-native" && !usedSet.has(m.key)).map((m) => m.key))
   );
   const [submitting, setSubmitting] = useState(false);
 
