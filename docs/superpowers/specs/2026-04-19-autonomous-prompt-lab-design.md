@@ -370,6 +370,13 @@ Only pursued if Phase 1's Claude-only judge fails to hit the 80% bar.
 - Add `clip_similarity` population to the existing `lab_judge_scores` table
 - Re-run calibration; confirm composite score hits the bar
 
+### Phase 1.5 follow-ups (independent of CLIP decision)
+
+Tracked in Phase 1 code review, unblock Phase 3's automated iteration:
+
+- **Write judge cost to `cost_events`** — `lib/judge/index.ts` currently stores `cost_cents` on `lab_judge_scores` but does not insert a `cost_events` row. Phase 3's budget guard needs `cost_events` entries to enforce the `$20 per cell run` ceiling. One-line addition inside `scoreIteration` after the upsert succeeds.
+- **Calibration as a background job** — the `/api/admin/judge/calibrate` endpoint runs synchronously and will time out on Vercel for multi-cell runs. Move to a queue-backed or cron-polled background worker (Phase 3 brings the iterator worker anyway, so this can ride on the same plumbing).
+
 ### Phase 2 — Knowledge Map + Dashboard (read-only visualization first)
 
 - Build `get_knowledge_map_cells` RPC + `v_knowledge_map_cells` view
