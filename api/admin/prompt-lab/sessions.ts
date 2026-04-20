@@ -32,12 +32,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       completed: boolean;
       pending_render: boolean;
       ready_for_approval: boolean;
+      iteration_needs_attention: boolean;
       has_feedback: boolean;
     }> = {};
     if (ids.length > 0) {
       const { data: its } = await supabase
         .from("prompt_lab_iterations")
-        .select("id, session_id, rating, tags, user_comment, refinement_instruction, clip_url, provider_task_id, render_error, render_queued_at, director_output_json")
+        .select("id, session_id, iteration_number, rating, tags, user_comment, refinement_instruction, clip_url, provider_task_id, render_error, render_queued_at, director_output_json")
         .in("session_id", ids);
       const iterationIdToSession = new Map<string, string>();
       for (const it of its ?? []) {
@@ -54,10 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         row.iteration_count += 1;
         if (typeof it.rating === "number") {
           row.best_rating = Math.max(row.best_rating ?? 0, it.rating);
-          // A 5★ rating means the admin explicitly approved this iteration —
-          // counts as completed regardless of whether auto-promote succeeded
-          // (auto-promote can skip via the dedup RPC).
-          if (it.rating === 5) row.completed = true;
+          // 4★+ = admin approved this iteration as good enough → completed.
+          if (it.rating >= 4) row.completed = true;
         }
         if (it.provider_task_id && !it.clip_url && !it.render_error) row.pending_render = true;
         const feedback = typeof it.rating === "number"
@@ -65,10 +64,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           || (typeof it.user_comment === "string" && it.user_comment.trim().length > 0 && !it.user_comment.startsWith("[refiner rationale]"))
           || (typeof it.refinement_instruction === "string" && it.refinement_instruction.trim().length > 0);
         if (feedback) row.has_feedback = true;
-        // Any unrated clip = generation approval needed (even after re-renders)
-        if (it.clip_url && it.rating == null) row.ready_for_approval = true;
-        // Iteration with a prompt but no clip yet and not rendering/queued = needs attention
-        if (it.director_output_json && !it.clip_url && !it.provider_task_id && !it.render_error && !it.render_queued_at && it.rating == null) {
+      }
+
+      // Banner state is based on the LATEST iteration per session,
+      // not the union of all iterations. The latest iteration reflects
+      // where the user is currently working.
+      const latestBySession = new Map<string, typeof (its ?? [])[number]>();
+      for (const it of its ?? []) {
+        const prev = latestBySession.get(it.session_id);
+        if (!prev || it.iteration_number > prev.iteration_number) {
+          latestBySession.set(it.session_id, it);
+        }
+      }
+      for (const [sid, latest] of latestBySession) {
+        const row = summaries[sid];
+        if (!row) continue;
+        if (latest.clip_url && latest.rating == null) {
+          row.ready_for_approval = true;
+        } else if (latest.director_output_json && !latest.clip_url && !latest.provider_task_id && !latest.render_error && !latest.render_queued_at && latest.rating == null) {
           row.iteration_needs_attention = true;
         }
       }
