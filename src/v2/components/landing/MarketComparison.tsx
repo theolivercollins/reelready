@@ -38,8 +38,8 @@ export function MarketComparison() {
         <h2
           className="le-display"
           style={{
-            fontSize: "clamp(48px, 6vw, 96px)",
-            lineHeight: 1,
+            fontSize: "clamp(44px, 5.5vw, 76px)",
+            lineHeight: 0.98,
             margin: 0,
             maxWidth: 800,
             color: "#fff",

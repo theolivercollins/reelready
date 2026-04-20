@@ -20,7 +20,7 @@ export function SelectedWork() {
       <div style={{ maxWidth: 1440, margin: "0 auto" }}>
         <div className="le-eyebrow" style={{ marginBottom: 24, color: "rgba(255,255,255,0.55)" }}>— SHOWCASE</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 56 }}>
-          <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: 0 }}>
+          <h2 className="le-display" style={{ fontSize: "clamp(44px, 5.5vw, 76px)", lineHeight: 0.98, margin: 0 }}>
             Selected work.
           </h2>
           <a href="#showcase" style={{ fontSize: 14, color: "rgba(255,255,255,0.8)", textDecoration: "underline", textUnderlineOffset: 6 }}>

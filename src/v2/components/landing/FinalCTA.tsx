@@ -10,7 +10,7 @@ export function FinalCTA() {
         textAlign: "center",
       }}
     >
-      <h2 className="le-display" style={{ fontSize: "clamp(56px, 7vw, 112px)", lineHeight: 1, margin: "0 0 40px" }}>
+      <h2 className="le-display" style={{ fontSize: "clamp(52px, 6.5vw, 96px)", lineHeight: 0.98, margin: "0 0 40px" }}>
         Elevate your next listing.
       </h2>
       <Link to="/upload" className="le-btn le-btn-primary" style={{ padding: "14px 28px", fontSize: 15 }}>

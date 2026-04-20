@@ -16,7 +16,7 @@ export function Pricing() {
     >
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div className="le-eyebrow" style={{ marginBottom: 24 }}>— PRICING</div>
-        <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: "0 0 64px", color: "#fff" }}>
+        <h2 className="le-display" style={{ fontSize: "clamp(44px, 5.5vw, 76px)", lineHeight: 0.98, margin: "0 0 64px", color: "#fff" }}>
           Priced per listing.
         </h2>
         <div className="le-pricing-grid">
