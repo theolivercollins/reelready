@@ -9,6 +9,7 @@ export interface MarketStatRow {
   market: MarketStatValue;
   elevate: MarketStatValue;
   source: { label: string; url: string };
+  counterStat?: { pct: number; label: string };
 }
 
 // Four rows, each tied to an external primary or trade-body source.
@@ -55,6 +56,7 @@ const MOCK_ROWS: MarketStatRow[] = [
       label: "Properties Online Real Estate Tech Trends (2018)",
       url: "https://propertiesonline.com/Reports/annual-real-estate-trends-report.pdf",
     },
+    counterStat: { pct: 11, label: "of agents actually offer it" },
   },
   {
     id: "demand",
