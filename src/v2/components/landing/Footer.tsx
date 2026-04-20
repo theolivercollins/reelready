@@ -20,8 +20,6 @@ export function Footer() {
           <a href="#showcase">Showcase</a>
           <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
-          <a href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
         </nav>
         <div>© 2026 Listing Elevate, Inc.</div>
       </div>
