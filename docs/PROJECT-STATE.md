@@ -1,6 +1,6 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-19** — post production-readiness merge (scene_ratings denorm, error classification, Lab→prod promotion, resubmit endpoint, cost_events widened).
+Last updated: **2026-04-20** — banner system overhaul, 4★ backup recipes, refine-from-any-iteration, card sorting, recipe dedup removal finalized.
 
 Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
 
@@ -83,13 +83,17 @@ Only 7 rated scenes in prod (0 kitchen, 0 living). Can't tune director prompts f
 
 **Batches:** sessions can carry a `batch_label` (e.g. "Smith property"). List view groups by batch. Session cards are draggable — drop on another batch header to move, drop on the "create new batch" zone at the bottom to make a new group. Click a batch title to rename all its sessions at once.
 
-**Filter chips per batch:** All / Need to start / In progress / Completed. "Need to start" means no admin feedback yet (no rating, tag, comment, or refinement). "Completed" means any iteration rated 5★ OR any iteration became the source of a recipe.
+**Filter chips per batch:** All / Need to start / In progress / Completed. "Need to start" means no admin feedback yet (no rating, tag, comment, or refinement). "Completed" means any iteration rated 4★+ OR any iteration became the source of a recipe.
 
 **Card states on the list view:**
 - `Rendering` amber pill over thumbnail while any iteration has `provider_task_id` set + no `clip_url` + no error
-- `Ready for approval` sky banner when there's a rendered clip with no rating
-- `✓ Completed` emerald badge (top-right) when 5★ rated or promoted to recipe
+- `Generation approval needed` sky blue banner when latest iteration has a rendered clip with no rating
+- `Iteration approval needed` teal banner when latest iteration has a director prompt but no clip yet
+- `✓ Completed` emerald badge (top-right) when any iteration rated 4★+ or promoted to recipe
 - Auto-refreshes every 15s when any session is active (visibility-gated)
+- **Card sorting within batches** by priority: Generation approval needed → Iteration approval needed → Rendering → rest → Completed
+
+Banners are based on the LATEST iteration per session (not the union of all iterations). Fixes false "generation approval" when user has moved past old unrated clips to new iterations.
 
 **Detail view (`/dashboard/development/prompt-lab/:sessionId`):** click-to-edit label in header; iteration stack with newest on top. Latest iteration has 2px foreground border + "Latest · active" pill. Older iterations muted. Each iteration card shows analysis summary, director prompt, retrieval chips ("Based on N similar wins" / "Recipe · archetype"), render controls on latest, rating widget + chat.
 
@@ -103,7 +107,9 @@ Only 7 rated scenes in prod (0 kitchen, 0 living). Can't tune director prompts f
 
 **Save rating** button (separate from Refine) persists rating + tags + comment without forcing a new iteration.
 
-**Refine** button: Claude gets the previous iteration + user feedback + exemplars from similarity retrieval, proposes a revised director prompt, creates a new iteration.
+**Refine from any iteration (shipped 2026-04-20):** Refine controls (chat + "Refine → new iteration" button) no longer gated on `isLatest`. Can branch from any older iteration; label says "(will branch from this iteration)".
+
+**4★ backup recipes (shipped 2026-04-20):** Rating 4★ auto-promotes to recipe as a "backup" (archetype prefixed `backup_`, `rating_at_promotion=4`). 4★+ marks session as completed (was 5★ only). Manual "Promote to recipe" button shows on 4★+ iterations. Both primary (5★) and backup (4★) recipes feed retrieval.
 
 **Organize mode + archive (shipped 2026-04-17):** "Organize" button toggles multi-select mode with checkboxes on session cards. Selection actions: group into batch, move to batch, archive, unarchive. Collapse chevrons on batch headers hide/show card grids. Sessions filtered out when archived; "Show archived" toggle. Grey "Archived" badge on archived cards. Migration 013: `archived boolean` on `prompt_lab_sessions`.
 
@@ -117,7 +123,7 @@ Three layered mechanisms. Retrieval now pulls from a unified pool of Lab + produ
 
 **"DO NOT REPEAT" block (shipped 2026-04-15–19):** when re-analyzing a session, all prior non-5★ prompts are injected as a "DO NOT REPEAT" block so the director avoids repeating failed approaches.
 
-**2. Recipe library** — `prompt_lab_recipes` table keyed by archetype + room_type + camera_movement. Auto-populated on rating=5 unconditionally (dedup removed 2026-04-17 — every 5★ now promotes). Manual "Promote to recipe" button pre-fills `room_camera_YYMMDD-slug` archetype pattern. Green success banner for auto-promote confirmation. When a new photo's embedding matches a recipe within distance 0.35 on the same room_type, director gets a "VALIDATED RECIPE MATCH" block instructing it to use the template verbatim after feature substitution. `times_applied` increments per use. Recipes UI at `/dashboard/development/prompt-lab/recipes`: list, edit, archive, delete.
+**2. Recipe library** — `prompt_lab_recipes` table keyed by archetype + room_type + camera_movement. Auto-populated on rating=5 unconditionally (dedup removed 2026-04-17 — every 5★ now promotes). Rating=4 also auto-promotes as backup recipe (archetype prefixed `backup_`, `rating_at_promotion=4`; shipped 2026-04-20). Manual "Promote to recipe" button pre-fills `room_camera_YYMMDD-slug` archetype pattern. Green success banner for auto-promote confirmation. When a new photo's embedding matches a recipe within distance 0.35 on the same room_type, director gets a "VALIDATED RECIPE MATCH" block instructing it to use the template verbatim after feature substitution. `times_applied` increments per use. Recipes UI at `/dashboard/development/prompt-lab/recipes`: list, edit, archive, delete.
 
 **3. Rule mining + proposals** — `/dashboard/development/proposals` page. "Run rule mining" aggregates rated Lab iterations by (room × movement × provider) bucket, passes winners + losers + evidence to Claude with `DIRECTOR_PATCH_SYSTEM`, which returns a unified diff + per-change citations. Admin reviews (diff + bucket evidence), clicks Apply → new `lab_prompt_overrides` row. Lab's director resolves the override at call time; production director does NOT consult overrides. Reject is one click, audit-logged on the proposal row.
 
@@ -217,6 +223,46 @@ Development landing (`/dashboard/development`) shows:
 - **Rating on any iteration** — rating widget no longer gated on `isLatest`.
 - **"Ready for approval" persists after rating** — fixed; banner clears once any iteration in a session has feedback.
 - **Director repeats prompts** — new "DO NOT REPEAT" block injected with all prior non-5★ prompts when re-analyzing a session.
+
+---
+
+## What shipped 2026-04-20
+
+### Banner system overhaul
+- "Ready for approval" renamed to **"Generation approval needed"** (sky blue)
+- New **"Iteration approval needed"** banner (teal) — shows when latest iteration has a director prompt but no clip yet
+- Banners now based on the LATEST iteration per session, not the union of all iterations. Fixes false "generation approval" when user has moved past old unrated clips to new iterations
+- Card sorting within batches by priority: Generation approval needed → Iteration approval needed → Rendering → rest → Completed
+
+### 4★ backup recipes
+- Rating 4★ auto-promotes to recipe as a "backup" (archetype prefixed `backup_`, `rating_at_promotion=4`)
+- 4★+ marks session as completed (was 5★ only)
+- Manual "Promote to recipe" button shows on 4★+ iterations
+- Both primary (5★) and backup (4★) recipes feed retrieval
+
+### Refine from any iteration
+- Refine controls (chat + "Refine → new iteration" button) no longer gated on `isLatest`
+- Can branch from any older iteration; label says "(will branch from this iteration)"
+
+### Recipe dedup fully removed
+- Dropped `prompt_lab_recipes_source_iteration_unique` index from migration 015
+- Every 5★ (and now 4★) creates a new recipe unconditionally
+
+### Production readiness merge (from claude/review-listing-elevate-docs-NkMzb branch)
+- Migration 014: scene_ratings denormalization (ratings survive property rerun, FK → ON DELETE SET NULL, denorm columns backfilled, RPCs rebuilt with coalesce fallback). Fixed: `rated_photo_key_features` type corrected from `text[]` to `jsonb`
+- Migration 015: Lab ML integrity (refiner_rationale split from user_comment, completeness view)
+- Migration 016: Lab→prod promotion (override readiness view, audit columns, source tracking on prompt_revisions)
+- Migration 017: cost_events CHECK widened for shotstack + openai
+- `lib/providers/errors.ts` — error classification (permanent/capacity/transient)
+- `lib/prompts/resolve.ts` — resolveProductionPrompt reads Lab-promoted revisions
+- `api/scenes/[id]/resubmit.ts` — manual scene resubmission
+- `api/admin/prompt-lab/promote-to-prod.ts` — Lab→prod promotion endpoint
+- `lib/pipeline.ts` — smart failover loop, Shotstack cost tracking, Lab-promoted director
+- Dashboard UI: resubmit buttons on PropertyDetail + Pipeline
+
+### Bug fixes (2026-04-20)
+- Duplicate recipe 500 on double-click — wrapped in try/catch (then fully removed dedup)
+- SyntaxError in sessions.ts from conflict resolution — fixed typeof expression
 
 ---
 
@@ -338,7 +384,7 @@ Development landing (`/dashboard/development`) shows:
 | 012 | `render_queued_at` | `render_queued_at` column on prompt_lab_iterations |
 | 013 | `session_archived` | `archived boolean` on prompt_lab_sessions |
 | 014 | `scene_ratings_denorm` | Denorm columns on scene_ratings, FK→ON DELETE SET NULL, RPCs rebuilt with coalesce fallback. Fixes "lost ratings on rerun" bug |
-| 015 | `lab_ml_integrity` | `refiner_rationale` column (split from user_comment), unique index on recipes per source_iteration_id, `prompt_lab_iterations_complete` view |
+| 015 | `lab_ml_integrity` | `refiner_rationale` column (split from user_comment), ~~unique index on recipes per source_iteration_id~~ (dropped 2026-04-20), `prompt_lab_iterations_complete` view |
 | 016 | `director_prod_promotion` | `lab_prompt_override_readiness` view (≥10 renders, avg ≥4★, winners ≥2× losers), promotion audit columns on lab_prompt_overrides, source + source_override_id on prompt_revisions |
 | 017 | `cost_events_shotstack` | CHECK constraints widened for shotstack + openai providers; unit_type widened for 'renders' |
 
@@ -349,10 +395,10 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 ## Immediate next actions (start here next session)
 
 1. **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed; prod needs the same treatment.
-2. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness. Unblock when ready.
-3. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built.
-4. **Structured failure tags on ratings** — proposed, not built. Would give the learning loop richer signal than star ratings alone.
-5. **Use the Lab** — continue rating aggressively; every 5★ now auto-promotes to recipe (dedup removed). Lab→prod promotion is now live.
+2. **Use the Lab** — continue rating aggressively; every 4★+ now auto-promotes to recipe (backup at 4★, primary at 5★). Lab→prod promotion is live. Volume compounds the learning loop.
+3. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness. Unblock when ready.
+4. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built.
+5. **Structured failure tags on ratings** — proposed, not built. Would give the learning loop richer signal than star ratings alone.
 6. **Client-side photo compression** — resize to 2048px / JPEG 85 before upload to cut transfer + storage cost.
 
 ---
@@ -396,4 +442,4 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## One-liner for next session
 
-> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **Production-readiness merge (65dcc7d)** shipped: scene_ratings denorm (ratings survive rerun), smart error-classified failover, Shotstack cost tracking, single-scene resubmit endpoint, Lab→prod promotion flow (`resolveProductionPrompt`), refiner rationale split, cost_events widened. **Prompt Lab** has unified embeddings, negative signal, Kling concurrency guard, re-render, organize + archive, recipe auto-promote. Lab→prod promotion is now live. Next: prod base64→URL fix, spatial grounding (paused), Shotstack reverse clips, structured failure tags.
+> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **2026-04-20:** banner system overhauled (generation/iteration approval, priority card sorting), 4★ backup recipes (auto-promote as `backup_` archetype), refine from any iteration, recipe dedup index dropped. **Production-readiness merge** shipped earlier same day: scene_ratings denorm, smart failover, Shotstack cost tracking, resubmit endpoint, Lab→prod promotion (`resolveProductionPrompt`), refiner rationale split. **Prompt Lab** has unified embeddings, negative signal, Kling concurrency guard, re-render, organize + archive. Next: prod base64→URL fix, use the Lab for volume, spatial grounding (paused).

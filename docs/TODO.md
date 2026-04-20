@@ -50,6 +50,16 @@ See `docs/PROJECT-STATE.md` for full project state and `docs/PROMPT-LAB-PLAN.md`
 
 - [ ] **Clean up `match_lab_iterations` RPC** — unused since unified embeddings shipped. Still in DB.
 
+## Done 2026-04-20
+
+- [x] Banner system overhaul — "Generation approval needed" (sky blue) + "Iteration approval needed" (teal), based on latest iteration only; card sorting by priority within batches
+- [x] 4★ backup recipes — auto-promote 4★ as backup (`backup_` archetype prefix, `rating_at_promotion=4`); 4★+ marks session completed
+- [x] Refine from any iteration — refine controls ungated from `isLatest`; can branch from older iterations
+- [x] Recipe dedup fully removed — dropped `prompt_lab_recipes_source_iteration_unique` index; every 4★+ promotes unconditionally
+- [x] Production readiness merge — migrations 014–017, error classification, resolveProductionPrompt, resubmit endpoint, promote-to-prod endpoint, smart failover, Shotstack cost tracking, dashboard resubmit buttons
+- [x] Bug fix: duplicate recipe 500 on double-click
+- [x] Bug fix: SyntaxError in sessions.ts from conflict resolution
+
 ## Done 2026-04-19 (production-readiness merge, commit 65dcc7d)
 
 - [x] scene_ratings denormalization — migration 014: denorm columns, FK→ON DELETE SET NULL, RPCs rebuilt with coalesce. Fixes "lost 7+ ratings" bug
