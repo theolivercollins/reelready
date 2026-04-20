@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getMarketStats, type MarketStatRow } from "@/v2/data/marketStats";
 import { AnimatedBar } from "@/v2/components/primitives/AnimatedBar";
-import { AnimatedNumber } from "@/v2/components/primitives/AnimatedNumber";
+import { AnimatedLabel } from "@/v2/components/primitives/AnimatedLabel";
 import { useInViewOnce } from "@/v2/hooks/useInViewOnce";
 import { usePrefersReducedMotion } from "@/v2/hooks/usePrefersReducedMotion";
 
@@ -76,7 +76,7 @@ function MarketComparisonRow({ row, index }: { row: MarketStatRow; index: number
           </span>
           <AnimatedBar fillPercent={marketPct} animate={animate} variant="market" label={`Market ${row.dimension}`} />
           <span style={{ fontSize: 14, color: "var(--le-text-muted)", width: 180, textAlign: "right" }}>
-            <AnimatedNumber value={row.market.numericMax ?? 0} label={row.market.label} animate={animate} />
+            <AnimatedLabel label={row.market.label} animate={animate} />
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -85,7 +85,7 @@ function MarketComparisonRow({ row, index }: { row: MarketStatRow; index: number
           </span>
           <AnimatedBar fillPercent={elevatePct} animate={animate} variant="elevate" label={`Elevate ${row.dimension}`} delayMs={150} />
           <span style={{ fontSize: 14, color: "var(--le-text)", width: 180, textAlign: "right", fontWeight: 500 }}>
-            <AnimatedNumber value={row.elevate.numericMax ?? 0} label={row.elevate.label} animate={animate} delayMs={150} />
+            <AnimatedLabel label={row.elevate.label} animate={animate} delayMs={150} />
           </span>
         </div>
       </div>

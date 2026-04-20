@@ -1,13 +1,12 @@
 import { motion } from "framer-motion";
 
-interface AnimatedNumberProps {
-  value: number;
+interface AnimatedLabelProps {
   label: string;
   animate: boolean;
   delayMs?: number;
 }
 
-export function AnimatedNumber({ value, label, animate, delayMs = 0 }: AnimatedNumberProps) {
+export function AnimatedLabel({ label, animate, delayMs = 0 }: AnimatedLabelProps) {
   if (!animate) {
     return <span>{label}</span>;
   }
