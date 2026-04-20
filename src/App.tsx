@@ -30,6 +30,7 @@ import DashboardPromptLab from "./pages/dashboard/PromptLab";
 import DashboardDevelopment from "./pages/dashboard/Development";
 import DashboardPromptLabRecipes from "./pages/dashboard/PromptLabRecipes";
 import DashboardPromptProposals from "./pages/dashboard/PromptProposals";
+import DashboardJudgeSmoke from "./pages/dashboard/JudgeSmoke";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -75,6 +76,7 @@ const App = () => (
                   <Route path="development/prompt-lab" element={<DashboardPromptLab />} />
                   <Route path="development/prompt-lab/recipes" element={<DashboardPromptLabRecipes />} />
                   <Route path="development/proposals" element={<DashboardPromptProposals />} />
+                  <Route path="development/judge-smoke" element={<DashboardJudgeSmoke />} />
                   <Route path="development/prompt-lab/:sessionId" element={<DashboardPromptLab />} />
                   <Route path="finances" element={<DashboardFinances />} />
                   <Route path="settings" element={<DashboardSettings />} />
