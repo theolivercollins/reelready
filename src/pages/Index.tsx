@@ -1,28 +1,23 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, ArrowUpRight, Mail, Loader2, CheckCircle, Plus, Minus, Sun, Moon } from "lucide-react";
-import { motion, useScroll, useTransform, type Variants } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { Mail, Loader2, CheckCircle } from "lucide-react";
+import { motion, type Variants } from "framer-motion";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { supabase, AUTH_CALLBACK_URL } from "@/lib/supabase";
-import { Wordmark } from "@/components/brand/Wordmark";
+import { LECyclingWord, LELogoMark, LEIcon } from "@/components/le";
 import heroVideo from "@/assets/hero-video-loop.mp4.asset.json";
 import heroBg from "@/assets/hero-bg.jpg";
 import interior1 from "@/assets/interior-1.jpg";
 import exterior1 from "@/assets/exterior-1.jpg";
 import kitchen1 from "@/assets/kitchen-1.jpg";
-import bathroom1 from "@/assets/bathroom-1.jpg";
 import aerial1 from "@/assets/aerial-1.jpg";
 import showcaseInterior from "@/assets/showcase-interior.mp4.asset.json";
 import showcaseKitchen from "@/assets/showcase-kitchen.mp4.asset.json";
-import showcaseBathroom from "@/assets/showcase-bathroom.mp4.asset.json";
-import showcaseAerial from "@/assets/showcase-aerial.mp4.asset.json";
 import showcaseExterior from "@/assets/showcase-exterior.mp4.asset.json";
-import showcaseBeach from "@/assets/showcase-beach.mp4.asset.json";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -34,40 +29,22 @@ const fadeUp: Variants = {
     transition: { duration: 1.1, delay: i * 0.08, ease: EASE },
   }),
 };
+const stagger: Variants = { visible: { transition: { staggerChildren: 0.12 } } };
 
-const stagger: Variants = {
-  visible: { transition: { staggerChildren: 0.12 } },
-};
+const TRUSTED = ["Compass", "Douglas Elliman", "Sotheby's Intl.", "Corcoran", "The Agency", "Engel & Völkers"];
 
-function FAQItem({ question, answer }: { question: string; answer: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="border-b border-border">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="group flex w-full items-center justify-between py-7 text-left"
-      >
-        <span className="pr-8 text-base font-semibold tracking-[-0.01em] text-foreground md:text-lg">
-          {question}
-        </span>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border text-muted-foreground transition-all duration-500 ease-cinematic group-hover:border-foreground group-hover:text-foreground">
-          {open ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-        </div>
-      </button>
-      <motion.div
-        initial={false}
-        animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
-        transition={{ duration: 0.5, ease: EASE }}
-        className="overflow-hidden"
-      >
-        <p className="max-w-2xl pb-7 text-sm leading-relaxed text-muted-foreground">
-          {answer}
-        </p>
-      </motion.div>
-    </div>
-  );
-}
+const PROCESS_STEPS = [
+  { n: "01", t: "Upload", d: "Drop 20–60 photos. We handle exposure, orientation, and metadata. Takes a minute.", img: kitchen1 },
+  { n: "02", t: "Direct", d: "Our model scripts the shot plan — camera work, room order, voice, and mood.", img: interior1 },
+  { n: "03", t: "Deliver", d: "A human editor reviews. You receive 16:9 and 9:16 cuts, ready to broadcast.", img: aerial1 },
+];
+
+const NUMBERS: [string, string][] = [
+  ["4,280+", "Listings elevated"],
+  ["72h", "Guaranteed turnaround"],
+  ["$75", "Starting per video"],
+  ["94.2%", "Accepted first cut"],
+];
 
 const Index = () => {
   const { user, profile } = useAuth();
@@ -75,51 +52,7 @@ const Index = () => {
   const accountLabel = profile?.role === "admin" ? "Dashboard" : "Account";
   const navigate = useNavigate();
   const { theme, toggle: toggleTheme } = useTheme();
-  const heroRef = useRef<HTMLElement>(null);
 
-  // Hero verb typewriter — types Take, holds, deletes, then Retain, then Sell, looping.
-  const heroVerbs = ["Take", "Retain", "Sell"] as const;
-  const [heroVerbIndex, setHeroVerbIndex] = useState(0);
-  const [heroText, setHeroText] = useState("");
-  const [heroPhase, setHeroPhase] = useState<"type" | "hold" | "erase" | "rest">("type");
-
-  useEffect(() => {
-    const verb = heroVerbs[heroVerbIndex];
-    let timeout: ReturnType<typeof setTimeout>;
-    const TYPE_MS = 95;
-    const ERASE_MS = 55;
-    const HOLD_MS = 1600;
-    const REST_MS = 380;
-
-    if (heroPhase === "type") {
-      if (heroText.length < verb.length) {
-        timeout = setTimeout(() => setHeroText(verb.slice(0, heroText.length + 1)), TYPE_MS);
-      } else {
-        timeout = setTimeout(() => setHeroPhase("hold"), 0);
-      }
-    } else if (heroPhase === "hold") {
-      timeout = setTimeout(() => setHeroPhase("erase"), HOLD_MS);
-    } else if (heroPhase === "erase") {
-      if (heroText.length > 0) {
-        timeout = setTimeout(() => setHeroText(heroText.slice(0, -1)), ERASE_MS);
-      } else {
-        timeout = setTimeout(() => setHeroPhase("rest"), 0);
-      }
-    } else if (heroPhase === "rest") {
-      timeout = setTimeout(() => {
-        setHeroVerbIndex((i) => (i + 1) % heroVerbs.length);
-        setHeroPhase("type");
-      }, REST_MS);
-    }
-
-    return () => clearTimeout(timeout);
-  }, [heroText, heroVerbIndex, heroPhase]);
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
-  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0]);
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 120]);
-
-  // Auth modal
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
   const [authEmail, setAuthEmail] = useState("");
@@ -151,15 +84,13 @@ const Index = () => {
     setAuthError("");
     setAuthLoading(true);
     try {
-      const metadata = authTab === "signup"
-        ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
-        : undefined;
+      const metadata =
+        authTab === "signup"
+          ? { first_name: authFirst, last_name: authLast, brokerage: authBrokerage }
+          : undefined;
       const { error } = await supabase.auth.signInWithOtp({
         email: authEmail,
-        options: {
-          emailRedirectTo: AUTH_CALLBACK_URL,
-          data: metadata,
-        },
+        options: { emailRedirectTo: AUTH_CALLBACK_URL, data: metadata },
       });
       if (error) throw error;
       setAuthSent(true);
@@ -170,522 +101,639 @@ const Index = () => {
     }
   };
 
-  const showcase = [
-    { src: showcaseInterior.url, poster: interior1, label: "Interior", index: "01", tall: true },
-    { src: showcaseKitchen.url, poster: kitchen1, label: "Kitchen", index: "02" },
-    { src: showcaseBathroom.url, poster: bathroom1, label: "Bathroom", index: "03" },
-    { src: showcaseExterior.url, poster: exterior1, label: "Exterior", index: "04" },
-    { src: showcaseAerial.url, poster: aerial1, label: "Aerial", index: "05" },
-    { src: showcaseBeach.url, poster: aerial1, label: "Coastal", index: "06" },
-  ];
-
-  const faqs = [
-    { q: "How many photos do I need?", a: "Upload 10 to 60 high-resolution property photos. More photos give the engine more material to compose from — a mix of exterior, interior, and detail shots produces the most cinematic result." },
-    { q: "How fast is delivery?", a: "Every video is delivered within 72 hours. The pipeline runs a six-stage process — intake, analysis, scripting, generation, quality control, and assembly — around the clock." },
-    { q: "What formats do I receive?", a: "Vertical 9:16 for Reels and TikTok, horizontal 16:9 for YouTube and MLS, or both. Every video ships with transitions, music, and optional AI voiceover included." },
-    { q: "Can I request revisions?", a: "Yes. One revision round is included at no additional cost. Flag anything you want changed from your status page and we'll deliver the update within 48 hours." },
-    { q: "How does pricing compare to traditional video?", a: "Real estate videographers charge $500 to $2,000 per listing with a one to two week turnaround. Listing Elevate starts at $75, delivered in 72 hours. Up to 85% less, at cinematic quality." },
-  ];
-
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* ─── Navigation (liquid glass) ─── */}
-      <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-white/[0.04] backdrop-blur-2xl backdrop-saturate-[180%] supports-[backdrop-filter]:bg-white/[0.05]">
-        <nav className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-8 md:h-[76px] md:px-12">
-          <Link to="/" className="inline-flex items-center gap-2.5 text-white transition-opacity hover:opacity-80">
-            <span className="relative inline-block h-6 w-6" aria-hidden>
-              <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1" y="1" width="22" height="22" stroke="currentColor" strokeWidth="1.5" />
-                <rect x="5" y="14" width="3" height="5" fill="currentColor" />
-                <rect x="10.5" y="10" width="3" height="9" fill="currentColor" />
-                <rect x="16" y="6" width="3" height="13" fill="currentColor" />
-              </svg>
-            </span>
-            <span className="text-base font-semibold tracking-[-0.01em] leading-none">
-              Listing Elevate
-            </span>
+    <div className="le-root" style={{ background: "var(--le-bg)", color: "var(--le-text)", minHeight: "100vh" }}>
+      {/* ============ HERO ============ */}
+      <section style={{ position: "relative", height: "min(820px, 100vh)", minHeight: 640, overflow: "hidden", background: "#000" }}>
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          poster={heroBg}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "brightness(0.62) saturate(1.05)" }}
+        >
+          <source src={heroVideo.url} type="video/mp4" />
+        </video>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(180deg, rgba(5,7,14,0.85) 0%, rgba(5,7,14,0.15) 22%, rgba(5,7,14,0) 45%, rgba(5,7,14,0.35) 75%, rgba(5,7,14,0.7) 100%)",
+          }}
+        />
+
+        {/* NAV */}
+        <nav
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "26px 48px",
+            color: "#fff",
+            zIndex: 2,
+          }}
+        >
+          <Link to="/" style={{ display: "flex", alignItems: "center", color: "#fff" }}>
+            <LELogoMark size={20} color="#fff" />
           </Link>
-          <div className="hidden items-center gap-10 md:flex">
-            <a href="#process" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Process</a>
-            <a href="#showcase" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Showcase</a>
-            <a href="#pricing" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">Pricing</a>
-            <a href="#faq" className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white">FAQ</a>
+          <div
+            className="hidden md:flex"
+            style={{
+              gap: 44,
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.82)",
+            }}
+          >
+            <a href="#process" style={{ color: "inherit" }}>Process</a>
+            <a href="#showcase" style={{ color: "inherit" }}>Showcase</a>
+            <a href="#numbers" style={{ color: "inherit" }}>Numbers</a>
+            <a href="#faq" style={{ color: "inherit" }}>FAQ</a>
           </div>
-          <div className="flex items-center gap-3">
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button
               type="button"
-              onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="inline-flex h-9 w-9 items-center justify-center border border-white/20 text-white/80 transition-all duration-500 ease-cinematic hover:border-white/60 hover:bg-white/10"
+              onClick={toggleTheme}
+              style={{
+                width: 34,
+                height: 34,
+                border: "1px solid rgba(255,255,255,0.22)",
+                borderRadius: 6,
+                background: "transparent",
+                color: "#fff",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <LEIcon name={theme === "dark" ? "sun" : "moon"} size={14} color="#fff" />
             </button>
             {user ? (
-              <Button
-                asChild
-                size="sm"
-                variant="outline"
-                className="border-white/30 bg-white/5 text-white hover:border-white hover:bg-white hover:text-black"
+              <Link
+                to={accountHref}
+                style={{
+                  background: "#fff",
+                  color: "#07080c",
+                  padding: "8px 16px",
+                  borderRadius: 4,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  letterSpacing: "-0.005em",
+                  textDecoration: "none",
+                }}
               >
-                <Link to={accountHref}>{accountLabel}</Link>
-              </Button>
+                {accountLabel} <LEIcon name="arrow" size={12} color="#07080c" />
+              </Link>
             ) : (
               <>
                 <button
                   type="button"
                   onClick={() => openAuth("signin")}
-                  className="hidden text-[13px] font-medium text-white/70 transition-colors hover:text-white md:block"
+                  style={{ background: "transparent", border: "none", fontSize: 13, color: "rgba(255,255,255,0.85)", cursor: "pointer" }}
                 >
                   Sign in
                 </button>
-                <Button
-                  size="sm"
+                <button
+                  type="button"
                   onClick={handleGetStarted}
-                  className="bg-white text-black hover:bg-white/90"
+                  style={{
+                    background: "#fff",
+                    color: "#07080c",
+                    border: "none",
+                    padding: "8px 16px",
+                    borderRadius: 4,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    letterSpacing: "-0.005em",
+                  }}
                 >
-                  Get started
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
+                  Get started <LEIcon name="arrow" size={12} color="#07080c" />
+                </button>
               </>
             )}
           </div>
         </nav>
-      </header>
 
-      {/* ─── Hero ─── */}
-      <section ref={heroRef} className="relative flex h-screen min-h-[720px] w-full items-center justify-center overflow-hidden">
-        <motion.div style={{ scale: heroScale }} className="absolute inset-0">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            poster={heroBg}
-            className="absolute inset-0 h-full w-full object-cover"
-          >
-            <source src={heroVideo.url} type="video/mp4" />
-          </video>
-        </motion.div>
-        {/* Cinematic gradient — always dark over video, independent of theme */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/35 to-black/90" />
+        {/* HERO COPY */}
         <div
-          className="absolute inset-0"
           style={{
-            boxShadow:
-              "inset 0 160px 180px -60px rgba(0,0,0,0.7), inset 0 -160px 200px -40px rgba(0,0,0,0.85)",
+            position: "absolute",
+            left: 48,
+            bottom: 80,
+            right: 48,
+            color: "#fff",
+            zIndex: 2,
           }}
-        />
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 500,
+              letterSpacing: "0.24em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.75)",
+              marginBottom: 28,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <span style={{ width: 18, height: 1, background: "rgba(255,255,255,0.5)" }} />
+            Listing Elevate · Cinematic · On demand
+          </div>
+          <h1
+            style={{
+              fontSize: "clamp(2.5rem, 8vw, 6.5rem)",
+              lineHeight: 0.96,
+              margin: 0,
+              fontWeight: 500,
+              letterSpacing: "-0.035em",
+              maxWidth: 1100,
+            }}
+          >
+            <LECyclingWord words={["Take", "Sell", "Retain"]} kind="cascade" /> more listings.
+          </h1>
+          <p
+            style={{
+              fontSize: 18,
+              lineHeight: 1.5,
+              maxWidth: 520,
+              marginTop: 28,
+              color: "rgba(255,255,255,0.78)",
+              fontWeight: 400,
+            }}
+          >
+            Upload photos. Receive a directed, edited, cinematic listing video within 72&nbsp;hours. No crew, no scheduling,
+            no post-production.
+          </p>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 28, marginTop: 40, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={handleGetStarted}
+              style={{
+                background: "#fff",
+                color: "#07080c",
+                border: "none",
+                padding: "16px 22px",
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                letterSpacing: "-0.005em",
+                borderRadius: 2,
+              }}
+            >
+              Start a video <LEIcon name="arrow" size={14} color="#07080c" />
+            </button>
+            {!user && (
+              <button
+                type="button"
+                onClick={() => openAuth("signin")}
+                style={{
+                  fontSize: 14,
+                  color: "#fff",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 4,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  background: "transparent",
+                  border: "none",
+                }}
+              >
+                Sign in to your account <LEIcon name="arrowUpRight" size={12} color="#fff" />
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ============ LOGO STRIP ============ */}
+      <section
+        style={{
+          padding: "28px 48px",
+          borderBottom: "1px solid var(--le-border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 32,
+          background: "var(--le-bg)",
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            color: "var(--le-text-faint)",
+            fontWeight: 500,
+          }}
+        >
+          — Trusted by
+        </span>
+        {TRUSTED.map((n) => (
+          <span
+            key={n}
+            style={{
+              fontSize: 16,
+              color: "var(--le-text-muted)",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+              opacity: 0.55,
+            }}
+          >
+            {n}
+          </span>
+        ))}
+      </section>
+
+      {/* ============ PROCESS ============ */}
+      <section id="process" style={{ padding: "140px 48px 120px", background: "var(--le-bg)" }}>
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-120px" }}
+          variants={stagger}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 88, flexWrap: "wrap", gap: 24 }}
+        >
+          <motion.div variants={fadeUp}>
+            <div className="le-eyebrow" style={{ marginBottom: 20 }}>— The Process</div>
+            <h2
+              className="le-display"
+              style={{
+                fontSize: "clamp(2.5rem, 6vw, 4.75rem)",
+                lineHeight: 0.98,
+                margin: 0,
+                fontWeight: 500,
+                letterSpacing: "-0.035em",
+                maxWidth: 800,
+                fontFamily: "var(--le-font-sans)",
+              }}
+            >
+              Three steps.
+              <br />Seventy-two hours.
+            </h2>
+          </motion.div>
+          <motion.p
+            variants={fadeUp}
+            custom={1}
+            style={{ maxWidth: 320, color: "var(--le-text-muted)", fontSize: 14, lineHeight: 1.6, marginBottom: 6 }}
+          >
+            Every frame directed by our model. Every cut approved by a human editor. No templates, no stock, no crew.
+          </motion.p>
+        </motion.div>
 
         <motion.div
-          style={{ opacity: heroOpacity, y: heroY }}
-          className="relative z-10 mx-auto w-full max-w-[1440px] px-8 md:px-12"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-80px" }}
+          variants={stagger}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 1,
+            background: "var(--le-border)",
+          }}
         >
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-            className="max-w-4xl"
+          {PROCESS_STEPS.map((s, i) => (
+            <motion.div
+              key={s.n}
+              variants={fadeUp}
+              custom={i}
+              style={{
+                padding: "44px 40px 48px",
+                background: "var(--le-bg)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 32,
+                minHeight: 520,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                <span
+                  style={{
+                    fontFamily: "var(--le-font-mono)",
+                    fontSize: 11,
+                    letterSpacing: "0.18em",
+                    color: "var(--le-text-faint)",
+                  }}
+                >
+                  {s.n} / 03
+                </span>
+                <LEIcon name="arrowUpRight" size={14} color="var(--le-text-faint)" />
+              </div>
+
+              <div style={{ width: "100%", aspectRatio: "4/3", overflow: "hidden", background: "#000" }}>
+                <img
+                  src={s.img}
+                  alt={s.t}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", filter: "brightness(0.9)" }}
+                />
+              </div>
+
+              <div>
+                <h3
+                  style={{
+                    fontSize: 34,
+                    margin: 0,
+                    fontWeight: 500,
+                    letterSpacing: "-0.025em",
+                    lineHeight: 1,
+                  }}
+                >
+                  {s.t}
+                </h3>
+                <p
+                  style={{
+                    marginTop: 14,
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    color: "var(--le-text-muted)",
+                    maxWidth: 360,
+                  }}
+                >
+                  {s.d}
+                </p>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </section>
+
+      {/* ============ SHOWCASE — midnight wash ============ */}
+      <section
+        id="showcase"
+        className="le-midnight-wash"
+        style={{ padding: "140px 48px", color: "#fff", position: "relative", overflow: "hidden" }}
+      >
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-end",
+              marginBottom: 72,
+              flexWrap: "wrap",
+              gap: 24,
+            }}
           >
-            <motion.span
-              variants={fadeUp}
-              className="label block text-white/60"
-            >
-              — Listing Elevate. Cinematic, on demand.
-            </motion.span>
-            <motion.h1
-              variants={fadeUp}
-              className="mt-8 whitespace-nowrap font-semibold tracking-[-0.035em] text-white"
-              style={{ fontSize: "clamp(2.25rem, 6vw, 5.5rem)", lineHeight: 1 }}
-            >
-              <span aria-live="polite">{heroText}</span>
-              <span
-                aria-hidden
-                className="ml-[0.05em] inline-block w-[0.06em] animate-hero-caret bg-white align-baseline"
-                style={{ height: "0.85em", verticalAlign: "-0.05em" }}
+            <div>
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.22em",
+                  textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.5)",
+                  fontWeight: 500,
+                  marginBottom: 20,
+                }}
+              >
+                — Showcase
+              </div>
+              <h2
+                style={{
+                  fontSize: "clamp(2.5rem, 6vw, 4.75rem)",
+                  lineHeight: 0.98,
+                  margin: 0,
+                  fontWeight: 500,
+                  letterSpacing: "-0.035em",
+                }}
+              >
+                Selected work.
+              </h2>
+            </div>
+            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", textDecoration: "underline", textUnderlineOffset: 4 }}>
+              View the reel →
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 20 }}>
+            <ShowcaseCard
+              video={showcaseInterior.url}
+              poster={interior1}
+              title="812 Alta Mesa Drive"
+              meta="Austin · $2.45M · 4 BD · 3.5 BA"
+              duration="0:38"
+              big
+            />
+            <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 20 }}>
+              <ShowcaseCard
+                video={showcaseKitchen.url}
+                poster={kitchen1}
+                title="115 Meridian Court"
+                meta="San Diego · $4.8M · 5 BD · 6 BA"
+                duration="0:42"
               />
-              {" "}more listings.
-            </motion.h1>
-            <motion.p
-              variants={fadeUp}
-              className="mt-10 max-w-xl text-base leading-relaxed text-white/75 md:text-lg"
-            >
-              Upload photos. Receive a directed, edited, cinematic listing video within 72 hours. No crew, no scheduling, no post-production.
-            </motion.p>
-            <motion.div variants={fadeUp} className="mt-12 flex flex-wrap items-center gap-4">
-              <Button
-                size="xl"
-                onClick={handleGetStarted}
-                className="bg-white text-black hover:bg-white/90"
-              >
-                Start a video
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              {!user && (
-                <button
-                  type="button"
-                  onClick={() => openAuth("signin")}
-                  className="group inline-flex items-center gap-2 text-[13px] font-medium text-white/80 transition-colors hover:text-white"
+              <ShowcaseCard
+                video={showcaseExterior.url}
+                poster={exterior1}
+                title="27 Laurel Heights"
+                meta="Aspen · $11.2M · 6 BD · 7 BA"
+                duration="0:51"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ NUMBERS + QUOTE ============ */}
+      <section
+        id="numbers"
+        style={{
+          padding: "140px 48px",
+          background: "var(--le-bg)",
+          display: "grid",
+          gridTemplateColumns: "minmax(0,1.1fr) minmax(0,1fr)",
+          gap: 96,
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div className="le-eyebrow" style={{ marginBottom: 32 }}>— By the numbers</div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "60px 48px",
+            }}
+          >
+            {NUMBERS.map(([n, l]) => (
+              <div key={l} style={{ borderTop: "1px solid var(--le-border-strong)", paddingTop: 20 }}>
+                <div
+                  style={{
+                    fontSize: 60,
+                    fontWeight: 500,
+                    letterSpacing: "-0.035em",
+                    lineHeight: 1,
+                    fontFamily: "var(--le-font-sans)",
+                  }}
                 >
-                  <span className="border-b border-white/30 pb-1 transition-colors group-hover:border-white">
-                    Sign in to your account
-                  </span>
-                  <ArrowUpRight className="h-4 w-4" />
-                </button>
-              )}
-            </motion.div>
-          </motion.div>
-        </motion.div>
-
-        {/* Bottom meta strip */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.5, duration: 1, ease: EASE }}
-          className="absolute bottom-8 left-0 right-0 z-10 mx-auto flex max-w-[1440px] items-end justify-between px-8 md:px-12"
-        >
-          <div className="label text-white/50">
-            <span className="tabular text-white/80">72h</span> delivery
-          </div>
-          <div className="hidden label text-white/50 md:block">
-            From <span className="tabular text-white/80">$75</span>
-          </div>
-          <div className="label text-white/50">
-            Scroll to explore
-          </div>
-        </motion.div>
-      </section>
-
-      {/* ─── Section: Process ─── */}
-      <section id="process" className="relative border-t border-border px-8 py-32 md:px-12 md:py-40">
-        <div className="mx-auto max-w-[1440px]">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-120px" }}
-            variants={stagger}
-            className="grid gap-12 md:grid-cols-[1fr_2fr] md:gap-20"
-          >
-            <motion.div variants={fadeUp}>
-              <span className="label text-muted-foreground">— 01 / Process</span>
-              <h2 className="display-lg mt-6 text-foreground">
-                Three steps.
-                <br />
-                <span className="text-muted-foreground">No crew.</span>
-              </h2>
-            </motion.div>
-            <motion.p
-              variants={fadeUp}
-              custom={1}
-              className="self-end text-base leading-relaxed text-muted-foreground md:text-lg"
-            >
-              The same cinematic pipeline that powers premium listing firms, compressed into a 72-hour automated workflow. Upload, wait, deliver.
-            </motion.p>
-          </motion.div>
-
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-80px" }}
-            variants={stagger}
-            className="mt-20 grid gap-px bg-border md:grid-cols-3"
-          >
-            {[
-              {
-                index: "01",
-                title: "Upload",
-                copy: "Drop 10 to 60 property photos. Select your package, duration, and format. Three minutes, start to finish.",
-                image: kitchen1,
-              },
-              {
-                index: "02",
-                title: "Direct",
-                copy: "The engine analyses each frame, drafts a shot list, runs multi-model QA, and generates cinematic camera moves.",
-                image: interior1,
-              },
-              {
-                index: "03",
-                title: "Deliver",
-                copy: "Your final cut arrives within 72 hours — in vertical, horizontal, or both. Ready for every channel.",
-                image: aerial1,
-              },
-            ].map((step, i) => (
-              <motion.div
-                key={step.index}
-                variants={fadeUp}
-                custom={i}
-                className="group relative overflow-hidden bg-background"
-              >
-                <div className="aspect-[4/5] overflow-hidden">
-                  <img
-                    src={step.image}
-                    alt={step.title}
-                    className="h-full w-full object-cover transition-transform [transition-duration:1400ms] ease-cinematic group-hover:scale-[1.04]"
-                    loading="lazy"
-                  />
+                  {n}
                 </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-8">
-                  <span className="label text-white/50">— {step.index}</span>
-                  <h3 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-white md:text-3xl">
-                    {step.title}
-                  </h3>
-                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/75">
-                    {step.copy}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ─── Section: Showcase ─── */}
-      <section id="showcase" className="border-t border-border bg-secondary/30 px-8 py-32 md:px-12 md:py-40">
-        <div className="mx-auto max-w-[1440px]">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-120px" }}
-            variants={stagger}
-            className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between"
-          >
-            <motion.div variants={fadeUp}>
-              <span className="label text-muted-foreground">— 02 / Showcase</span>
-              <h2 className="display-lg mt-6 text-foreground">
-                Generated from stills.
-                <br />
-                <span className="text-muted-foreground">Every frame.</span>
-              </h2>
-            </motion.div>
-            <motion.p variants={fadeUp} custom={1} className="max-w-md text-base leading-relaxed text-muted-foreground">
-              Six cuts. Every one produced end-to-end from property photography by the Listing Elevate pipeline.
-            </motion.p>
-          </motion.div>
-
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={stagger}
-            className="mt-20 grid grid-cols-2 gap-1 md:grid-cols-4 md:grid-rows-2"
-          >
-            {showcase.map((v, i) => (
-              <motion.figure
-                key={v.label}
-                variants={fadeUp}
-                custom={i}
-                className={`group relative overflow-hidden bg-black ${i === 0 ? "md:col-span-2 md:row-span-2" : ""}`}
-              >
-                <video
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  poster={v.poster}
-                  className={`w-full object-cover transition-transform [transition-duration:1400ms] ease-cinematic group-hover:scale-[1.04] ${
-                    i === 0 ? "h-full min-h-[420px] md:min-h-[640px]" : "h-[220px] md:h-[310px]"
-                  }`}
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--le-text-muted)",
+                    marginTop: 10,
+                    letterSpacing: "0.02em",
+                  }}
                 >
-                  <source src={v.src} type="video/mp4" />
-                </video>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5">
-                  <span className="label text-white/90">{v.label}</span>
-                  <span className="label tabular text-white/40">— {v.index}</span>
-                </figcaption>
-              </motion.figure>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ─── Section: Pricing / Compare ─── */}
-      <section id="pricing" className="border-t border-border px-8 py-32 md:px-12 md:py-40">
-        <div className="mx-auto max-w-[1440px]">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-120px" }}
-            variants={stagger}
-            className="max-w-2xl"
-          >
-            <motion.span variants={fadeUp} className="label text-muted-foreground">
-              — 03 / The economics
-            </motion.span>
-            <motion.h2 variants={fadeUp} custom={1} className="display-lg mt-6">
-              85% less.
-              <br />
-              <span className="text-muted-foreground">Same cinema.</span>
-            </motion.h2>
-          </motion.div>
-
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-80px" }}
-            variants={stagger}
-            className="mt-20 grid gap-px border border-border bg-border md:grid-cols-3"
-          >
-            {[
-              { label: "Starting at", ours: "$75", theirs: "$500+", theirsLabel: "Traditional videographer" },
-              { label: "Turnaround", ours: "72 hours", theirs: "1–2 weeks", theirsLabel: "Production + post" },
-              { label: "Formats included", ours: "Both", theirs: "One", theirsLabel: "Vertical or horizontal" },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                variants={fadeUp}
-                custom={i}
-                className="bg-background p-10"
-              >
-                <span className="label text-muted-foreground">{stat.label}</span>
-                <div className="mt-6 flex items-baseline gap-4">
-                  <span className="tabular text-5xl font-semibold tracking-[-0.035em] text-foreground md:text-6xl">
-                    {stat.ours}
-                  </span>
-                  <span className="tabular text-sm text-muted-foreground/60 line-through">{stat.theirs}</span>
+                  {l}
                 </div>
-                <p className="mt-4 text-xs text-muted-foreground">{stat.theirsLabel}</p>
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
+        </div>
 
-          <div className="mt-16 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
-            <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
-              Four packages, three durations, two orientations. Start with a 15-second Just Listed at $75 — upgrade any time.
-            </p>
-            <Button size="lg" onClick={handleGetStarted}>
-              See packages
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+        <div>
+          <p
+            className="le-display"
+            style={{
+              fontSize: 44,
+              lineHeight: 1.15,
+              margin: 0,
+              fontStyle: "italic",
+              letterSpacing: "-0.02em",
+              fontWeight: 400,
+            }}
+          >
+            "We cut reels for eleven listings last weekend — on a Sunday, from my daughter's soccer game."
+          </p>
+          <div style={{ marginTop: 32, display: "flex", alignItems: "center", gap: 14 }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #e2d3c0, #8a7560)",
+              }}
+            />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Mara Kowalski</div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--le-text-muted)",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  marginTop: 2,
+                }}
+              >
+                Principal · Cresthaven Realty · Austin
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ─── Full-bleed CTA ─── */}
-      <section className="relative h-[70vh] min-h-[560px] overflow-hidden border-t border-border">
-        <motion.img
-          src={aerial1}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-          loading="lazy"
-          initial={{ scale: 1.12 }}
-          whileInView={{ scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 2, ease: EASE }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/90" />
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1.1, ease: EASE }}
-          className="relative z-10 mx-auto flex h-full max-w-[1440px] flex-col items-start justify-end px-8 pb-24 md:px-12 md:pb-32"
-        >
-          <span className="label text-white/60">— The next step</span>
-          <h2 className="mt-6 max-w-3xl font-semibold tracking-[-0.035em] text-white" style={{ fontSize: "clamp(2.5rem, 6vw, 5.5rem)", lineHeight: 1 }}>
-            Your next listing,
-            <br />
-            elevated.
+      {/* ============ FINAL CTA ============ */}
+      <section className="le-midnight-wash" style={{ padding: "120px 48px", color: "#fff", textAlign: "center", position: "relative" }}>
+        <div style={{ position: "relative", zIndex: 2, maxWidth: 760, margin: "0 auto" }}>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.24em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.6)",
+              marginBottom: 24,
+            }}
+          >
+            — The next step
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(2.5rem, 6vw, 5rem)",
+              lineHeight: 1,
+              margin: 0,
+              fontWeight: 500,
+              letterSpacing: "-0.035em",
+            }}
+          >
+            Your next listing, elevated.
           </h2>
-          <Button
-            size="xl"
-            className="mt-12 bg-white text-black hover:bg-white/90"
+          <button
+            type="button"
             onClick={handleGetStarted}
+            style={{
+              marginTop: 40,
+              background: "#fff",
+              color: "#07080c",
+              border: "none",
+              padding: "16px 24px",
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              letterSpacing: "-0.005em",
+              borderRadius: 2,
+            }}
           >
-            Start your first video
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </motion.div>
-      </section>
-
-      {/* ─── FAQ ─── */}
-      <section id="faq" className="border-t border-border px-8 py-32 md:px-12 md:py-40">
-        <div className="mx-auto grid max-w-[1440px] gap-16 md:grid-cols-[1fr_2fr] md:gap-24">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-120px" }}
-            variants={stagger}
-          >
-            <motion.span variants={fadeUp} className="label text-muted-foreground">
-              — 04 / Frequently asked
-            </motion.span>
-            <motion.h2 variants={fadeUp} custom={1} className="display-lg mt-6">
-              Questions,
-              <br />
-              <span className="text-muted-foreground">answered.</span>
-            </motion.h2>
-          </motion.div>
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-60px" }}
-            variants={stagger}
-            className="border-t border-border"
-          >
-            {faqs.map((f, i) => (
-              <motion.div key={i} variants={fadeUp} custom={i}>
-                <FAQItem question={f.q} answer={f.a} />
-              </motion.div>
-            ))}
-          </motion.div>
+            Start your first video <LEIcon name="arrow" size={14} color="#07080c" />
+          </button>
         </div>
       </section>
 
-      {/* ─── Footer ─── */}
-      <footer className="border-t border-border bg-secondary/20 px-8 py-20 md:px-12">
-        <div className="mx-auto max-w-[1440px]">
-          <div className="grid gap-16 md:grid-cols-[2fr_1fr_1fr_1fr]">
-            <div>
-              <Wordmark size="lg" />
-              <p className="mt-6 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                Cinematic real-estate video, automated. Every listing, in motion — delivered in 72 hours.
-              </p>
-            </div>
-            <div>
-              <h4 className="label mb-5 text-foreground">Platform</h4>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><Link to="/upload" className="transition-colors hover:text-foreground">New video</Link></li>
-                <li><Link to="/presets" className="transition-colors hover:text-foreground">Presets</Link></li>
-                <li><Link to={accountHref} className="transition-colors hover:text-foreground">{accountLabel}</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="label mb-5 text-foreground">Company</h4>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><a href="#process" className="transition-colors hover:text-foreground">Process</a></li>
-                <li><a href="#showcase" className="transition-colors hover:text-foreground">Showcase</a></li>
-                <li><a href="#pricing" className="transition-colors hover:text-foreground">Pricing</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="label mb-5 text-foreground">Contact</h4>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><a href="mailto:help@listingelevate.com" className="transition-colors hover:text-foreground">help@listingelevate.com</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-20 flex flex-col gap-4 border-t border-border pt-10 md:flex-row md:items-center md:justify-between">
-            <span className="label text-muted-foreground">© 2026 Listing Elevate</span>
-            <div className="flex gap-8">
-              <span className="label text-muted-foreground">Privacy</span>
-              <span className="label text-muted-foreground">Terms</span>
-            </div>
-          </div>
+      {/* ============ FOOTER ============ */}
+      <footer
+        style={{
+          padding: "40px 48px",
+          borderTop: "1px solid var(--le-border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 12,
+          color: "var(--le-text-muted)",
+          flexWrap: "wrap",
+          gap: 16,
+          background: "var(--le-bg)",
+        }}
+      >
+        <LELogoMark size={14} color="var(--le-text)" />
+        <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+          <a href="#process" style={{ color: "inherit" }}>Process</a>
+          <a href="#showcase" style={{ color: "inherit" }}>Showcase</a>
+          <a href="#numbers" style={{ color: "inherit" }}>Numbers</a>
+          <a href="#faq" style={{ color: "inherit" }}>FAQ</a>
+          <Link to="/upload" style={{ color: "inherit", textDecoration: "none" }}>Start</Link>
+          <a href="mailto:help@listingelevate.com" style={{ color: "inherit" }}>help@listingelevate.com</a>
         </div>
+        <span style={{ fontFamily: "var(--le-font-mono)", fontSize: 11 }}>© 2026 Listing Elevate, Inc.</span>
       </footer>
 
-      {/* ─── Auth modal ─── */}
+      {/* ============ AUTH MODAL ============ */}
       <Dialog open={authOpen} onOpenChange={setAuthOpen}>
         <DialogContent className="max-w-md gap-0 overflow-hidden rounded-none p-0">
           {authSent ? (
             <div className="space-y-5 p-10 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center border border-accent/30 bg-accent/10 text-accent">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center border border-[var(--le-border-strong)] bg-[var(--le-bg-sunken)] text-[var(--le-text)]">
                 <CheckCircle className="h-6 w-6" />
               </div>
-              <h2 className="text-xl font-semibold tracking-[-0.02em]">Check your email.</h2>
-              <p className="text-sm text-muted-foreground">
-                Magic link sent to <span className="font-medium text-foreground">{authEmail}</span>.
+              <h2 className="text-xl font-medium tracking-[-0.02em]" style={{ fontFamily: "var(--le-font-sans)" }}>
+                Check your email.
+              </h2>
+              <p className="text-sm" style={{ color: "var(--le-text-muted)" }}>
+                Magic link sent to <span className="font-medium" style={{ color: "var(--le-text)" }}>{authEmail}</span>.
               </p>
               <button
                 type="button"
@@ -693,28 +741,29 @@ const Index = () => {
                   setAuthSent(false);
                   setAuthEmail("");
                 }}
-                className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+                className="text-xs underline underline-offset-4"
+                style={{ color: "var(--le-text-muted)" }}
               >
                 Use a different email
               </button>
             </div>
           ) : (
             <>
-              <div className="flex border-b border-border">
+              <div className="flex border-b" style={{ borderColor: "var(--le-border)" }}>
                 {(["signin", "signup"] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setAuthTab(t)}
-                    className={`relative flex-1 py-4 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors ${
-                      authTab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                    }`}
+                    className="relative flex-1 py-4 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors"
+                    style={{ color: authTab === t ? "var(--le-text)" : "var(--le-text-muted)" }}
                   >
                     {t === "signin" ? "Sign in" : "Create account"}
                     {authTab === t && (
                       <motion.span
                         layoutId="auth-tab-underline"
-                        className="absolute inset-x-0 bottom-[-1px] h-[2px] bg-foreground"
+                        className="absolute inset-x-0 bottom-[-1px] h-[2px]"
+                        style={{ background: "var(--le-text)" }}
                         transition={{ duration: 0.4, ease: EASE }}
                       />
                     )}
@@ -727,25 +776,25 @@ const Index = () => {
                   <>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label className="label text-muted-foreground">First name</Label>
+                        <Label className="le-eyebrow">First name</Label>
                         <Input value={authFirst} onChange={(e) => setAuthFirst(e.target.value)} placeholder="Jane" required />
                       </div>
                       <div className="space-y-2">
-                        <Label className="label text-muted-foreground">Last name</Label>
+                        <Label className="le-eyebrow">Last name</Label>
                         <Input value={authLast} onChange={(e) => setAuthLast(e.target.value)} placeholder="Smith" required />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label className="label text-muted-foreground">Brokerage</Label>
+                      <Label className="le-eyebrow">Brokerage</Label>
                       <Input value={authBrokerage} onChange={(e) => setAuthBrokerage(e.target.value)} placeholder="Compass, Keller Williams…" required />
                     </div>
                   </>
                 )}
 
                 <div className="space-y-2">
-                  <Label className="label text-muted-foreground">Email</Label>
+                  <Label className="le-eyebrow">Email</Label>
                   <div className="relative">
-                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--le-text-faint)" }} />
                     <Input
                       type="email"
                       value={authEmail}
@@ -758,33 +807,46 @@ const Index = () => {
                   </div>
                 </div>
 
-                {authError && (
-                  <p className="text-xs text-destructive">{authError}</p>
-                )}
+                {authError && <p className="text-xs" style={{ color: "var(--le-danger)" }}>{authError}</p>}
 
-                <Button type="submit" className="w-full" size="lg" disabled={authLoading || !authEmail}>
+                <button
+                  type="submit"
+                  disabled={authLoading || !authEmail}
+                  className="le-btn le-btn-primary w-full"
+                  style={{ padding: "12px 16px", borderRadius: 2, fontSize: 14 }}
+                >
                   {authLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
                       {authTab === "signup" ? "Create account" : "Send magic link"}
-                      <ArrowRight className="h-4 w-4" />
+                      <LEIcon name="arrow" size={14} color="var(--le-accent-fg)" />
                     </>
                   )}
-                </Button>
+                </button>
 
-                <p className="text-center text-xs text-muted-foreground">
+                <p className="text-center text-xs" style={{ color: "var(--le-text-muted)" }}>
                   {authTab === "signin" ? (
                     <>
                       No account?{" "}
-                      <button type="button" onClick={() => setAuthTab("signup")} className="text-foreground underline underline-offset-4">
+                      <button
+                        type="button"
+                        onClick={() => setAuthTab("signup")}
+                        className="underline underline-offset-4"
+                        style={{ color: "var(--le-text)" }}
+                      >
                         Create one
                       </button>
                     </>
                   ) : (
                     <>
                       Already registered?{" "}
-                      <button type="button" onClick={() => setAuthTab("signin")} className="text-foreground underline underline-offset-4">
+                      <button
+                        type="button"
+                        onClick={() => setAuthTab("signin")}
+                        className="underline underline-offset-4"
+                        style={{ color: "var(--le-text)" }}
+                      >
                         Sign in
                       </button>
                     </>
@@ -798,5 +860,97 @@ const Index = () => {
     </div>
   );
 };
+
+function ShowcaseCard({
+  video,
+  poster,
+  title,
+  meta,
+  duration,
+  big,
+}: {
+  video: string;
+  poster: string;
+  title: string;
+  meta: string;
+  duration: string;
+  big?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        background: "#000",
+        aspectRatio: big ? "16/11" : "16/9",
+        cursor: "pointer",
+      }}
+    >
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        poster={poster}
+        style={{ width: "100%", height: "100%", objectFit: "cover", filter: "brightness(0.82)" }}
+      >
+        <source src={video} type="video/mp4" />
+      </video>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.6) 100%)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          top: 18,
+          left: 18,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 10px",
+          borderRadius: 2,
+          background: "rgba(255,255,255,0.12)",
+          backdropFilter: "blur(14px) saturate(1.4)",
+          WebkitBackdropFilter: "blur(14px) saturate(1.4)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          color: "#fff",
+          fontSize: 10,
+          fontWeight: 500,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+        }}
+      >
+        <LEIcon name="play" size={10} color="#fff" /> {duration}
+      </div>
+      <div style={{ position: "absolute", left: 22, bottom: 20, color: "#fff" }}>
+        <div
+          style={{
+            fontSize: big ? 26 : 18,
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.1,
+          }}
+        >
+          {title}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.75)",
+            marginTop: 6,
+          }}
+        >
+          {meta}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default Index;
