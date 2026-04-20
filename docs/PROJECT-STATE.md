@@ -624,6 +624,8 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## Immediate next actions (start here next session)
 
+0. **Back-on-track plan in flight (spec `docs/superpowers/specs/2026-04-20-back-on-track-design.md`).** Phase A (Lab UX "next-action spine" redesign) is code-complete on branch `feature/back-on-track` — needs browser verification (run `npm run dev` in `.worktrees/back-on-track`, open any listing, check banner + chips + optimistic rate/archive). Phase M.1 verdict: **WORKING WITH GAPS** — learning loop is wired end-to-end (refutes "ML failed" hypothesis). Full audit at `docs/ML-AUDIT-2026-04-20.md`; raw traces at `docs/traces/`. Top fixes identified: back-fill prod scene embeddings (7/24 → 24/24), stop writing deprecated capture fields (`tags`, `refinement_instruction`), add UI nudge when Lab overrides become promotable.
+
 1. **Validate shake fix on new renders** — the stability prefix + negative_prompt ship on every NEW Atlas render but won't improve existing iterations. Render one push-in or top-down and visually confirm reduced shake. If still shaky, lower cfg_scale (Atlas default ~0.5, try 0.3–0.4).
 2. **Phase 3 prerequisites (autonomous iterator foundations)**:
    - **Prompt rewrite pass** — replace the raw "ADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:" concat in render.ts with a Sonnet call that rewrites director_prompt cleanly incorporating refinement_notes. Partially covered by the chat `update_director_prompt` tool but not automatic at render time.
