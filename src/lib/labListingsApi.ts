@@ -49,6 +49,7 @@ export interface LabListingScene {
   director_prompt: string;
   director_intent: Record<string, unknown>;
   refinement_notes: string | null;
+  use_end_frame: boolean;
   created_at: string;
 }
 
@@ -142,6 +143,13 @@ export async function refineScenePrompt(listingId: string, sceneId: string, dire
   return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}`, {
     method: "PATCH",
     body: JSON.stringify({ director_prompt: directorPrompt }),
+  });
+}
+
+export async function setSceneUseEndFrame(listingId: string, sceneId: string, useEndFrame: boolean): Promise<{ scene: LabListingScene }> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/scenes/${sceneId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ use_end_frame: useEndFrame }),
   });
 }
 

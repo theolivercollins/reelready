@@ -32,8 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   for (const sceneId of sceneIds) {
     const { data: scene } = await supabase.from("prompt_lab_listing_scenes")
-      .select("id, photo_id, end_image_url, director_prompt, refinement_notes").eq("id", sceneId).maybeSingle();
+      .select("id, photo_id, end_image_url, director_prompt, refinement_notes, use_end_frame").eq("id", sceneId).maybeSingle();
     if (!scene) continue;
+    const effectiveEndImage = scene.use_end_frame && scene.end_image_url ? scene.end_image_url : undefined;
     const effectivePrompt = scene.refinement_notes
       ? `${scene.director_prompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}`
       : scene.director_prompt;
@@ -58,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const job = await provider.generateClip({
         sourceImage: Buffer.from(""),
         sourceImageUrl: photo.image_url,
-        endImageUrl: scene.end_image_url ?? undefined,
+        endImageUrl: effectiveEndImage,
         prompt: effectivePrompt,
         durationSeconds: 5,
         aspectRatio: "16:9",

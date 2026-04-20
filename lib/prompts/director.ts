@@ -292,10 +292,13 @@ When NOT to pair:
 - Feature closeups (the whole point is shallow DOF on ONE object).
 - rack_focus shots (static camera, no path to plan).
 
-If no good pair exists, leave end_photo_id null. The pipeline falls
-back to a center-crop variant of the start photo as the end frame — the
-push-in still benefits from having a second pinned frame, but the
-effect is subtler.
+If no good pair exists, leave end_photo_id null. The clip will render
+as single-image i2v using only the start frame — this is usually the
+RIGHT choice for push-ins, top-downs, orbits, and feature closeups.
+Kling and Wan handle those shots cleanly from one frame; a forced end
+frame often produces awkward interpolation. Only pair when the two
+photos share enough geometry that the model can plausibly traverse
+between them.
 
 Every non-null end_photo_id must reference a photo in the current
 photo list. Do not invent ids.

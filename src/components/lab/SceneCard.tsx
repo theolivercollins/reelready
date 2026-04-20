@@ -10,6 +10,7 @@ import {
   chatIteration,
   pinSceneInstruction,
   setSceneRefinementNotes,
+  setSceneUseEndFrame,
   type LabListingScene,
   type LabListingIteration,
   type LabListingPhoto,
@@ -271,6 +272,11 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
     onReload();
   }
 
+  async function toggleEndFrame() {
+    await setSceneUseEndFrame(listingId, scene.id, !scene.use_end_frame);
+    onReload();
+  }
+
   return (
     <div className="border border-border bg-background p-5">
       <div className="flex items-start justify-between gap-4">
@@ -289,9 +295,27 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
       <div className="mt-4">
         <PairVisualization
           startImageUrl={startPhoto?.image_url ?? ""}
-          endImageUrl={scene.end_image_url}
-          isPaired={Boolean(endPhoto)}
+          endImageUrl={scene.use_end_frame ? scene.end_image_url : null}
+          isPaired={Boolean(endPhoto) && scene.use_end_frame}
         />
+        <div className="mt-2 flex items-center gap-2 text-[11px]">
+          <button
+            type="button"
+            onClick={toggleEndFrame}
+            className={`border px-2 py-1 uppercase tracking-wider ${
+              scene.use_end_frame
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                : "border-border bg-muted text-muted-foreground"
+            }`}
+          >
+            End frame: {scene.use_end_frame ? "on" : "off"}
+          </button>
+          <span className="text-muted-foreground">
+            {scene.use_end_frame
+              ? "Clip will interpolate start → end."
+              : "Clip renders from the start frame only (better for push-ins, closeups, top-downs)."}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4">

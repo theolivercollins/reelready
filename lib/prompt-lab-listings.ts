@@ -1,21 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "./client.js";
 import { analyzeSingleImage } from "./prompt-lab.js";
-import { resolveEndFrameUrl } from "./services/end-frame.js";
 import { parseDirectorIntent, type DirectorIntent } from "./prompts/director-intent.js";
 import { DIRECTOR_SYSTEM, buildDirectorUserPrompt } from "./prompts/director.js";
 import { buildAnalysisText, embedTextSafe, toPgVector } from "./embeddings.js";
 
 export interface PairResolution {
-  endImageUrl: string;
-  pairingMode: "paired" | "crop_fallback";
+  endImageUrl: string | null;
+  pairingMode: "paired" | "none";
 }
 
 export interface ResolveSceneEndFrameInput {
   startPhotoUrl: string;
   endPhotoId: string | null;
   photoLookup: (id: string) => Promise<string | null>;
-  cropFn: (url: string) => Promise<string>;
 }
 
 export async function resolveSceneEndFrame(input: ResolveSceneEndFrameInput): Promise<PairResolution> {
@@ -24,8 +22,7 @@ export async function resolveSceneEndFrame(input: ResolveSceneEndFrameInput): Pr
     const url = await input.photoLookup(input.endPhotoId);
     if (url) return { endImageUrl: url, pairingMode: "paired" };
   }
-  const cropUrl = await input.cropFn(input.startPhotoUrl);
-  return { endImageUrl: cropUrl, pairingMode: "crop_fallback" };
+  return { endImageUrl: null, pairingMode: "none" };
 }
 
 export async function createListingWithPhotos(input: {
@@ -176,7 +173,6 @@ export async function directListingScenes(listingId: string): Promise<void> {
       startPhotoUrl: startUrl,
       endPhotoId: scene.end_photo_id ?? null,
       photoLookup: async (id) => photoUrlById.get(id) ?? null,
-      cropFn: (u) => resolveEndFrameUrl({ startPhotoUrl: u, endPhotoUrl: null }),
     });
     let intent: DirectorIntent;
     try {
