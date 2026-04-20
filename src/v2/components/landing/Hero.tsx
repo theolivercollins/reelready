@@ -56,15 +56,20 @@ export function Hero() {
       {/* NAV — fixed at viewport top, persists through the whole page. */}
       <HeroNav />
 
-      {/* HERO COPY */}
+      {/* HERO COPY — vertically centered within the section */}
       <div
         style={{
           position: "absolute",
-          left: 48,
-          bottom: 180,
-          right: 48,
+          inset: 0,
+          paddingLeft: 48,
+          paddingRight: 48,
+          paddingTop: 96,
+          paddingBottom: 48,
           color: "#fff",
           zIndex: 2,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
         }}
       >
         <div
