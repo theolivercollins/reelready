@@ -78,7 +78,7 @@ export function ShotPlanTable({ scenes: allScenes, iterations, photos, selectedS
           rendering: "border-amber-400/40 bg-amber-400/10 text-amber-700",
           iterating: "border-violet-500/40 bg-violet-500/10 text-violet-700",
           failed: "border-red-500/40 bg-red-500/10 text-red-700",
-          done: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
+          done: "border-slate-400/40 bg-slate-400/10 text-slate-600",
           archived: "border-border bg-muted text-muted-foreground",
         };
         const selected = selectedSceneId === s.id;

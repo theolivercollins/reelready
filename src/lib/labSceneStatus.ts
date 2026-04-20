@@ -41,25 +41,18 @@ export function resolveSceneStatus({ scene, iterations }: SceneStatusInput): Sce
     return { kind: "done", latestIteration: latest, bestRating };
   }
 
-  if (latest) {
-    if (latest.render_error) {
-      return { kind: "failed", latestIteration: latest, bestRating };
-    }
-    if (latest.provider_task_id && !latest.clip_url) {
-      return { kind: "rendering", latestIteration: latest, bestRating };
-    }
-    if (latest.clip_url && latest.rating === null) {
-      return { kind: "needs_rating", latestIteration: latest, bestRating };
-    }
-    if (
-      latest.rating !== null &&
-      latest.rating <= 3 &&
-      scene.refinement_notes &&
-      scene.refinement_notes.trim().length > 0
-    ) {
-      return { kind: "iterating", latestIteration: latest, bestRating };
-    }
+  if (latest?.render_error) {
+    return { kind: "failed", latestIteration: latest, bestRating };
   }
 
-  return { kind: "needs_rating", latestIteration: latest, bestRating };
+  if (latest?.provider_task_id && !latest.clip_url && !latest.render_error) {
+    return { kind: "rendering", latestIteration: latest, bestRating };
+  }
+
+  const unratedWithClip = visible.find((i) => i.clip_url && i.rating === null);
+  if (unratedWithClip) {
+    return { kind: "needs_rating", latestIteration: latest, bestRating };
+  }
+
+  return { kind: "iterating", latestIteration: latest, bestRating };
 }

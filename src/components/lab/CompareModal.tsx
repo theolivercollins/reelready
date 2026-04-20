@@ -39,7 +39,7 @@ export function CompareModal({ listingId, sceneLabel, iterations, onClose, onRel
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
-      <div className="flex max-h-[95vh] w-full max-w-7xl flex-col border border-border bg-background shadow-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[95vh] w-full max-w-[min(1800px,95vw)] flex-col border border-border bg-background shadow-lg" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <span className="label text-muted-foreground">Compare · {playable.length} of {iterations.length} iterations playable</span>
@@ -49,7 +49,10 @@ export function CompareModal({ listingId, sceneLabel, iterations, onClose, onRel
           <Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
 
-        <div className="grid flex-1 auto-rows-fr grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-2 lg:grid-cols-3">
+        <div
+          className="grid flex-1 auto-rows-fr gap-3 overflow-y-auto p-4"
+          style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, 320px), 1fr))` }}
+        >
           {playable.map((iter, idx) => {
             const letter = String.fromCharCode(65 + idx);
             const model = getLabModel(iter.model_used);

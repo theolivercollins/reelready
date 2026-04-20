@@ -17,7 +17,7 @@ const KIND_STYLE: Record<NextAction["kind"], string> = {
   retry_failed: "border-red-500/40 bg-red-500/10 text-red-700",
   iterate: "border-violet-500/40 bg-violet-500/10 text-violet-700",
   waiting: "border-amber-400/40 bg-amber-400/10 text-amber-700",
-  all_done: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
+  all_done: "border-slate-400/40 bg-slate-400/10 text-slate-600",
 };
 
 export function NextActionBanner({ action, busy, onRate, onRenderBatch, onRetry, onIterate }: NextActionBannerProps) {

@@ -81,6 +81,30 @@ describe("resolveSceneStatus", () => {
     expect(resolveSceneStatus(input).kind).toBe("iterating");
   });
 
+  it("returns 'iterating' when all iterations rated but best is <4★ (no winner)", () => {
+    const input: SceneStatusInput = {
+      scene: scene(),
+      iterations: [
+        iter({ id: "i1", iteration_number: 1, clip_url: "https://x/1.mp4", rating: 1, status: "rated" }),
+        iter({ id: "i2", iteration_number: 2, clip_url: "https://x/2.mp4", rating: 3, status: "rated" }),
+        iter({ id: "i3", iteration_number: 3, clip_url: "https://x/3.mp4", rating: 3, status: "rated" }),
+        iter({ id: "i4", iteration_number: 4, clip_url: "https://x/4.mp4", rating: 2, status: "rated" }),
+      ],
+    };
+    expect(resolveSceneStatus(input).kind).toBe("iterating");
+  });
+
+  it("returns 'needs_rating' when any iteration has a clip but no rating, regardless of which is latest", () => {
+    const input: SceneStatusInput = {
+      scene: scene(),
+      iterations: [
+        iter({ id: "i1", iteration_number: 1, clip_url: "https://x/1.mp4", rating: null, status: "rendered" }),
+        iter({ id: "i2", iteration_number: 2, clip_url: "https://x/2.mp4", rating: 3, status: "rated" }),
+      ],
+    };
+    expect(resolveSceneStatus(input).kind).toBe("needs_rating");
+  });
+
   it("returns 'done' when any iteration is rated >= 4", () => {
     const input: SceneStatusInput = {
       scene: scene(),

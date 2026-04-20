@@ -494,7 +494,7 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
             </Button>
             <Button size="sm" variant="outline" onClick={() => setGenAllOpen(true)} disabled={rendering}>
               <Layers className="mr-1 h-3 w-3" />
-              Generate all
+              Compare models
             </Button>
             {iterations.filter((i) => i.clip_url).length >= 2 && (
               <Button size="sm" variant="outline" onClick={() => setCompareOpen(true)}>
@@ -509,6 +509,7 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
           <GenerateAllModal
             sceneLabel={`Scene ${scene.scene_number} · ${scene.room_type} · ${scene.camera_movement}`}
             useEndFrame={scene.use_end_frame}
+            usedModels={Array.from(new Set(iterations.filter((i) => i.clip_url && !i.archived).map((i) => i.model_used)))}
             onGenerate={async (models) => {
               await renderSceneWithModels(listingId, scene.id, models);
               onReload();

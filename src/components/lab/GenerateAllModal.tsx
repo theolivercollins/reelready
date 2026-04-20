@@ -6,13 +6,15 @@ import { LAB_MODELS } from "@/lib/labModels";
 interface GenerateAllModalProps {
   sceneLabel: string;
   useEndFrame: boolean;
+  usedModels?: string[];
   onGenerate: (modelKeys: string[]) => Promise<void>;
   onClose: () => void;
 }
 
-export function GenerateAllModal({ sceneLabel, useEndFrame, onGenerate, onClose }: GenerateAllModalProps) {
+export function GenerateAllModal({ sceneLabel, useEndFrame, usedModels = [], onGenerate, onClose }: GenerateAllModalProps) {
+  const usedSet = new Set(usedModels);
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(LAB_MODELS.filter((m) => m.key !== "kling-v2-master").map((m) => m.key))
+    new Set(LAB_MODELS.filter((m) => m.key !== "kling-v2-master" && !usedSet.has(m.key)).map((m) => m.key))
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -43,10 +45,10 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, onGenerate, onClose 
       <div className="w-full max-w-lg border border-border bg-background p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
-            <span className="label text-muted-foreground">Generate all models</span>
+            <span className="label text-muted-foreground">Compare models</span>
             <p className="mt-1 text-sm">{sceneLabel}</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              One iteration per selected model. Uncheck any you don't want to spend on.
+              One iteration per selected model. Already-tested models are pre-unchecked — tick to re-render.
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -57,6 +59,7 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, onGenerate, onClose 
         <div className="mt-4 space-y-1">
           {LAB_MODELS.map((m) => {
             const picked = selected.has(m.key);
+            const used = usedSet.has(m.key);
             const pairIncompatible = useEndFrame && !m.supportsEndFrame;
             return (
               <button
@@ -64,11 +67,20 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, onGenerate, onClose 
                 type="button"
                 onClick={() => toggle(m.key)}
                 className={`flex w-full items-center justify-between gap-3 border px-3 py-2 text-left text-xs transition-colors ${
-                  picked ? "border-foreground bg-foreground/5" : "border-border text-muted-foreground hover:text-foreground"
+                  picked
+                    ? "border-foreground bg-foreground/5"
+                    : used
+                    ? "border-border/60 bg-muted/30 text-muted-foreground opacity-60 hover:opacity-90"
+                    : "border-border text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <div className="flex-1">
-                  <div className="font-medium text-foreground">{m.label}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">{m.label}</span>
+                    {used && !picked && (
+                      <span className="border border-border px-1 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">already tested</span>
+                    )}
+                  </div>
                   {m.note && <div className="mt-0.5 text-[10px] text-muted-foreground">{m.note}</div>}
                   {pairIncompatible && (
                     <div className="mt-0.5 text-[10px] text-amber-700">Scene has end-frame on; this model will render start-only.</div>
@@ -88,7 +100,7 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, onGenerate, onClose 
             <Button size="sm" variant="outline" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={submit} disabled={submitting || chosen.length === 0}>
               {submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
-              Generate {chosen.length}
+              Render {chosen.length}
             </Button>
           </div>
         </div>
