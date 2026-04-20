@@ -8,6 +8,13 @@ export interface GenerateClipParams {
    * base64-encoding `sourceImage`, which avoids Runway's 5MB data-URL cap.
    */
   sourceImageUrl?: string;
+  /**
+   * Optional end-frame image URL for providers that support start+end
+   * keyframe interpolation. Atlas Cloud's Kling v3.0 Pro (end_image) and
+   * Wan 2.7 (last_image) map this to their model-specific field. When
+   * null/undefined, the provider generates a single-frame clip.
+   */
+  endImageUrl?: string;
   prompt: string;
   durationSeconds: number;
   aspectRatio: "16:9" | "9:16";
