@@ -10,3 +10,4 @@ dist/
 .vercel
 docs/CREDENTIALS.md
 .DS_Store
+.worktrees/
