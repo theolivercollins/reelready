@@ -2,7 +2,11 @@
 
 const MODEL = "text-embedding-3-small";
 
-export async function embedText(text: string): Promise<{ vector: number[]; model: string }> {
+export async function embedText(text: string): Promise<{
+  vector: number[];
+  model: string;
+  usage: { totalTokens: number; costCents: number };
+}> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not set");
 
@@ -18,10 +22,16 @@ export async function embedText(text: string): Promise<{ vector: number[]; model
     const body = await response.text().catch(() => "");
     throw new Error(`OpenAI embeddings ${response.status}: ${body || response.statusText}`);
   }
-  const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
+  const data = (await response.json()) as {
+    data: Array<{ embedding: number[] }>;
+    usage?: { prompt_tokens?: number; total_tokens?: number };
+  };
   const vector = data.data?.[0]?.embedding;
   if (!vector) throw new Error("OpenAI embeddings returned no vector");
-  return { vector, model: MODEL };
+  const totalTokens = data.usage?.total_tokens ?? 0;
+  // text-embedding-3-small: $0.02/M tokens = 2 cents per 1M tokens
+  const costCents = (totalTokens * 2) / 1_000_000;
+  return { vector, model: MODEL, usage: { totalTokens, costCents } };
 }
 
 // Canonical text representation used for both iterations and recipes.
@@ -67,7 +77,7 @@ export function fromPgVector(literal: string | null | undefined): number[] | nul
 // the call fails. Lab should degrade gracefully — no key == no retrieval.
 export async function embedTextSafe(
   text: string
-): Promise<{ vector: number[]; model: string } | null> {
+): Promise<{ vector: number[]; model: string; usage: { totalTokens: number; costCents: number } } | null> {
   try {
     return await embedText(text);
   } catch {

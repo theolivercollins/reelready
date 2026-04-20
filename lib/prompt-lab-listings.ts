@@ -100,6 +100,28 @@ export async function analyzeListingPhotos(listingId: string): Promise<void> {
           embedding: embedded ? toPgVector(embedded.vector) : null,
         })
         .eq("id", p.id);
+      if (embedded) {
+        try {
+          await supabase.from("cost_events").insert({
+            property_id: null,
+            scene_id: null,
+            stage: "embedding",
+            provider: "openai",
+            units_consumed: embedded.usage.totalTokens,
+            unit_type: "tokens",
+            cost_cents: Math.round(embedded.usage.costCents),
+            metadata: {
+              scope: "lab_listing_photo_embedding",
+              model: embedded.model,
+              tokens: embedded.usage.totalTokens,
+              listing_id: listingId,
+              photo_id: p.id,
+            },
+          });
+        } catch (costErr) {
+          console.error("[embeddings] cost_events insert failed:", costErr);
+        }
+      }
     }),
   );
 

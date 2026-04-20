@@ -58,6 +58,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cameraMovement: director.camera_movement,
       })
     );
+    if (embedded) {
+      try {
+        await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "embedding",
+          provider: "openai",
+          units_consumed: embedded.usage.totalTokens,
+          unit_type: "tokens",
+          cost_cents: Math.round(embedded.usage.costCents),
+          metadata: {
+            scope: "lab_recipe_promotion_embedding",
+            model: embedded.model,
+            tokens: embedded.usage.totalTokens,
+            iteration_id,
+          },
+        });
+      } catch (costErr) {
+        console.error("[embeddings] cost_events insert failed:", costErr);
+      }
+    }
 
     const { data: recipe, error: rErr } = await supabase
       .from("prompt_lab_recipes")

@@ -467,7 +467,7 @@ export async function embedScene(sceneId: string): Promise<void> {
   const { data: scene, error } = await supabase
     .from("scenes")
     .select(
-      "id, camera_movement, prompt, photo:photos(room_type, key_features, composition, suggested_motion)",
+      "id, property_id, camera_movement, prompt, photo:photos(room_type, key_features, composition, suggested_motion)",
     )
     .eq("id", sceneId)
     .single();
@@ -498,6 +498,24 @@ export async function embedScene(sceneId: string): Promise<void> {
     .update({ embedding: toPgVector(embedded.vector), embedding_model: embedded.model })
     .eq("id", sceneId);
   if (updateError) throw updateError;
+  try {
+    await supabase.from("cost_events").insert({
+      property_id: (scene.property_id as string | null) ?? null,
+      scene_id: sceneId,
+      stage: "embedding",
+      provider: "openai",
+      units_consumed: embedded.usage.totalTokens,
+      unit_type: "tokens",
+      cost_cents: Math.round(embedded.usage.costCents),
+      metadata: {
+        scope: "prod_scene_embedding",
+        model: embedded.model,
+        tokens: embedded.usage.totalTokens,
+      },
+    });
+  } catch (costErr) {
+    console.error("[embeddings] cost_events insert failed:", costErr);
+  }
 }
 
 export async function getScenesForProperty(propertyId: string): Promise<Scene[]> {
