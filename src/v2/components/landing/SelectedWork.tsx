@@ -48,7 +48,7 @@ function ReelCard({ reel, large = false }: { reel: SampleReel; large?: boolean }
       <img src={reel.posterUrl} alt={reel.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       <div style={{ position: "absolute", top: 16, left: 16 }}>
         <span className="le-mono" style={{ fontSize: 10, padding: "4px 8px", borderRadius: 999, background: "rgba(0,0,0,0.5)", color: "#fff", backdropFilter: "blur(8px)" }}>
-          ▶ {mins}:{secs}
+          <span aria-hidden="true">▶</span> {mins}:{secs}
         </span>
       </div>
       <div style={{ position: "absolute", top: 16, right: 16 }}>
