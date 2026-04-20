@@ -144,6 +144,9 @@ export interface Scene {
   qc_verdict: string | null;
   qc_issues: Record<string, unknown>[] | null;
   qc_confidence: number | null;
+  // Phase 2.7: end-frame keyframe support
+  end_photo_id: string | null;
+  end_image_url: string | null;
 }
 
 export interface PipelineLog {
