@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -111,22 +109,24 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-feature-settings: 'ss01', 'cv11';
+    letter-spacing: -0.01em;
   }
-  /* Legacy utility classes from old system — now route to Inter */
+  /* Legacy utility classes — routed to the LE type system */
   .font-mono {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
   }
   .font-display {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-family: 'Instrument Serif', 'Playfair Display', 'Times New Roman', serif;
+    font-weight: 400;
+    letter-spacing: -0.025em;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
+    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-weight: 500;
     letter-spacing: -0.02em;
   }
 }
@@ -136,6 +136,7 @@
   .tabular {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
   /* Hero typewriter caret blink — soft pulse to feel premium, not arcade */
@@ -147,31 +148,35 @@
     animation: hero-caret 1.05s steps(1, end) infinite;
   }
 
-  /* Editorial display scale — used for hero + page titles */
+  /* Editorial display scale — v3 uses Geist sans (tight letter-spacing) */
   .display-xl {
+    font-family: 'Geist', 'Inter', system-ui, sans-serif;
     font-size: clamp(3rem, 8vw, 6.5rem);
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: -0.035em;
     line-height: 0.95;
   }
   .display-lg {
+    font-family: 'Geist', 'Inter', system-ui, sans-serif;
     font-size: clamp(2.25rem, 5vw, 4rem);
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: -0.03em;
     line-height: 1;
   }
   .display-md {
+    font-family: 'Geist', 'Inter', system-ui, sans-serif;
     font-size: clamp(1.75rem, 3.5vw, 2.75rem);
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: -0.025em;
     line-height: 1.05;
   }
 
-  /* Uppercase label — brand system label for section headers, tags */
+  /* Uppercase label — v3 uses JetBrains Mono */
   .label {
-    font-size: 0.6875rem;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.625rem;
     font-weight: 500;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     line-height: 1;
   }

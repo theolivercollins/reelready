@@ -43,7 +43,7 @@ export default function AuthCallback() {
   }, [navigate, profile]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-between bg-background px-8 py-12 text-foreground">
+    <div className="le-root flex min-h-screen flex-col items-center justify-between bg-background px-8 py-12 text-foreground">
       <Wordmark size="md" />
       <motion.div
         initial={{ opacity: 0, y: 16 }}

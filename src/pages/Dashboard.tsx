@@ -6,7 +6,7 @@ import { Outlet } from "react-router-dom";
  */
 const Dashboard = () => {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="le-root min-h-screen bg-background text-foreground">
       <main className="mx-auto w-full max-w-[1440px] px-8 py-12 md:px-12 md:py-16">
         <Outlet />
       </main>

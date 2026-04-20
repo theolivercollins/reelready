@@ -9,12 +9,12 @@ const navItems = [
 
 export default function Account() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="le-root min-h-screen bg-background text-foreground">
       <div className="border-b border-border">
         <div className="mx-auto flex max-w-[1280px] items-end justify-between gap-6 px-8 pb-6 pt-12 md:px-12">
           <div>
             <span className="label text-muted-foreground">— Account</span>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.02em] md:text-4xl">Your studio</h1>
+            <h1 className="display-md mt-3">Your studio</h1>
           </div>
         </div>
         <nav className="mx-auto flex max-w-[1280px] items-center gap-8 px-8 md:px-12">

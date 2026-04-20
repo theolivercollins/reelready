@@ -38,28 +38,43 @@ export default function Login() {
 
   return (
     <div className="grid min-h-screen grid-cols-1 bg-background text-foreground md:grid-cols-2">
-      {/* Left — editorial copy panel */}
-      <div className="relative hidden flex-col justify-between border-r border-border bg-secondary/30 px-12 py-12 md:flex">
-        <Wordmark size="lg" />
+      {/* Left — editorial copy panel with midnight wash */}
+      <div
+        className="le-midnight-wash relative hidden flex-col justify-between px-12 py-12 md:flex"
+        style={{ color: "#fff" }}
+      >
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <Wordmark size="lg" />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, ease: EASE, delay: 0.1 }}
-          className="max-w-md"
+          className="relative max-w-md"
+          style={{ zIndex: 2 }}
         >
-          <span className="label text-muted-foreground">— Listing Elevate</span>
-          <h1 className="display-lg mt-6">
+          <span
+            className="label"
+            style={{ color: "rgba(255,255,255,0.55)" }}
+          >
+            — Listing Elevate
+          </span>
+          <h1 className="display-lg mt-6" style={{ color: "#fff" }}>
             Cinema for
             <br />
-            <span className="text-muted-foreground">every listing.</span>
+            <span style={{ color: "rgba(255,255,255,0.55)" }}>every listing.</span>
           </h1>
-          <p className="mt-8 text-sm leading-relaxed text-muted-foreground">
+          <p
+            className="mt-8 text-sm leading-relaxed"
+            style={{ color: "rgba(255,255,255,0.7)" }}
+          >
             Sign in to access your video library, manage in-flight productions, and submit new listings.
           </p>
         </motion.div>
         <Link
           to="/"
-          className="label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+          className="label relative inline-flex items-center gap-2 transition-colors"
+          style={{ color: "rgba(255,255,255,0.65)", zIndex: 2 }}
         >
           <ArrowLeft className="h-3 w-3" /> Back to home
         </Link>

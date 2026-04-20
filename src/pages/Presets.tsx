@@ -36,7 +36,7 @@ const Presets = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="le-root flex min-h-screen flex-col bg-background text-foreground">
       <div className="border-b border-border">
         <div className="mx-auto flex max-w-[1080px] items-end justify-between gap-6 px-8 py-12 md:px-12">
           <div>
