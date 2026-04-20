@@ -20,7 +20,7 @@ export function Pricing() {
         <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: "0 0 64px" }}>
           Priced per listing.
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${tiers.length}, 1fr)`, gap: 24 }}>
+        <div className="le-pricing-grid">
           {tiers.map(t => (
             <div
               key={t.id}
