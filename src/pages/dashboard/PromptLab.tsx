@@ -470,7 +470,18 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
           completed: items.filter((i) => statusOf(i) === "completed").length,
         };
         const filter = filters[batch] ?? "all";
-        const visible = filter === "all" ? items : items.filter((i) => statusOf(i) === filter);
+        const filtered = filter === "all" ? items : items.filter((i) => statusOf(i) === filter);
+        // Sort: generation approval needed → iteration approval needed → rendering → rest → completed
+        const visible = [...filtered].sort((a, b) => {
+          const priority = (s: LabSession) => {
+            if (!s.completed && !s.pending_render && s.ready_for_approval) return 0;
+            if (!s.completed && !s.pending_render && !s.ready_for_approval && s.iteration_needs_attention) return 1;
+            if (s.pending_render) return 2;
+            if (s.completed) return 4;
+            return 3;
+          };
+          return priority(a) - priority(b);
+        });
 
         return (
           <div
@@ -840,7 +851,8 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         comment: payload.comment || null,
       });
       if (result.auto_promoted) {
-        setSuccess(`Promoted to recipe "${result.auto_promoted.archetype}"`);
+        const tier = result.auto_promoted.tier === "backup" ? " (backup recipe)" : "";
+        setSuccess(`Promoted to recipe "${result.auto_promoted.archetype}"${tier}`);
       }
       await reload();
     } catch (e) {
@@ -1337,7 +1349,7 @@ function IterationCard({
       )}
 
       {/* Promote to recipe (on 5★ iterations) */}
-      {iteration.rating === 5 && director && (
+      {typeof iteration.rating === "number" && iteration.rating >= 4 && director && (
         <PromoteRecipeControl iteration={iteration} director={director} />
       )}
 
