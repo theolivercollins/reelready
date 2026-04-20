@@ -31,22 +31,21 @@ export function Process() {
     <section
       id="process"
       style={{
-        background: "var(--le-bg)",
-        color: "var(--le-text)",
+        background: "transparent",
+        color: "#fff",
         padding: "140px 48px",
         maxWidth: 1440,
         margin: "0 auto",
       }}
-      data-theme="light"
     >
       <div className="le-eyebrow" style={{ marginBottom: 24 }}>— THE PROCESS</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 80, gap: 48 }}>
-        <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: 0 }}>
+        <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: 0, color: "#fff" }}>
           Three steps.
           <br />
           One day.
         </h2>
-        <p style={{ maxWidth: 320, fontSize: 14, color: "var(--le-text-muted)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)" }}>
+        <p style={{ maxWidth: 320, fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)" }}>
           Every frame directed by our model. Every cut approved by a human editor. No templates, no stock, no crew.
         </p>
       </div>
@@ -65,8 +64,8 @@ export function Process() {
               }}
               aria-hidden
             />
-            <h3 className="le-display" style={{ fontSize: 32, margin: "0 0 12px" }}>{step.title}</h3>
-            <p style={{ fontSize: 14, color: "var(--le-text-muted)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)", margin: 0 }}>
+            <h3 className="le-display" style={{ fontSize: 32, margin: "0 0 12px", color: "#fff" }}>{step.title}</h3>
+            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)", margin: 0 }}>
               {step.body}
             </p>
           </div>

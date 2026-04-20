@@ -13,18 +13,24 @@ import { V2ThemeProvider, useV2Theme } from "@/v2/lib/theme-context";
 
 function LandingShell() {
   const { theme } = useV2Theme();
+  // The landing is a sustained dark editorial surface. The root holds a
+  // solid midnight base so every section inherits the dark palette without
+  // needing its own background. The Hero sets its own full-bleed photo on
+  // top of this base; all other sections sit directly on midnight.
   return (
     <div
       data-testid="v2-landing-root"
       data-v2-root
       className="le-root"
       data-theme={theme}
-      style={{ minHeight: "100vh", background: "var(--le-bg)", position: "relative" }}
+      style={{
+        minHeight: "100vh",
+        background: "var(--le-bg)",
+        position: "relative",
+      }}
     >
       <Nav />
-      <div className="le-midnight-wash" data-theme="dark" style={{ position: "relative" }}>
-        <Hero />
-      </div>
+      <Hero />
       <Process />
       <MarketComparison />
       <SelectedWork />

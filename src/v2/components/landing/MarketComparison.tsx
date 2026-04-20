@@ -16,22 +16,21 @@ export function MarketComparison() {
     <section
       id="compare"
       style={{
-        background: "var(--le-bg)",
-        color: "var(--le-text)",
+        background: "transparent",
+        color: "#fff",
         padding: "140px 48px",
         maxWidth: 1440,
         margin: "0 auto",
       }}
-      data-theme="light"
     >
       <div className="le-eyebrow" style={{ marginBottom: 24 }}>— HOW WE COMPARE</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 80, gap: 48 }}>
-        <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: 0, maxWidth: 800 }}>
+        <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: 0, maxWidth: 800, color: "#fff" }}>
           The market average,
           <br />
           and then us.
         </h2>
-        <p style={{ maxWidth: 360, fontSize: 14, color: "var(--le-text-muted)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)" }}>
+        <p style={{ maxWidth: 360, fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)" }}>
           Every number independently sourced. We'll replace these with your numbers the day you run a listing with us.
         </p>
       </div>
@@ -62,29 +61,29 @@ function MarketComparisonRow({ row, index }: { row: MarketStatRow; index: number
         gap: 32,
         alignItems: "center",
         paddingBottom: 32,
-        borderBottom: "1px solid var(--le-border)",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}
     >
       <div>
         <div className="le-eyebrow" style={{ marginBottom: 8 }}>0{index + 1}</div>
-        <h3 className="le-display" style={{ fontSize: 22, margin: 0 }}>{row.dimension}</h3>
+        <h3 className="le-display" style={{ fontSize: 22, margin: 0, color: "#fff" }}>{row.dimension}</h3>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span className="le-mono" style={{ fontSize: 11, color: "var(--le-text-muted)", width: 80, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+          <span className="le-mono" style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", width: 80, textTransform: "uppercase", letterSpacing: "0.14em" }}>
             Market
           </span>
           <AnimatedBar fillPercent={marketPct} animate={animate} variant="market" label={`Market ${row.dimension}`} />
-          <span style={{ fontSize: 14, color: "var(--le-text-muted)", width: 180, textAlign: "right" }}>
+          <span style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", width: 180, textAlign: "right" }}>
             <AnimatedLabel label={row.market.label} animate={animate} />
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span className="le-mono" style={{ fontSize: 11, color: "var(--le-text)", width: 80, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+          <span className="le-mono" style={{ fontSize: 11, color: "#fff", width: 80, textTransform: "uppercase", letterSpacing: "0.14em" }}>
             Elevate
           </span>
           <AnimatedBar fillPercent={elevatePct} animate={animate} variant="elevate" label={`Elevate ${row.dimension}`} delayMs={150} />
-          <span style={{ fontSize: 14, color: "var(--le-text)", width: 180, textAlign: "right", fontWeight: 500 }}>
+          <span style={{ fontSize: 14, color: "#fff", width: 180, textAlign: "right", fontWeight: 500 }}>
             <AnimatedLabel label={row.elevate.label} animate={animate} delayMs={150} />
           </span>
         </div>
@@ -98,7 +97,7 @@ function MarketComparisonRow({ row, index }: { row: MarketStatRow; index: number
           fontSize: 10,
           textTransform: "uppercase",
           letterSpacing: "0.14em",
-          color: "var(--le-text-faint)",
+          color: "rgba(255,255,255,0.4)",
           maxWidth: 180,
           textAlign: "right",
           textDecoration: "none",

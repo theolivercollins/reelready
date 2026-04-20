@@ -4,7 +4,6 @@ export function FinalCTA() {
   return (
     <section
       className="le-midnight-wash"
-      data-theme="dark"
       style={{
         padding: "140px 48px",
         color: "#fff",

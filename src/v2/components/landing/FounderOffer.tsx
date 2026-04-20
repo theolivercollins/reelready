@@ -3,13 +3,12 @@ import { Link } from "react-router-dom";
 export function FounderOffer() {
   return (
     <section
-      data-theme="light"
       style={{
-        background: "var(--le-bg-sunken)",
-        color: "var(--le-text)",
+        background: "rgba(255,255,255,0.02)",
+        color: "#fff",
         padding: "24px 48px",
-        borderTop: "1px solid var(--le-border)",
-        borderBottom: "1px solid var(--le-border)",
+        borderTop: "1px solid rgba(255,255,255,0.08)",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}
     >
       <div
@@ -24,10 +23,10 @@ export function FounderOffer() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span className="le-mono" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.2em", color: "var(--le-text-muted)" }}>
+          <span className="le-mono" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.2em", color: "rgba(255,255,255,0.55)" }}>
             Founding agents
           </span>
-          <span style={{ fontFamily: "var(--le-font-sans)", fontSize: 15 }}>
+          <span style={{ fontFamily: "var(--le-font-sans)", fontSize: 15, color: "rgba(255,255,255,0.85)" }}>
             50% off your first three videos. First 50 signups.
           </span>
         </div>

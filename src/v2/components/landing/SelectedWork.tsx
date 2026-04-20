@@ -15,9 +15,7 @@ export function SelectedWork() {
   return (
     <section
       id="showcase"
-      className="le-midnight-wash"
-      data-theme="dark"
-      style={{ padding: "140px 48px", color: "#fff" }}
+      style={{ padding: "140px 48px", color: "#fff", background: "transparent" }}
     >
       <div style={{ maxWidth: 1440, margin: "0 auto" }}>
         <div className="le-eyebrow" style={{ marginBottom: 24, color: "rgba(255,255,255,0.55)" }}>— SHOWCASE</div>
