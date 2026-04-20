@@ -13,21 +13,23 @@
 | Service | Model / Method | Usage |
 |---|---|---|
 | Anthropic | Claude Sonnet 4.6 | Photo analysis, director prompting, refinement, rule mining |
-| OpenAI | text-embedding-3-small (1536 dim) | pgvector similarity retrieval (Lab + prod unified pool) |
+| Anthropic | Claude Haiku 4.5 (streaming SSE) | Listings Lab scene chat w/ `save_future_instruction` + `update_director_prompt` tools |
+| OpenAI | text-embedding-3-small (1536 dim) | pgvector similarity retrieval (legacy Lab + prod + listings unified pool) |
 
-NPM: `@anthropic-ai/sdk ^0.39.0`. OpenAI called via raw fetch in `lib/embeddings.ts` (no npm package).
+NPM: `@anthropic-ai/sdk ^0.39.0`. OpenAI called via raw fetch in `lib/embeddings.ts`.
 
 ## Video Generation Providers
 
 | Provider | Status | Strengths | Notes |
 |---|---|---|---|
-| Kling 2.0 | Active | v2-master, interiors, dolly/parallax/reveal | 5-concurrent trial cap with guard, auto-fallback to Runway when full |
-| Runway Gen-4 Turbo | Active | Exteriors, push_in/pull_out/drone | URL-based image input (bypass 5MB base64 cap) |
-| Luma Ray2 | Coded, not wired | | `lib/providers/luma.ts` exists |
+| **Atlas Cloud** | Active (Lab listings) | Aggregator exposing 6 Kling SKUs via one key + endpoint; supports `negative_prompt`, `cfg_scale`, `end_image` | Env `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v3-pro`). Models registered: kling-v3-pro ($0.095), kling-v3-std ($0.071), kling-v2-6-pro ($0.060), kling-v2-1-pair ($0.076, start-end-frame SKU), kling-v2-master ($0.221, no end-frame), kling-o3-pro ($0.095) |
+| Kling (native) | Active (legacy Lab + prod) | Interiors, dolly/parallax/reveal | 5-concurrent trial cap, auto-fallback to Runway |
+| Runway Gen-4 Turbo | Active (legacy Lab + prod) | Exteriors, push_in/pull_out/drone | URL-based image input |
+| Luma Ray2 | Coded, not wired | | `lib/providers/luma.ts` |
 | Higgsfield | Scaffolded, deferred permanently | | See `docs/HIGGSFIELD-INTEGRATION.md` |
-| Shotstack | Active when `SHOTSTACK_API_KEY` set | Video assembly — JSON timeline API, clip stitching + text overlays | Stage + prod keys in `.env` |
+| Shotstack | Active when `SHOTSTACK_API_KEY` set | Video assembly | Used by prod + legacy Lab. Listings Lab does NOT yet assemble |
 
-Router logic: movement-first, room-type tiebreaker. See `lib/providers/router.ts`.
+Router logic (prod + legacy Lab): movement-first, room-type tiebreaker. See `lib/providers/router.ts`. Listings Lab skips the router — Atlas is the single provider, model per-iteration is user-chosen via the Generate-all modal.
 
 ## Frontend
 
@@ -60,7 +62,17 @@ Router logic: movement-first, room-type tiebreaker. See `lib/providers/router.ts
 
 - **PostgreSQL** via Supabase
 - **pgvector** extension — HNSW indexes, cosine distance (`<=>` operator)
-- **17 migrations** in `supabase/migrations/` (001–017)
+- **27 migrations** in `supabase/migrations/` (001–027). Latest: 023 (lab listings tables), 024 (iteration chat + scene refinement notes), 025 (scene.use_end_frame), 026 (scene chat + iteration archive + rating reasons), 027 (scene.archived).
+
+### Listings Lab tables (Phase 2.8)
+
+| Table | Purpose |
+|---|---|
+| `prompt_lab_listings` | Top-level container: name, model_name, status, archived, total_cost_cents |
+| `prompt_lab_listing_photos` | Uploaded photos + analysis_json + pgvector embedding |
+| `prompt_lab_listing_scenes` | Director-planned shots: director_prompt, director_intent, refinement_notes, chat_messages, use_end_frame, archived |
+| `prompt_lab_listing_scene_iterations` | Per-model render attempts: director_prompt snapshot, model_used, clip_url, rating, rating_reasons, archived |
+| `v_rated_pool` (view, migration 023 extension) | 3-way UNION: legacy Lab iterations + prod scene_ratings + listing iterations |
 
 ### Key RPC functions
 

@@ -1,6 +1,6 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-20** — banner system overhaul, 4★ backup recipes, refine-from-any-iteration, card sorting, recipe dedup removal finalized.
+Last updated: **2026-04-20 (evening)** — Phase 2.8 listings Lab shipped: Atlas Cloud + 6 Kling SKUs, multi-photo listings, scene-level master-detail UI, streaming scene chat with Haiku 4.5 + rewrite tool, end-frame pairing, scene + iteration archive, rating reasons taxonomy, generate-all-models + side-by-side compare, recipe retrieval restored in listings director.
 
 Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
 
@@ -69,9 +69,157 @@ Movement first, room type as tiebreaker. `lib/providers/router.ts`.
 
 ---
 
-## Prompt Lab (new subsystem — shipped 2026-04-14 PM)
+## Phase 2.8 — Prompt Lab Listings (shipped 2026-04-20 evening)
 
-An admin-only iterative prompt-refinement workbench at `/dashboard/development/prompt-lab`. Separate from production — changes here do not touch `lib/pipeline.ts` or production director output.
+A second-generation Lab at `/dashboard/development/lab`, distinct from the legacy single-photo session Lab at `/dashboard/development/prompt-lab` (which is preserved and still functional). Listings group multiple photos, the director plans a shot sequence (scenes), and each scene carries iterations rendered via Atlas Cloud.
+
+### Hierarchy
+
+`Listing → Photos → Scenes → Iterations`
+
+- **Listing** — one real-estate property. Carries a name, default model, status, notes, archived flag, and a total cost rollup.
+- **Photo** — one uploaded image. Gets analyzed by Claude (room type, aesthetic, depth, key features, composition, suggested motion). Embedding stored on the row.
+- **Scene** — director-planned shot. `photo_id` (start) + optional `end_photo_id` (pair). Carries `director_prompt`, `director_intent` (model-agnostic structured intent), `refinement_notes` (accumulated directives), `chat_messages` JSONB, `use_end_frame` toggle, `archived` flag.
+- **Iteration** — a single render of a scene. One per model when you "Generate all". Carries `director_prompt` (snapshot at render time), `model_used`, `provider_task_id`, `clip_url`, `rating`, `rating_reasons` (tag array), `user_comment`, `chat_messages` JSONB (legacy — now uses scene chat), `archived`, `cost_cents`.
+
+### Provider: Atlas Cloud (replaces Kling/Runway/Luma for Lab)
+
+Atlas Cloud is a multi-model aggregator. One API key, one endpoint, six Kling SKUs registered:
+
+| Key | Slug | Price | End-frame | Notes |
+|---|---|---|---|---|
+| `kling-v3-pro` | `kwaivgi/kling-v3.0-pro/image-to-video` | $0.095 | yes | Default |
+| `kling-v3-std` | `kwaivgi/kling-v3.0-std/image-to-video` | $0.071 | yes | Cheap exploration |
+| `kling-v2-6-pro` | `kwaivgi/kling-v2.6-pro/image-to-video` | $0.060 | yes | HOT-tagged, smoother motion |
+| `kling-v2-1-pair` | `kwaivgi/kling-v2.1-i2v-pro/start-end-frame` | $0.076 | yes | Purpose-built for paired scenes |
+| `kling-v2-master` | `kwaivgi/kling-v2.0-i2v-master` | $0.221 | **no** | Premium; single-frame only |
+| `kling-o3-pro` | `kwaivgi/kling-video-o3-pro/image-to-video` | $0.095 | yes | Newest generation |
+
+Wan 2.7 registered briefly, removed 2026-04-20 evening. `lib/providers/atlas.ts::ATLAS_MODELS` is the server-side source of truth; `src/lib/labModels.ts` mirrors it for the UI.
+
+### Lifecycle + crons
+
+Fire-and-forget does not survive Vercel lambda termination, so the listings Lab runs on two crons:
+
+1. `/api/cron/poll-listing-lifecycle` (every minute, `maxDuration=300`)
+   - Picks up listings at `status='analyzing'` (limit 3/tick) — runs `analyzeListingPhotos` (Claude vision per photo, parallel, stores embedding)
+   - Picks up listings at `status='directing'` (limit 5/tick) — runs `directListingScenes` (Sonnet 4.6 with recipe + exemplar + loser retrieval), flips to `status='ready_to_render'`
+   - Failures mark listing `status='failed'` so the UI stops spinning
+2. `/api/cron/poll-listing-iterations` (every minute) — polls Atlas for rendering iterations, downloads clip URL, flips to `rendered`, logs cost to `cost_events` (property_id=null, scope='lab_listing')
+
+### Director (lists listings) — recipe-driven (restored 2026-04-20)
+
+`lib/prompt-lab-listings.ts::directListingScenes` injects three retrieval blocks into the Sonnet user prompt alongside `buildDirectorUserPrompt`:
+
+1. **Recipe match** — top matching `prompt_lab_recipes` by cosine distance (<0.35) per photo, deduped across photos, capped at 5. Gives the director curated templates from past promoted winners.
+2. **Past winners** — top 4★+ iterations from `v_rated_pool` (unified Lab sessions + prod ratings + listing iterations), capped at 5.
+3. **Past losers** — bottom 2★ iterations, capped at 3.
+
+Retrieval is best-effort; a failing RPC logs and continues. Photo embedding is read off `prompt_lab_listing_photos.embedding` (parsed with `fromPgVector`).
+
+### End-frame pairing
+
+Director returns `end_photo_id` per scene when it wants a pair. `resolveSceneEndFrame` returns the URL if resolvable, else null (no more center-crop fallback — dropped 2026-04-20). Scene carries `use_end_frame` boolean; backfilled `false` for existing scenes where `end_photo_id IS NULL`. UI has a per-scene on/off toggle.
+
+Director prompt explicitly tells Claude that single-image i2v is the right default for push-ins, top-downs, and feature closeups — don't force a pair.
+
+### Shake mitigation (Kling v3 issue)
+
+Kling v3.0-pro renders visibly shakier than v2. Two levers applied on every render:
+
+- **Positive prefix** injected by render.ts: `"LOCKED-OFF CAMERA on a gimbal-stabilized Steadicam rig. Smooth motorized dolly motion only. Zero camera shake, zero handheld jitter, tripod-stable framing."` — idempotent (skipped if already present)
+- **Negative prompt** field on `AtlasSubmitBody`: `"shaky camera, handheld, wobble, vibration, jitter, camera shake, rolling shutter, unstable motion"` (default on every request)
+
+### Rating + reasons
+
+Rating remains 1–5★ on iterations. Clicking a star opens `RatingReasonsModal` — user picks structured tags from a fixed taxonomy (`lib/rating-taxonomy.ts`):
+
+- **Positive (4–5★)**: good_pacing, clean_motion, on_brand, excellent_composition, accurate_to_photo, cinematic_energy
+- **Negative (1–3★)**: camera_shake, too_fast, too_slow, boring_motion, hallucinated_geometry, hallucinated_objects, warped_text, flicker, jumpy, overexposed, underexposed, color_cast, bad_framing, subject_drift, end_frame_lurch
+- **other** (escape hatch, rely on comment for detail)
+
+Reasons persist to `prompt_lab_listing_scene_iterations.rating_reasons TEXT[]`. Rendered as pill chips on the iteration card. Intended to feed retrieval/autonomous iterator with richer signal than stars alone.
+
+### Unified scene chat (Haiku 4.5 + streaming + two tools)
+
+`POST /api/admin/prompt-lab/listings/:id/scenes/:sceneId/chat` — SSE stream. Haiku 4.5 sees the full scene state: director prompt, refinement notes, every iteration's model / prompt / rating / reasons / comment / archive state. User can reference iterations by # naturally.
+
+Two tools:
+- **`save_future_instruction(instruction)`** — appends to `scene.refinement_notes`. Concatenated onto the prompt at next render.
+- **`update_director_prompt(new_prompt)`** — rewrites `scene.director_prompt` directly. UI surfaces the change via a dismissible "Director prompt rewritten" banner and triggers a reload.
+
+Stream events: `text` (delta), `saved_instruction`, `prompt_updated`, `done`, `error`. Client consumer in `src/lib/labListingsApi.ts::chatSceneStream`.
+
+Per-iteration chat still works but the SceneCard no longer surfaces a button for it (single scene thread is the primary flow).
+
+### Scene + iteration archive
+
+- `prompt_lab_listing_scenes.archived` BOOLEAN (migration 027) — ShotPlanTable hides by default with "Show archived scenes (N)" toggle; archived scenes skipped by Render-all
+- `prompt_lab_listing_scene_iterations.archived` BOOLEAN (migration 026) — iteration list hides by default; "Show archived (N)" per-scene toggle; archived stays in DB so rating signal survives
+
+### UI: master-detail layout
+
+`src/pages/dashboard/LabListingDetail.tsx`:
+
+- **Header**: listing name + status chip + model chip + notes + stats strip (scenes rendered/total, iterations, cost w/ per-model breakdown, photos count w/ show/hide, created date)
+- **ShotPlanTable**: one compact row per non-archived scene (thumbnail + # + room + movement + iteration count + best rating + total cost + status chip). Click a row to focus that scene.
+- **Focused SceneCard**: full interaction surface for the selected scene. Newest iteration auto-expanded; all older iterations rendered as one-line `IterationCollapsed` rows, click to expand into `IterationExpanded` (video + actions + comment + rating reasons).
+
+### Generate all models + side-by-side compare
+
+`GenerateAllModal` (scene card → "Generate all" button) — checkboxes per model, running cost total, warns when pair-incompatible models are selected with end-frame on. Calls `POST /render` with `models: string[]` → one iteration per model in a single request.
+
+`CompareModal` (appears when scene has ≥2 playable iterations) — side-by-side video grid labeled A/B/C... Click stars to rate inline.
+
+### Data model additions (migrations 023–027)
+
+- **`prompt_lab_listings`** — id, name, created_by, model_name, notes, status ('analyzing' | 'directing' | 'ready_to_render' | 'rendering' | 'failed'), archived, total_cost_cents, created_at
+- **`prompt_lab_listing_photos`** — id, listing_id, photo_index, image_url, image_path, analysis_json, embedding vector(1536), created_at
+- **`prompt_lab_listing_scenes`** — id, listing_id, scene_number, photo_id, end_photo_id, end_image_url, room_type, camera_movement, director_prompt, director_intent JSONB, refinement_notes TEXT, chat_messages JSONB, use_end_frame BOOLEAN, archived BOOLEAN, created_at
+- **`prompt_lab_listing_scene_iterations`** — id, scene_id, iteration_number, director_prompt, model_used, provider_task_id, clip_url, rating, tags, user_comment, rating_reasons TEXT[], cost_cents, status, render_error, chat_messages JSONB, archived BOOLEAN, embedding, created_at
+- **`v_rated_pool`** view extended with a 3rd UNION branch so new listing iterations flow into unified retrieval alongside legacy Lab sessions and prod ratings.
+
+### Listings Lab key files
+
+| File | Purpose |
+|---|---|
+| `lib/providers/atlas.ts` | Atlas provider + ATLAS_MODELS registry + negative prompt + end-frame routing |
+| `lib/prompt-lab-listings.ts` | Lifecycle helpers: `analyzeListingPhotos`, `directListingScenes` (w/ recipe + exemplar + loser retrieval), `resolveSceneEndFrame`, `createListingWithPhotos` |
+| `lib/services/end-frame.ts` | (legacy — crop fallback no longer called) |
+| `lib/rating-taxonomy.ts` | Fixed positive/negative rating reasons list |
+| `lib/prompts/director-intent.ts` | `DirectorIntent` zod schema — model-agnostic structured scene intent |
+| `api/admin/prompt-lab/listings/index.ts` | GET list, POST create listing with photos |
+| `api/admin/prompt-lab/listings/[id].ts` | GET full listing + photos + scenes + iterations, PATCH archive/name/notes |
+| `api/admin/prompt-lab/listings/[id]/direct.ts` | Manual re-director trigger |
+| `api/admin/prompt-lab/listings/[id]/render.ts` | Submit one/many renders; accepts `scene_ids`, `model_override`, `models[]`, `source_iteration_id`; prepends stability prefix; passes refinement_notes |
+| `api/admin/prompt-lab/listings/[id]/scenes/[sceneId].ts` | PATCH director_prompt / use_end_frame / archived |
+| `api/admin/prompt-lab/listings/[id]/scenes/[sceneId]/chat.ts` | SSE streaming scene chat (Haiku 4.5) w/ save_future_instruction + update_director_prompt tools |
+| `api/admin/prompt-lab/listings/[id]/scenes/[sceneId]/clear-chat.ts` | Reset scene.chat_messages |
+| `api/admin/prompt-lab/listings/[id]/scenes/[sceneId]/pin-instruction.ts` | Append instruction OR replace refinement_notes; marks a specific chat_messages[idx].pinned=true when iteration_id + message_index supplied |
+| `api/admin/prompt-lab/listings/[id]/iterations/[iterId]/index.ts` | DELETE iteration |
+| `api/admin/prompt-lab/listings/[id]/iterations/[iterId]/rate.ts` | rating, tags, comment, rating_reasons, archived |
+| `api/admin/prompt-lab/listings/[id]/iterations/[iterId]/chat.ts` | SSE streaming iteration chat (still functional; UI no longer surfaces it) |
+| `api/admin/prompt-lab/listings/[id]/iterations/[iterId]/clear-chat.ts` | Reset iteration.chat_messages |
+| `api/cron/poll-listing-lifecycle.ts` | Advance listings through analyzing → directing → ready_to_render |
+| `api/cron/poll-listing-iterations.ts` | Finalize renders from Atlas, insert cost_events |
+| `src/pages/dashboard/LabListingDetail.tsx` | Master-detail view: header + ShotPlanTable + focused SceneCard |
+| `src/pages/dashboard/LabListings.tsx` | Listings list page |
+| `src/pages/dashboard/LabListingNew.tsx` | Create listing + upload photos |
+| `src/components/lab/SceneCard.tsx` | Full scene interaction: pair viz, prompt editor, refinement notes panel, iterations list w/ collapse, unified ChatPanel, Generate-all + Compare buttons |
+| `src/components/lab/ShotPlanTable.tsx` | Compact scene list |
+| `src/components/lab/ChatPanel.tsx` | Shared streaming chat component (used by scene chat) |
+| `src/components/lab/RatingReasonsModal.tsx` | Rating-reason tag picker |
+| `src/components/lab/GenerateAllModal.tsx` | Multi-model confirmation + cost tally |
+| `src/components/lab/CompareModal.tsx` | A/B/C side-by-side grid with inline rating |
+| `src/components/lab/PairVisualization.tsx` | Start → end thumbnail preview |
+| `src/lib/labListingsApi.ts` | Client API: types, authedFetch, streaming SSE consumer, all helpers |
+| `src/lib/labModels.ts` | UI-side model metadata (mirror of ATLAS_MODELS) |
+
+---
+
+## Prompt Lab — legacy single-photo subsystem (shipped 2026-04-14 PM, still live)
+
+An admin-only iterative prompt-refinement workbench at `/dashboard/development/prompt-lab`. Separate from production — changes here do not touch `lib/pipeline.ts` or production director output. Superseded by Phase 2.8 listings for multi-photo workflows but preserved because its recipes and rated history feed the unified retrieval pool that the listings director now reads.
 
 ### Why
 
@@ -185,12 +333,14 @@ Development landing (`/dashboard/development`) shows:
 
 | Provider | Status | Notes |
 |---|---|---|
-| Runway | Active | Now accepts URL-based image input (bypass 5MB base64 cap). Fallback target when Kling is full |
-| Kling | Active | 4-concurrent cap enforced by concurrency guard. Auto-fallback to Runway when full. Explicit Kling queues with 30-min expiry. Now accepts URL-based image input |
+| **Atlas Cloud** | Active (Lab listings) | 6 Kling SKUs registered (v3-pro default, v3-std, v2.6-pro, v2.1-pair, v2-master, o3-pro). Env: `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v3-pro`). Accepts `negative_prompt` + `cfg_scale` per request. |
+| Runway | Active (legacy Lab + prod) | URL-based image input. Fallback target when Kling is full |
+| Kling (native) | Active (legacy Lab + prod) | 4-concurrent cap, auto-fallback to Runway, explicit queues with 30-min expiry |
 | Luma | Coded, not wired | |
 | Higgsfield | Scaffolded, not wired (deferred — see `docs/HIGGSFIELD-INTEGRATION.md`) | |
 | Shotstack | Active if key set. Stage + prod keys exist in `.env` | |
 | OpenAI | Embeddings for Lab + prod scene retrieval (unified pool). `OPENAI_API_KEY` live in Vercel prod + preview |
+| Anthropic | Claude Sonnet 4.6 (director), Claude Haiku 4.5 (scene chat, streaming via SSE) |
 
 ---
 
@@ -226,7 +376,78 @@ Development landing (`/dashboard/development`) shows:
 
 ---
 
-## What shipped 2026-04-20
+## What shipped 2026-04-20 (evening session — Phase 2.8 Lab Listings)
+
+### Atlas Cloud + 6 Kling SKUs, Wan removed
+- `lib/providers/atlas.ts::ATLAS_MODELS` registers kling-v3-pro, kling-v3-std, kling-v2-6-pro, kling-v2-1-pair (start-end-frame SKU), kling-v2-master, kling-o3-pro. Wan 2.7 dropped.
+- `AtlasSubmitBody` carries `negative_prompt` + `cfg_scale`; `ATLAS_DEFAULT_NEGATIVE_PROMPT` applied every render.
+- `AtlasModelDescriptor.endFrameField` gates end-frame support per-model (master i2v is null, all others `end_image`).
+- Atlas output URL parser extended to handle `outputs: ["url"]` (array of strings) in addition to `Array<{url}>`; earlier version failed every completed render with "finished without an output URL".
+
+### Listings Lab (migration 023)
+- Multi-photo listing → scenes → iterations hierarchy. Director plans shots for the whole property in one pass.
+- Cron-based lifecycle: `poll-listing-lifecycle` advances `analyzing → directing → ready_to_render`. `poll-listing-iterations` finalizes Atlas renders + logs cost_events (property_id=null, scope='lab_listing').
+- Listing GET returns photos + scenes + iterations in one shot.
+
+### Scene chat + iteration chat (migration 024, 026)
+- Streaming SSE via Haiku 4.5. Two tools: `save_future_instruction` (appends to scene.refinement_notes), `update_director_prompt` (rewrites scene.director_prompt). User-facing "Pin" on user messages also appends to refinement_notes.
+- `ChatPanel` shared component, used at scene level. Dismissable "Director prompt rewritten" banner. Enter to send, Shift+Enter for newline.
+- System prompt sees every iteration's prompt / rating / reasons / comment — can pattern-match across iterations ("what worked in #1 and #4").
+- Per-iteration chat endpoint still active for backward compat but UI no longer surfaces it.
+
+### Rating reasons taxonomy (migration 026)
+- `rating_reasons TEXT[]` on iterations.
+- Fixed taxonomy in `lib/rating-taxonomy.ts`: 6 positive + 15 negative + "other".
+- `RatingReasonsModal` opens on star click; polarity-appropriate tag list + optional comment.
+- Reasons render as colored pills on iteration cards and feed into scene chat context.
+
+### Scene + iteration archive (migrations 026, 027)
+- Scene-level and iteration-level `archived` flags.
+- ShotPlanTable hides archived scenes with "Show archived (N)" toggle; "Render all" skips them.
+- IterationRow per-scene toggle for archived iterations; archived stays in DB so rating signal survives.
+
+### End-frame toggle + stop auto-cropping (migration 025)
+- Scene.`use_end_frame` BOOLEAN. Backfilled `false` for scenes where `end_photo_id IS NULL` (so existing crop-fallback scenes stop rendering with them).
+- `resolveSceneEndFrame` no longer calls the crop fallback — unpaired → null endImageUrl.
+- render.ts only passes endImageUrl when `use_end_frame && end_image_url`.
+- Per-scene "End frame: on/off" chip in SceneCard.
+
+### Kling v3 shake fix
+- `CAMERA_STABILITY_PREFIX` prepended to every effective prompt in render.ts: `"LOCKED-OFF CAMERA on a gimbal-stabilized Steadicam rig. Smooth motorized dolly motion only. Zero camera shake..."`. Idempotent.
+- `ATLAS_DEFAULT_NEGATIVE_PROMPT` on every request: `"shaky camera, handheld, wobble, vibration, jitter, camera shake, rolling shutter, unstable motion"`.
+
+### Recipe + exemplar retrieval restored in listings director
+- Phase 2.8 director was running rulebook-only — no retrieval from `prompt_lab_recipes` or `v_rated_pool`. Fixed.
+- Per-photo: parse stored embedding → `retrieveMatchingRecipes` + `retrieveSimilarIterations` (4★+) + `retrieveSimilarLosers` (≤2★) → dedupe across photos → render blocks + append to `buildDirectorUserPrompt`.
+- `renderRecipeBlock`, `renderExemplarBlock`, `renderLoserBlock` exported from `lib/prompt-lab.ts`. `fromPgVector` added to `lib/embeddings.ts`.
+- Retrieval is best-effort; failures log and continue.
+
+### Per-iteration actions (parity with legacy Lab)
+- Regenerate (new iteration with this iteration's exact prompt — skips refinement_notes concat).
+- Show full prompt (expand to see what actually rendered).
+- Copy prompt to clipboard.
+- Archive iteration (soft-hide, keeps signal).
+- Delete iteration (permanent).
+- Render endpoint accepts `source_iteration_id` for regenerate.
+
+### Generate-all + Compare modals
+- `GenerateAllModal` (scene card → "Generate all") — per-model checkboxes, live cost total, pair-incompatible warning. `POST /render` accepts `models: string[]`.
+- `CompareModal` (auto-shows when ≥2 playable iterations) — side-by-side video grid labeled A/B/C... with inline star rating.
+
+### Master-detail layout
+- `LabListingDetail.tsx` rebuilt: header w/ stats strip → `ShotPlanTable` → focused `SceneCard`.
+- Newest iteration auto-expanded; older iterations collapsed to one-line rows (click to expand).
+- Photos gallery collapsed by default, toggled from the header.
+- Dropped the vertical stack of N SceneCards that made navigation slow.
+
+### Bug fixes
+- Listing stuck at "analyzing" forever — fire-and-forget in POST /listings didn't survive Vercel lambda termination → replaced with cron-based lifecycle advancer.
+- Director failing on Lab listings — user prompt was a raw JSON dump of analysis_json → switched to production's `buildDirectorUserPrompt` + injected retrieval blocks.
+- Atlas renders marked failed with "finished without an output URL" — parser expected `Array<{url}>`, Atlas returns `Array<string>`. Extractor handles both shapes now.
+
+---
+
+## What shipped 2026-04-20 (morning — legacy Lab)
 
 ### Banner system overhaul
 - "Ready for approval" renamed to **"Generation approval needed"** (sky blue)
@@ -387,6 +608,15 @@ Development landing (`/dashboard/development`) shows:
 | 015 | `lab_ml_integrity` | `refiner_rationale` column (split from user_comment), ~~unique index on recipes per source_iteration_id~~ (dropped 2026-04-20), `prompt_lab_iterations_complete` view |
 | 016 | `director_prod_promotion` | `lab_prompt_override_readiness` view (≥10 renders, avg ≥4★, winners ≥2× losers), promotion audit columns on lab_prompt_overrides, source + source_override_id on prompt_revisions |
 | 017 | `cost_events_shotstack` | CHECK constraints widened for shotstack + openai providers; unit_type widened for 'renders' |
+| 018 | `judge_tables` | (Phase 1) Claude rubric judge infrastructure |
+| 019 | `knowledge_map` | (Phase 2) Knowledge Map dashboard (168-cell grid) |
+| 020 | `vocab_expansion` | (Phase 2.5) Rooms +10 (office, laundry, closet, basement, deck, powder_room, stairs, media_room, gym, mudroom); verbs −2 (pull_out, drone_pull_back) +1 (rack_focus) |
+| 022 | `end_frame` | (Phase 2.7) end_image_url + end_photo_id on prod scenes for Atlas end-frame pairing |
+| 023 | `lab_listings` | (Phase 2.8) 4 new tables: prompt_lab_listings, prompt_lab_listing_photos, prompt_lab_listing_scenes, prompt_lab_listing_scene_iterations. v_rated_pool extended with 3rd UNION branch |
+| 024 | `iteration_chat` | iteration.chat_messages JSONB; scene.refinement_notes TEXT |
+| 025 | `scene_use_end_frame_toggle` | scene.use_end_frame BOOLEAN (backfill false for end_photo_id IS NULL) |
+| 026 | `scene_chat_archive_reasons` | scene.chat_messages JSONB; iteration.archived BOOLEAN; iteration.rating_reasons TEXT[] |
+| 027 | `scene_archived` | scene.archived BOOLEAN |
 
 SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the live path.
 
@@ -394,12 +624,15 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## Immediate next actions (start here next session)
 
-1. **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed; prod needs the same treatment.
-2. **Use the Lab** — continue rating aggressively; every 4★+ now auto-promotes to recipe (backup at 4★, primary at 5★). Lab→prod promotion is live. Volume compounds the learning loop.
-3. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness. Unblock when ready.
-4. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built.
-5. **Structured failure tags on ratings** — proposed, not built. Would give the learning loop richer signal than star ratings alone.
-6. **Client-side photo compression** — resize to 2048px / JPEG 85 before upload to cut transfer + storage cost.
+1. **Validate shake fix on new renders** — the stability prefix + negative_prompt ship on every NEW Atlas render but won't improve existing iterations. Render one push-in or top-down and visually confirm reduced shake. If still shaky, lower cfg_scale (Atlas default ~0.5, try 0.3–0.4).
+2. **Phase 3 prerequisites (autonomous iterator foundations)**:
+   - **Prompt rewrite pass** — replace the raw "ADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:" concat in render.ts with a Sonnet call that rewrites director_prompt cleanly incorporating refinement_notes. Partially covered by the chat `update_director_prompt` tool but not automatic at render time.
+   - **Expand v_rated_pool retrieval** — currently pooled for director input; autonomous iterator will also need it for scene-level decisioning ("which model did 5★ kitchens use?").
+3. **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed; prod needs the same treatment.
+4. **Use the listings Lab for data generation** — rate aggressively, archive junk, use Generate-all + Compare for A/B feedback. Recipe retrieval feeds back into every new listing's director.
+5. **Route paired scenes to kling-v2-1-pair** — the SKU is purpose-built for start+end-frame rendering. Not yet auto-selected; user toggles it via "Generate all" for now.
+6. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness.
+7. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built. Lab listings don't assemble to a final video yet.
 
 ---
 
@@ -442,4 +675,4 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## One-liner for next session
 
-> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **2026-04-20:** banner system overhauled (generation/iteration approval, priority card sorting), 4★ backup recipes (auto-promote as `backup_` archetype), refine from any iteration, recipe dedup index dropped. **Production-readiness merge** shipped earlier same day: scene_ratings denorm, smart failover, Shotstack cost tracking, resubmit endpoint, Lab→prod promotion (`resolveProductionPrompt`), refiner rationale split. **Prompt Lab** has unified embeddings, negative signal, Kling concurrency guard, re-render, organize + archive. Next: prod base64→URL fix, use the Lab for volume, spatial grounding (paused).
+> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **Phase 2.8 (2026-04-20 evening)**: new listings-based Lab at `/dashboard/development/lab` on Atlas Cloud with 6 Kling SKUs (v3-pro default, Wan removed), multi-photo master-detail UI with ShotPlanTable + focused SceneCard, streaming scene chat via Haiku 4.5 with `save_future_instruction` + `update_director_prompt` tools, rating reasons taxonomy, scene + iteration archive, end-frame toggle (crop fallback dropped), shake fix (stability prefix + negative_prompt on every render), recipe + exemplar + loser retrieval restored in listings director, Generate-all-models + A/B/C Compare modal. Legacy Lab at `/dashboard/development/prompt-lab` still live. Next: validate shake on fresh renders, build prompt-rewrite pass for autonomous iterator, prod base64→URL fix.
