@@ -1,84 +1,322 @@
 import { Link } from "react-router-dom";
+import { LELogoMark } from "@/v2/components/primitives/LELogoMark";
+import { LEIcon } from "@/v2/components/primitives/LEIcon";
+import { LECyclingWord } from "@/v2/components/primitives/LECyclingWord";
 
-// Modern dusk home — matches the cinematic reference screenshot
-// (warm interior glow, pool in foreground, deep dusk sky).
-const HERO_PHOTO_URL =
-  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=2400&q=80";
+// Full-bleed luxury-interior reference — matches landing.jsx line 7.
+const HERO_IMAGE =
+  "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=2400&q=85";
 
+/**
+ * Hero — pixel-faithful port of landing.jsx lines 29-240.
+ *
+ * Nav is anchored to the viewport top with `position: fixed` so it
+ * persists across the whole page (user request) while matching the
+ * design's in-hero visual treatment (glass background, white text,
+ * sharp-corner buttons). Hero is 820px tall and the nav sits on top of
+ * the hero photo — 48px left/right gutter, 26px vertical padding.
+ */
 export function Hero() {
   return (
     <section
       style={{
         position: "relative",
-        minHeight: "100vh",
-        backgroundImage: `url(${HERO_PHOTO_URL})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        color: "#fff",
+        height: 820,
         overflow: "hidden",
+        background: "#000",
       }}
     >
-      {/* Gradient overlay — darkens bottom-left for legibility, keeps sky airy */}
+      {/* Background image */}
+      <img
+        src={HERO_IMAGE}
+        alt=""
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          filter: "brightness(0.62) saturate(1.05)",
+        }}
+      />
+
+      {/* Legibility gradient — darkens top for nav, mid-airy, bottom for copy */}
       <div
         aria-hidden
         style={{
           position: "absolute",
           inset: 0,
           background:
-            "linear-gradient(to bottom, rgba(5,7,16,0.25) 0%, rgba(5,7,16,0.7) 60%, rgba(5,7,16,0.9) 100%)",
+            "linear-gradient(180deg, rgba(5,7,14,0.85) 0%, rgba(5,7,14,0.15) 22%, rgba(5,7,14,0) 45%, rgba(5,7,14,0.35) 75%, rgba(5,7,14,0.7) 100%)",
           pointerEvents: "none",
         }}
       />
 
+      {/* NAV — fixed at viewport top, persists through the whole page. */}
+      <HeroNav />
+
+      {/* HERO COPY */}
       <div
         style={{
-          position: "relative",
-          zIndex: 1,
-          minHeight: "100vh",
-          padding: "120px 48px 80px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "flex-end",
-          maxWidth: 1440,
-          margin: "0 auto",
+          position: "absolute",
+          left: 48,
+          bottom: 80,
+          right: 48,
+          color: "#fff",
+          zIndex: 2,
         }}
       >
-        <div className="le-eyebrow" style={{ marginBottom: 16 }}>
-          LISTING ELEVATE · CINEMATIC · ON DEMAND
-        </div>
-        <h1
-          className="le-display"
+        <div
           style={{
-            fontSize: "clamp(56px, 9vw, 128px)",
-            lineHeight: 0.95,
-            marginBottom: 24,
-            maxWidth: 1100,
+            fontSize: 10,
+            fontWeight: 500,
+            letterSpacing: "0.24em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.75)",
+            marginBottom: 28,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
           }}
         >
-          Retain more listings.
+          <span
+            style={{
+              width: 18,
+              height: 1,
+              background: "rgba(255,255,255,0.5)",
+              display: "inline-block",
+            }}
+          />
+          Listing Elevate · Cinematic · On demand
+        </div>
+        <h1
+          style={{
+            fontSize: "clamp(56px, 9vw, 104px)",
+            lineHeight: 0.96,
+            margin: 0,
+            fontWeight: 500,
+            letterSpacing: "-0.035em",
+            maxWidth: 1100,
+            fontFamily: "var(--le-font-sans)",
+          }}
+        >
+          <LECyclingWord words={["Take", "Sell", "Retain"]} /> more listings.
         </h1>
         <p
           style={{
-            fontFamily: "var(--le-font-sans)",
-            fontSize: 17,
+            fontSize: 18,
+            lineHeight: 1.5,
             maxWidth: 520,
-            color: "rgba(255,255,255,0.75)",
-            marginBottom: 40,
-            lineHeight: 1.55,
+            marginTop: 28,
+            color: "rgba(255,255,255,0.78)",
+            fontWeight: 400,
+            fontFamily: "var(--le-font-sans)",
           }}
         >
-          Upload photos. Receive a directed, edited, cinematic listing video in 24 hours. No crew, no scheduling, no post-production.
+          Upload photos. Receive a directed, edited, cinematic listing video
+          within 24&nbsp;hours. No crew, no scheduling, no post-production.
         </p>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <Link to="/upload" className="le-btn le-btn-primary" style={{ padding: "12px 22px", fontSize: 14 }}>
-            Start a video →
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 28,
+            marginTop: 40,
+          }}
+        >
+          <Link
+            to="/upload"
+            style={{
+              background: "#fff",
+              color: "#07080c",
+              border: "none",
+              padding: "16px 22px",
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              letterSpacing: "-0.005em",
+              borderRadius: 2,
+              textDecoration: "none",
+              fontFamily: "var(--le-font-sans)",
+            }}
+          >
+            Start a video <LEIcon name="arrow" size={14} color="#07080c" />
           </Link>
-          <Link to="/login" style={{ color: "rgba(255,255,255,0.7)", fontSize: 14, textDecoration: "underline", textUnderlineOffset: 6 }}>
-            Sign in to your account →
+          <Link
+            to="/login"
+            style={{
+              fontSize: 14,
+              color: "#fff",
+              textDecoration: "underline",
+              textUnderlineOffset: 4,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontFamily: "var(--le-font-sans)",
+            }}
+          >
+            Sign in to your account
+            <LEIcon name="arrowUpRight" size={12} color="#fff" />
           </Link>
         </div>
+      </div>
+
+      {/* Floating play widget — top-right mid */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          right: 20,
+          top: "52%",
+          zIndex: 2,
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.12)",
+          backdropFilter: "blur(18px) saturate(1.4)",
+          WebkitBackdropFilter: "blur(18px) saturate(1.4)",
+          border: "1px solid rgba(255,255,255,0.2)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#fff",
+        }}
+      >
+        <LEIcon name="play" size={14} color="#fff" />
       </div>
     </section>
   );
 }
+
+/**
+ * Hero nav — fixed at the viewport top. Visual language mirrors the
+ * design bundle (landing.jsx lines 53-127): logo mark left, uppercase
+ * tracked link row center, sharp-corner theme button + Sign in link +
+ * white Get started button on the right. Theme button is visual only
+ * (landing page is dark-only by user request).
+ */
+function HeroNav() {
+  return (
+    <nav
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "26px 48px",
+        color: "#fff",
+        zIndex: 20,
+        // Subtle scrim so the nav stays legible once scrolled past the hero
+        background:
+          "linear-gradient(180deg, rgba(5,7,16,0.82) 0%, rgba(5,7,16,0.55) 65%, rgba(5,7,16,0) 100%)",
+        backdropFilter: "blur(14px) saturate(1.2)",
+        WebkitBackdropFilter: "blur(14px) saturate(1.2)",
+      }}
+    >
+      <Link
+        to="/v2"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          textDecoration: "none",
+        }}
+      >
+        <LELogoMark size={20} variant="light" />
+      </Link>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 44,
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,0.82)",
+          fontFamily: "var(--le-font-sans)",
+        }}
+      >
+        <a href="#process" style={navLinkStyle}>
+          Process
+        </a>
+        <a href="#showcase" style={navLinkStyle}>
+          Showcase
+        </a>
+        <a href="#pricing" style={navLinkStyle}>
+          Pricing
+        </a>
+        <a href="#faq" style={navLinkStyle}>
+          FAQ
+        </a>
+      </div>
+
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 14 }}
+      >
+        <button
+          type="button"
+          aria-label="Toggle theme"
+          style={{
+            width: 34,
+            height: 34,
+            border: "1px solid rgba(255,255,255,0.22)",
+            borderRadius: 6,
+            background: "transparent",
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <LEIcon name="sun" size={14} color="#fff" />
+        </button>
+        <Link
+          to="/login"
+          style={{
+            fontSize: 13,
+            color: "rgba(255,255,255,0.85)",
+            textDecoration: "none",
+            fontFamily: "var(--le-font-sans)",
+          }}
+        >
+          Sign in
+        </Link>
+        <Link
+          to="/upload"
+          style={{
+            background: "#fff",
+            color: "#07080c",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: 4,
+            fontSize: 13,
+            fontWeight: 500,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: "pointer",
+            letterSpacing: "-0.005em",
+            textDecoration: "none",
+            fontFamily: "var(--le-font-sans)",
+          }}
+        >
+          Get started <LEIcon name="arrow" size={12} color="#07080c" />
+        </Link>
+      </div>
+    </nav>
+  );
+}
+
+const navLinkStyle = {
+  color: "inherit",
+  textDecoration: "none",
+} as const;
