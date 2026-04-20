@@ -9,6 +9,7 @@ import {
   directListing,
   renderListing,
   patchListing,
+  setSceneArchived,
   type LabListing,
   type LabListingPhoto,
   type LabListingScene,
@@ -131,6 +132,17 @@ export default function LabListingDetail() {
     }
   }
 
+  async function archiveSceneOptimistic(sceneId: string, archived: boolean): Promise<void> {
+    const prev = scenes;
+    setScenes((cur) => cur.map((s) => (s.id === sceneId ? { ...s, archived } : s)));
+    try {
+      await setSceneArchived(id, sceneId, archived);
+    } catch (err) {
+      setScenes(prev);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const stats = useMemo(() => {
     const rendered = scenes.filter((s) =>
       iterations.some((i) => i.scene_id === s.id && (i.status === "rendered" || i.status === "rated"))
@@ -238,6 +250,7 @@ export default function LabListingDetail() {
               defaultModel={listing.model_name}
               onReload={reload}
               onRateOptimistic={rateOptimistic}
+              onArchiveSceneOptimistic={archiveSceneOptimistic}
             />
           )}
         </>

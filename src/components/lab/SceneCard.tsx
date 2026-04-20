@@ -39,6 +39,7 @@ interface SceneCardProps {
     comment?: string | null;
     archived?: boolean;
   }) => Promise<void>;
+  onArchiveSceneOptimistic?: (sceneId: string, archived: boolean) => Promise<void>;
 }
 
 function Stars({ value, onChange, disabled }: { value: number | null; onChange: (n: number) => void; disabled?: boolean }) {
@@ -344,7 +345,7 @@ function RefinementNotesPanel({ listingId, scene, onReload }: {
   );
 }
 
-export function SceneCard({ listingId, scene, iterations, photos, defaultModel, onReload, onRateOptimistic }: SceneCardProps) {
+export function SceneCard({ listingId, scene, iterations, photos, defaultModel, onReload, onRateOptimistic, onArchiveSceneOptimistic }: SceneCardProps) {
   const startPhoto = photos.find((p) => p.id === scene.photo_id);
   const endPhoto = scene.end_photo_id ? photos.find((p) => p.id === scene.end_photo_id) : null;
   const [rendering, setRendering] = useState(false);
@@ -388,8 +389,12 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
 
   async function archiveScene() {
     if (!confirm(scene.archived ? "Unarchive this scene?" : "Archive this scene? It'll be hidden from the shot plan (toggle to show).")) return;
-    await setSceneArchived(listingId, scene.id, !scene.archived);
-    onReload();
+    if (onArchiveSceneOptimistic) {
+      await onArchiveSceneOptimistic(scene.id, !scene.archived);
+    } else {
+      await setSceneArchived(listingId, scene.id, !scene.archived);
+      onReload();
+    }
   }
 
   async function pinSceneMessage(_idx: number, content: string) {
