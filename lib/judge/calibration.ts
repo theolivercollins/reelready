@@ -84,6 +84,7 @@ export async function runCalibration(opts: {
   }
 
   const out: CalibrationRow[] = [];
+  const windowStart = new Date().toISOString();
   for (const bucket of buckets.values()) {
     const pairs: AgreementInput[] = [];
     for (const it of bucket.items) {
@@ -118,6 +119,7 @@ export async function runCalibration(opts: {
     };
     const { error: insErr } = await supabase.from("lab_judge_calibrations").insert({
       ...row,
+      window_start: windowStart,
       window_end: new Date().toISOString(),
     });
     if (insErr) throw new Error(`Insert calibration row failed: ${insErr.message}`);

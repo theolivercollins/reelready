@@ -17,8 +17,11 @@ export function computeConfidence(r: JudgeRubricScore, neighborsUsed: number): n
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
   const variance = scores.reduce((acc, s) => acc + (s - mean) ** 2, 0) / scores.length;
   const stddev = Math.sqrt(variance);
-  // Max stddev for a 1..5 axis across 4 scores is sqrt(4) = 2 (when values are 1,1,5,5).
-  const axisAgreement = clamp(1 - stddev / 2, 0, 1);
+  // Max population stddev for 4 scores in [1,5] is sqrt(2) ≈ 1.414
+  // (achieved when values are 1,1,5,5 — variance = 4). Normalizing by
+  // sqrt(2) makes axisAgreement span the full [0,1] range instead of
+  // floor-clamping at ~0.29 under maximal disagreement.
+  const axisAgreement = clamp(1 - stddev / Math.SQRT2, 0, 1);
 
   // Saturate density at ~6 neighbors.
   const density = clamp(neighborsUsed / 6, 0, 1);
