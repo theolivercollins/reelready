@@ -37,6 +37,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .in('status', ['failed', 'needs_review']).gte('created_at', `${weekAgo}T00:00:00`),
     ]);
 
+    // Cost breakdown: fetch last 7 days of cost_events for in-memory aggregation
+    const { data: costEvents } = await supabase
+      .from('cost_events')
+      .select('provider, stage, cost_cents, metadata, created_at')
+      .gte('created_at', `${weekAgo}T00:00:00`)
+      .limit(10000);
+
+    // Aggregate by provider, scope, and stage
+    const byProviderMap = new Map<string, { cents: number; events: number }>();
+    const byScopeMap = new Map<string, { cents: number; events: number }>();
+    const byStageMap = new Map<string, { cents: number; events: number }>();
+
+    let totalCostThisWeekCents = 0;
+
+    for (const e of costEvents ?? []) {
+      const cents = e.cost_cents ?? 0;
+      totalCostThisWeekCents += cents;
+
+      // byProvider
+      const prov = e.provider ?? 'unknown';
+      const provBucket = byProviderMap.get(prov) ?? { cents: 0, events: 0 };
+      provBucket.cents += cents;
+      provBucket.events += 1;
+      byProviderMap.set(prov, provBucket);
+
+      // byScope (metadata.scope, fall back to stage, then 'unscoped')
+      const scope = (e.metadata as { scope?: string } | null)?.scope ?? e.stage ?? 'unscoped';
+      const scopeBucket = byScopeMap.get(scope) ?? { cents: 0, events: 0 };
+      scopeBucket.cents += cents;
+      scopeBucket.events += 1;
+      byScopeMap.set(scope, scopeBucket);
+
+      // byStage (stage column)
+      const stage = e.stage ?? 'unknown';
+      const stageBucket = byStageMap.get(stage) ?? { cents: 0, events: 0 };
+      stageBucket.cents += cents;
+      stageBucket.events += 1;
+      byStageMap.set(stage, stageBucket);
+    }
+
+    function sortedEntries(m: Map<string, { cents: number; events: number }>) {
+      return [...m.entries()].sort((a, b) => b[1].cents - a[1].cents);
+    }
+
     const avgProcessingMs = completedData?.length
       ? completedData.reduce((s: number, p: any) => s + (p.processing_time_ms ?? 0), 0) / completedData.length
       : 0;
@@ -52,8 +96,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       needsReview: needsReview ?? 0,
       avgProcessingMs: Math.round(avgProcessingMs),
       totalCostTodayCents: totalCostToday,
+      totalCostThisWeekCents,
       avgCostPerVideoCents: Math.round(avgCost),
       successRate: Math.round(successRate * 10) / 10,
+      costBreakdown: {
+        byProvider: sortedEntries(byProviderMap).map(([provider, v]) => ({ provider, ...v })),
+        byScope: sortedEntries(byScopeMap).map(([scope, v]) => ({ scope, ...v })),
+        byStage: sortedEntries(byStageMap).map(([stage, v]) => ({ stage, ...v })),
+      },
     });
   } catch {
     return res.status(500).json({ error: 'Failed to fetch stats' });

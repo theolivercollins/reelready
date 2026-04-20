@@ -37,7 +37,7 @@ function Delta({ value, positiveIsGood = true }: { value: number; positiveIsGood
   );
 }
 
-type CostTab = "provider" | "model" | "scope";
+type CostTab = "provider" | "scope" | "stage" | "model";
 
 const Overview = () => {
   const [completedProps, setCompletedProps] = useState<Property[]>([]);
@@ -456,7 +456,7 @@ const Overview = () => {
           <div className="mt-10 border border-border">
             {/* Tab bar */}
             <div className="flex border-b border-border">
-              {(["provider", "model", "scope"] as CostTab[]).map((tab) => (
+              {(["provider", "scope", "stage", "model"] as CostTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setCostTab(tab)}
@@ -477,7 +477,7 @@ const Overview = () => {
                 <thead>
                   <tr className="border-b border-border bg-secondary/30">
                     <th className="label px-6 py-3 text-left text-muted-foreground font-normal">
-                      {costTab === "provider" ? "Provider" : costTab === "model" ? "Model" : "Scope"}
+                      {costTab === "provider" ? "Provider" : costTab === "scope" ? "Scope" : costTab === "stage" ? "Stage" : "Model"}
                     </th>
                     <th className="label px-4 py-3 text-right text-muted-foreground font-normal">Today</th>
                     <th className="label px-4 py-3 text-right text-muted-foreground font-normal">7d</th>
@@ -490,9 +490,11 @@ const Overview = () => {
                     const rows: CostBreakdownRow[] =
                       costTab === "provider"
                         ? (costBreakdown?.byProvider ?? [])
-                        : costTab === "model"
-                        ? (costBreakdown?.byModel ?? [])
-                        : (costBreakdown?.byScope ?? []);
+                        : costTab === "scope"
+                        ? (costBreakdown?.byScope ?? [])
+                        : costTab === "stage"
+                        ? (costBreakdown?.byStage ?? [])
+                        : (costBreakdown?.byModel ?? []);
                     if (!costBreakdown) {
                       return (
                         <tr>

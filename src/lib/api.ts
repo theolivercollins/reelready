@@ -209,7 +209,13 @@ export async function fetchLogs(params?: {
 
 export async function fetchStatsOverview(): Promise<{
   completedToday: number; submittedToday: number; inPipeline: number; needsReview: number;
-  avgProcessingMs: number; totalCostTodayCents: number; avgCostPerVideoCents: number; successRate: number;
+  avgProcessingMs: number; totalCostTodayCents: number; totalCostThisWeekCents: number;
+  avgCostPerVideoCents: number; successRate: number;
+  costBreakdown?: {
+    byProvider: Array<{ provider: string; cents: number; events: number }>;
+    byScope: Array<{ scope: string; cents: number; events: number }>;
+    byStage: Array<{ stage: string; cents: number; events: number }>;
+  };
 }> {
   return apiFetch('/api/stats/overview');
 }
@@ -230,6 +236,7 @@ export interface CostBreakdown {
   byProvider: CostBreakdownRow[];
   byModel: CostBreakdownRow[];
   byScope: CostBreakdownRow[];
+  byStage: CostBreakdownRow[];
 }
 
 export async function fetchCostBreakdown(): Promise<CostBreakdown> {

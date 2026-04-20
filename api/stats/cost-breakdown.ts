@@ -27,6 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const byProvider = new Map<string, { today: Bucket; week: Bucket; month: Bucket }>();
   const byModel = new Map<string, { today: Bucket; week: Bucket; month: Bucket }>();
   const byScope = new Map<string, { today: Bucket; week: Bucket; month: Bucket }>();
+  const byStage = new Map<string, { today: Bucket; week: Bucket; month: Bucket }>();
 
   function ensure<K>(m: Map<K, { today: Bucket; week: Bucket; month: Bucket }>, k: K) {
     if (!m.has(k)) m.set(k, { today: { events: 0, cents: 0 }, week: { events: 0, cents: 0 }, month: { events: 0, cents: 0 } });
@@ -41,11 +42,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cents = e.cost_cents ?? 0;
     const model = (e.metadata as { model?: string } | null)?.model ?? "—";
     const scope = (e.metadata as { scope?: string } | null)?.scope ?? e.stage ?? "—";
+    const stage = e.stage ?? "—";
 
     for (const [key, map] of [
       [e.provider, byProvider] as const,
       [model, byModel] as const,
       [scope, byScope] as const,
+      [stage, byStage] as const,
     ]) {
       const b = ensure(map, key);
       if (inMonth) { b.month.events += 1; b.month.cents += cents; }
@@ -64,5 +67,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     byProvider: toArr(byProvider),
     byModel: toArr(byModel),
     byScope: toArr(byScope),
+    byStage: toArr(byStage),
   });
 }
