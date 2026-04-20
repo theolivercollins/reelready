@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download, RotateCcw, Copy, Check, Loader2, AlertTriangle, Star } from "lucide-react";
 import { formatCents, formatDuration } from "@/lib/types";
 import type { Property, Photo, Scene, PipelineLog, CostEvent, SceneRating } from "@/lib/types";
-import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts, rateScene } from "@/lib/api";
+import { fetchProperty, fetchLogs, rerunProperty, fetchSystemPrompts, rateScene, resubmitScene } from "@/lib/api";
 
 const FAILURE_TAGS = [
   "hallucinated architecture",
@@ -155,6 +155,87 @@ function RatingWidget({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function ResubmitControls({ scene }: { scene: RatedScene }) {
+  const [busy, setBusy] = useState<null | "auto" | "other" | "edit">(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [kind, setKind] = useState<"info" | "warn" | "error" | null>(null);
+
+  const other: "kling" | "runway" = scene.provider === "kling" ? "runway" : "kling";
+
+  async function call(fn: () => Promise<{ ok: boolean; provider?: string; willRetryViaCron?: boolean; message?: string }>, label: "auto" | "other" | "edit") {
+    setBusy(label);
+    setMessage(null);
+    setKind(null);
+    try {
+      const r = await fn();
+      if (r.ok) {
+        setKind("info");
+        setMessage(`Submitted to ${r.provider}. Cron will finalize when the clip lands.`);
+      } else if (r.willRetryViaCron) {
+        setKind("warn");
+        setMessage(`Provider busy (${r.message ?? "capacity"}). Cron will retry.`);
+      } else {
+        setKind("error");
+        setMessage(r.message ?? "Resubmit failed across all providers.");
+      }
+    } catch (err) {
+      setKind("error");
+      setMessage(err instanceof Error ? err.message : "Resubmit failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+      <span className="label text-muted-foreground">Admin actions</span>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy !== null}
+        onClick={() => call(() => resubmitScene(scene.id), "auto")}
+      >
+        {busy === "auto" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+        Resubmit
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy !== null}
+        onClick={() => call(() => resubmitScene(scene.id, { provider: other }), "other")}
+      >
+        {busy === "other" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+        Try {other}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={busy !== null}
+        onClick={async () => {
+          const next = window.prompt("Edit prompt then resubmit:", scene.prompt);
+          if (!next || !next.trim() || next.trim() === scene.prompt) return;
+          await call(() => resubmitScene(scene.id, { prompt: next.trim() }), "edit");
+        }}
+      >
+        <RotateCcw className="h-3.5 w-3.5" /> Edit + resubmit
+      </Button>
+      {message && (
+        <span
+          className={`text-xs ${
+            kind === "error"
+              ? "text-destructive"
+              : kind === "warn"
+              ? "text-accent"
+              : "text-muted-foreground"
+          }`}
+        >
+          {message}
+        </span>
       )}
     </div>
   );
@@ -660,6 +741,18 @@ const PropertyDetail = () => {
                           className="mt-3 aspect-video w-full max-w-md bg-black"
                         />
                       </div>
+                    )}
+
+                    {/* Admin resubmit controls — surfaced on any scene that
+                        isn't a clean qc_pass with a clip_url. This replaces
+                        the old stuck-scene workflow where the only path was
+                        a full property rerun. */}
+                    {(scene.status === "needs_review" ||
+                      scene.status === "qc_hard_reject" ||
+                      scene.status === "qc_soft_reject" ||
+                      scene.status === "failed" ||
+                      scene.status === "pending") && (
+                      <ResubmitControls scene={scene} />
                     )}
                   </div>
                 );

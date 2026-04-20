@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, Check, RotateCcw, SkipForward, Loader2, Clock } from "lucide-react";
 import { statusStages, getRelativeTime } from "@/lib/types";
 import type { Property, Scene } from "@/lib/types";
-import { fetchProperties, fetchProperty, approveScene, retryScene, skipScene } from "@/lib/api";
+import { fetchProperties, fetchProperty, approveScene, retryScene, resubmitScene, skipScene } from "@/lib/api";
 import { motion } from "framer-motion";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -202,7 +202,7 @@ const Pipeline = () => {
                     size="sm"
                     variant="outline"
                     disabled={actionLoading[scene.id]}
-                    onClick={() => wrap(scene.id, () => approveScene(scene.id))}
+                    onClick={() => wrap(scene.id, async () => { await approveScene(scene.id); })}
                   >
                     <Check className="h-3.5 w-3.5" /> Approve
                   </Button>
@@ -210,15 +210,44 @@ const Pipeline = () => {
                     size="sm"
                     variant="outline"
                     disabled={actionLoading[scene.id]}
-                    onClick={() => wrap(scene.id, () => retryScene(scene.id, scene.prompt))}
+                    onClick={() => wrap(scene.id, async () => { await resubmitScene(scene.id); })}
+                    title="Resubmit with current prompt. Auto-fails over to another provider on permanent errors."
                   >
-                    <RotateCcw className="h-3.5 w-3.5" /> Retry
+                    <RotateCcw className="h-3.5 w-3.5" /> Resubmit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoading[scene.id]}
+                    onClick={() =>
+                      wrap(scene.id, async () => {
+                        const target = scene.provider === "kling" ? "runway" : "kling";
+                        await resubmitScene(scene.id, { provider: target });
+                      })
+                    }
+                    title="Retry on the other provider (force failover)."
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {scene.provider === "kling" ? "Try Runway" : "Try Kling"}
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     disabled={actionLoading[scene.id]}
-                    onClick={() => wrap(scene.id, () => skipScene(scene.id))}
+                    onClick={async () => {
+                      const next = window.prompt("Edit prompt then resubmit:", scene.prompt);
+                      if (!next || !next.trim() || next.trim() === scene.prompt) return;
+                      await wrap(scene.id, async () => { await retryScene(scene.id, next.trim()); });
+                    }}
+                    title="Edit the prompt and resubmit."
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Edit prompt
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={actionLoading[scene.id]}
+                    onClick={() => wrap(scene.id, async () => { await skipScene(scene.id); })}
                   >
                     <SkipForward className="h-3.5 w-3.5" /> Skip
                   </Button>

@@ -39,50 +39,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Auto-promote on rating=5 — every 5★ becomes a recipe, no dedup.
-  // More recipes = more matches on future photos = better director output.
-  let auto_promoted: { id: string; archetype: string } | null = null;
+  // Auto-promote on rating=5. One recipe per iteration — the partial
+  // unique index from migration 015 enforces this even under a double-
+  // click race. If a recipe already exists for this iteration, we reuse
+  // it instead of inserting again.
+  let auto_promoted: { id: string; archetype: string; reused?: boolean } | null = null;
   if (rating === 5 && updated.analysis_json && updated.director_output_json) {
     const analysis = updated.analysis_json as { room_type: string; key_features?: string[]; composition?: string | null; suggested_motion?: string | null };
     const director = updated.director_output_json as { camera_movement: string; prompt: string };
 
-    let vec: number[] | null = null;
-    if (Array.isArray(updated.embedding)) vec = updated.embedding as number[];
-    else if (typeof updated.embedding === "string" && updated.embedding.startsWith("[")) {
-      try { vec = JSON.parse(updated.embedding) as number[]; } catch { /* no-op */ }
-    }
-    if (!vec) {
-      const embedded = await embedTextSafe(
-        buildAnalysisText({
-          roomType: analysis.room_type,
-          keyFeatures: analysis.key_features ?? [],
-          composition: analysis.composition,
-          suggestedMotion: analysis.suggested_motion,
-          cameraMovement: director.camera_movement,
-        })
-      );
-      if (embedded) vec = embedded.vector;
-    }
-
-    const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-    const slug = Math.random().toString(36).slice(2, 6);
-    const archetype = `${analysis.room_type}_${director.camera_movement}_${stamp}_${slug}`;
-    const { data: recipe } = await supabase
+    const { data: existing } = await supabase
       .from("prompt_lab_recipes")
-      .insert({
-        archetype,
-        room_type: analysis.room_type,
-        camera_movement: director.camera_movement,
-        provider: updated.provider,
-        prompt_template: director.prompt,
-        source_iteration_id: iteration_id,
-        rating_at_promotion: 5,
-        promoted_by: auth.user.id,
-        embedding: vec ? toPgVector(vec) : null,
-      })
-      .select("id, archetype")
-      .single();
-    if (recipe) auto_promoted = { id: recipe.id, archetype: recipe.archetype };
+      .select("id, archetype, status")
+      .eq("source_iteration_id", iteration_id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (existing) {
+      auto_promoted = { id: existing.id, archetype: existing.archetype, reused: true };
+    } else {
+      let vec: number[] | null = null;
+      if (Array.isArray(updated.embedding)) vec = updated.embedding as number[];
+      else if (typeof updated.embedding === "string" && updated.embedding.startsWith("[")) {
+        try { vec = JSON.parse(updated.embedding) as number[]; } catch { /* no-op */ }
+      }
+      if (!vec) {
+        const embedded = await embedTextSafe(
+          buildAnalysisText({
+            roomType: analysis.room_type,
+            keyFeatures: analysis.key_features ?? [],
+            composition: analysis.composition,
+            suggestedMotion: analysis.suggested_motion,
+            cameraMovement: director.camera_movement,
+          })
+        );
+        if (embedded) vec = embedded.vector;
+      }
+
+      const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+      const slug = Math.random().toString(36).slice(2, 6);
+      const archetype = `${analysis.room_type}_${director.camera_movement}_${stamp}_${slug}`;
+      const { data: recipe, error: insertErr } = await supabase
+        .from("prompt_lab_recipes")
+        .insert({
+          archetype,
+          room_type: analysis.room_type,
+          camera_movement: director.camera_movement,
+          provider: updated.provider,
+          prompt_template: director.prompt,
+          source_iteration_id: iteration_id,
+          rating_at_promotion: 5,
+          promoted_by: auth.user.id,
+          embedding: vec ? toPgVector(vec) : null,
+        })
+        .select("id, archetype")
+        .single();
+      if (recipe) {
+        auto_promoted = { id: recipe.id, archetype: recipe.archetype };
+      } else if (insertErr && /unique|duplicate/i.test(insertErr.message)) {
+        // Race: another request promoted first. Load the existing one.
+        const { data: raced } = await supabase
+          .from("prompt_lab_recipes")
+          .select("id, archetype")
+          .eq("source_iteration_id", iteration_id)
+          .eq("status", "active")
+          .maybeSingle();
+        if (raced) auto_promoted = { id: raced.id, archetype: raced.archetype, reused: true };
+      }
+    }
   }
 
   return res.status(200).json({ iteration: updated, auto_promoted });

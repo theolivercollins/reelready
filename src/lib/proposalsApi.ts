@@ -52,3 +52,38 @@ export function listProposals(): Promise<{ proposals: LabProposal[] }> {
 export function reviewProposal(id: string, action: "apply" | "reject"): Promise<LabProposal> {
   return fetchJSON(`/api/admin/prompt-lab/proposals?id=${id}&action=${action}`, { method: "PATCH" });
 }
+
+export interface OverrideReadiness {
+  override_id: string;
+  prompt_name: string;
+  body: string;
+  body_hash: string;
+  override_created_at: string;
+  rated_count: number | null;
+  avg_rating: number | null;
+  winners: number | null;
+  losers: number | null;
+  rendered_count: number | null;
+  ready_for_promotion: boolean;
+}
+
+export function listPromotableOverrides(): Promise<{ overrides: OverrideReadiness[] }> {
+  return fetchJSON("/api/admin/prompt-lab/promote-to-prod");
+}
+
+export function promoteOverrideToProd(
+  override_id: string,
+  opts?: { note?: string; force?: boolean },
+): Promise<{
+  ok: boolean;
+  prompt_name: string;
+  version: number;
+  revision_id: string;
+  cohort_stats: OverrideReadiness | null;
+  forced: boolean;
+}> {
+  return fetchJSON("/api/admin/prompt-lab/promote-to-prod", {
+    method: "POST",
+    body: JSON.stringify({ override_id, ...(opts ?? {}) }),
+  });
+}

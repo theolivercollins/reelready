@@ -45,8 +45,10 @@ import {
   buildPromptQAUserPrompt,
   type PromptQAResult,
 } from "./prompts/prompt-qa.js";
-import { selectProvider } from "./providers/router.js";
+import { resolveProductionPrompt } from "./prompts/resolve.js";
+import { selectProvider, getEnabledProviders } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
+import { classifyProviderError } from "./providers/errors.js";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;
@@ -63,12 +65,15 @@ const REQUIRED_ROOM_TYPES: RoomType[] = [
 
 // Snapshot every system prompt to prompt_revisions on each pipeline run so
 // the Learning dashboard can show a changelog. No-ops if the body is
-// unchanged from the last recorded version.
+// unchanged from the last recorded version. For `director` we snapshot
+// the EFFECTIVE body (lab-promoted revision if present, code constant
+// otherwise) so the changelog reflects what actually ran.
 async function snapshotPromptRevisions(): Promise<void> {
   try {
+    const effectiveDirector = await resolveProductionPrompt("director", DIRECTOR_SYSTEM);
     await Promise.all([
       recordPromptRevisionIfChanged("photo-analysis", PHOTO_ANALYSIS_SYSTEM),
-      recordPromptRevisionIfChanged("director", DIRECTOR_SYSTEM),
+      recordPromptRevisionIfChanged("director", effectiveDirector.body),
       recordPromptRevisionIfChanged("preflight-qa", PROMPT_QA_SYSTEM),
       recordPromptRevisionIfChanged("style-guide", STYLE_GUIDE_SYSTEM),
       recordPromptRevisionIfChanged("qc-evaluator", QC_SYSTEM),
@@ -474,10 +479,25 @@ async function runScripting(propertyId: string): Promise<void> {
   // The property style guide is intentionally NOT injected into the
   // director's user message. The short-prompt director rule forbids
   // material/color descriptions in per-scene prompts.
+  //
+  // Resolve the effective director system prompt: a Lab override
+  // promoted via /api/admin/prompt-lab/promote-to-prod takes
+  // precedence over the compile-time DIRECTOR_SYSTEM. Falls back
+  // transparently on any error.
+  const effectiveDirector = await resolveProductionPrompt("director", DIRECTOR_SYSTEM);
+  if (effectiveDirector.source === "lab_promotion") {
+    await log(propertyId, "scripting", "info",
+      `Director prompt resolved from lab promotion v${effectiveDirector.version}`,
+      {
+        revision_id: effectiveDirector.revision_id,
+        source_override_id: effectiveDirector.source_override_id,
+      },
+    );
+  }
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
-    system: DIRECTOR_SYSTEM,
+    system: effectiveDirector.body,
     messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) + learningBlock }],
   });
 
@@ -681,56 +701,94 @@ async function runGenerationSubmit(propertyId: string): Promise<void> {
     `Submitting ${scenes.length} clips, up to ${GENERATION_CONCURRENCY} in parallel`);
 
   const submitScene = async (scene: typeof scenes[number]) => {
+    // Get the source photo once. Providers share the same source image,
+    // so a failover retry doesn't need to refetch.
+    let photo: { file_url: string; room_type: string } | null;
     try {
-      // Get the source photo
-      const { data: photo } = await supabase
+      const { data } = await supabase
         .from("photos")
         .select("file_url, room_type")
         .eq("id", scene.photo_id)
         .single();
-      if (!photo) throw new Error("Source photo not found");
-
-      const photoResponse = await fetch(photo.file_url);
-      const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
-
-      const provider = selectProvider(
-        (photo.room_type as RoomType) ?? "other",
-        scene.camera_movement as CameraMovement | null,
-        scene.provider as VideoProvider | null,
-        [],
-      );
-
-      const genJob = await provider.generateClip({
-        sourceImage,
-        prompt: scene.prompt,
-        durationSeconds: scene.duration_seconds,
-        aspectRatio: "16:9",
-      });
-
-      // Persist the task_id so the cron can pick it up.
-      await supabase
-        .from("scenes")
-        .update({
-          provider: provider.name,
-          provider_task_id: genJob.jobId,
-          submitted_at: new Date().toISOString(),
-          status: "generating",
-          attempt_count: 1,
-        })
-        .eq("id", scene.id);
-
-      await log(propertyId, "generation", "info",
-        `Scene ${scene.scene_number}: submitted to ${provider.name}`,
-        { jobId: genJob.jobId }, scene.id);
+      if (!data) throw new Error("Source photo not found");
+      photo = data as { file_url: string; room_type: string };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Mark this scene as needs_review so the cron finalization pass
-      // doesn't wait on it forever. Cron retry logic (out of scope for
-      // this commit) could try alternate providers.
       await updateSceneStatus(scene.id, "needs_review");
       await log(propertyId, "generation", "error",
-        `Scene ${scene.scene_number}: submit failed: ${msg}`, undefined, scene.id);
+        `Scene ${scene.scene_number}: photo lookup failed: ${msg}`, undefined, scene.id);
+      return;
     }
+
+    const photoResponse = await fetch(photo.file_url);
+    const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
+    const photoUrl = photo.file_url;
+    const roomType = (photo.room_type as RoomType) ?? "other";
+    const cameraMovement = scene.camera_movement as CameraMovement | null;
+    const preference = scene.provider as VideoProvider | null;
+
+    // Build the failover sequence: preferred provider first, then the
+    // rest of the enabled set (minus any we've already tried). Only
+    // advance through the sequence on PERMANENT errors, per the
+    // classification in `providers/errors.ts`. Transient + capacity
+    // errors mark the scene `needs_review` for the cron retry path
+    // without burning the provider out of rotation.
+    const excluded: VideoProvider[] = [];
+    const maxFailovers = Math.max(getEnabledProviders().length - 1, 1);
+    let lastError: { message: string; kind: string; provider: string } | null = null;
+
+    for (let attempt = 0; attempt <= maxFailovers; attempt++) {
+      const provider = selectProvider(roomType, cameraMovement, preference, excluded);
+      try {
+        const genJob = await provider.generateClip({
+          sourceImage,
+          sourceImageUrl: photoUrl,
+          prompt: scene.prompt,
+          durationSeconds: scene.duration_seconds,
+          aspectRatio: "16:9",
+        });
+
+        await supabase
+          .from("scenes")
+          .update({
+            provider: provider.name,
+            provider_task_id: genJob.jobId,
+            submitted_at: new Date().toISOString(),
+            status: "generating",
+            attempt_count: attempt + 1,
+          })
+          .eq("id", scene.id);
+
+        await log(propertyId, "generation", "info",
+          `Scene ${scene.scene_number}: submitted to ${provider.name}${attempt > 0 ? ` (failover ${attempt})` : ""}`,
+          { jobId: genJob.jobId, attempt: attempt + 1 }, scene.id);
+        return;
+      } catch (err) {
+        const classified = classifyProviderError(err);
+        lastError = { message: classified.message, kind: classified.kind, provider: provider.name };
+
+        // Capacity + transient errors do NOT burn the provider. The
+        // cron retry path will pick the scene up on the next minute.
+        if (!classified.shouldFailover) {
+          await log(propertyId, "generation", "warn",
+            `Scene ${scene.scene_number}: ${provider.name} ${classified.kind} error (will retry via cron): ${classified.message}`,
+            { status: classified.status, kind: classified.kind }, scene.id);
+          break;
+        }
+
+        // Permanent error: try the next enabled provider.
+        excluded.push(provider.name as VideoProvider);
+        await log(propertyId, "generation", "warn",
+          `Scene ${scene.scene_number}: ${provider.name} permanent error, failing over: ${classified.message}`,
+          { status: classified.status, kind: classified.kind, excluded }, scene.id);
+      }
+    }
+
+    // All attempts exhausted.
+    await updateSceneStatus(scene.id, "needs_review");
+    await log(propertyId, "generation", "error",
+      `Scene ${scene.scene_number}: submit failed after ${excluded.length + 1} attempts: ${lastError?.message ?? "unknown"}`,
+      { lastError }, scene.id);
   };
 
   // Pull-based worker pool so we don't burst past Kling's 5-concurrent
@@ -854,6 +912,28 @@ async function runAssembly(propertyId: string): Promise<void> {
       }
       horizontalUrl = horizontalResult.videoUrl;
 
+      // Shotstack flat per-render estimate. Real cost depends on output
+      // duration + resolution; SHOTSTACK_CENTS_PER_RENDER env lets us
+      // tune it without a deploy. Default 10¢/render (20¢ for a
+      // horizontal + vertical pair).
+      const shotstackCents = Math.round(
+        parseFloat(process.env.SHOTSTACK_CENTS_PER_RENDER ?? "10"),
+      );
+      await recordCostEvent({
+        propertyId,
+        stage: "assembly",
+        provider: "shotstack",
+        unitsConsumed: 1,
+        unitType: "renders",
+        costCents: shotstackCents,
+        metadata: {
+          aspect_ratio: "16:9",
+          clip_count: clipInputs.length,
+          render_time_ms: horizontalResult.renderTimeMs ?? null,
+          job_id: horizontalJob.jobId,
+        },
+      });
+
       const verticalJob = await provider.assemble({
         clips: clipInputs,
         overlays,
@@ -866,6 +946,21 @@ async function runAssembly(propertyId: string): Promise<void> {
         throw new Error(`Vertical render failed: ${verticalResult.error ?? "unknown"}`);
       }
       verticalUrl = verticalResult.videoUrl;
+
+      await recordCostEvent({
+        propertyId,
+        stage: "assembly",
+        provider: "shotstack",
+        unitsConsumed: 1,
+        unitType: "renders",
+        costCents: shotstackCents,
+        metadata: {
+          aspect_ratio: "9:16",
+          clip_count: clipInputs.length,
+          render_time_ms: verticalResult.renderTimeMs ?? null,
+          job_id: verticalJob.jobId,
+        },
+      });
 
       await log(propertyId, "assembly", "info",
         `Shotstack renders complete`,

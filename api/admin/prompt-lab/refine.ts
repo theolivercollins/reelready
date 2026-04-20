@@ -86,6 +86,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const iterationNumber = await getNextIterationNumber(prev.session_id);
+    // IMPORTANT: the refiner's rationale is Claude's own explanation of
+    // what it changed, not user-authored feedback. Earlier versions
+    // stashed it in `user_comment` with a "[refiner rationale]" prefix —
+    // which meant the unified retrieval RPCs surfaced it to the director
+    // as "admin note", contaminating the learning signal on the next
+    // run. After migration 015 it lives in `refiner_rationale` and stays
+    // out of loser-retrieval entirely.
     const { data: newIteration, error: nErr } = await supabase
       .from("prompt_lab_iterations")
       .insert({
@@ -96,10 +103,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         director_output_json: scene,
         director_prompt_hash: DIRECTOR_PROMPT_HASH,
         cost_cents: Math.round(costCents),
-        user_comment: rationale ? `[refiner rationale] ${rationale}` : null,
+        refiner_rationale: rationale ? rationale : null,
+        user_comment: null,
         embedding: prev.embedding ?? null,
         embedding_model: prev.embedding_model ?? null,
         retrieval_metadata: {
+          parent_iteration_id: prev.id,
           exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
           losers: losers.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
         },

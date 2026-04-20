@@ -28,6 +28,7 @@ interface IterationRow {
   tags: string[] | null;
   user_comment: string | null;
   refinement_instruction: string | null;
+  refiner_rationale: string | null;
   clip_url: string | null;
   provider: string | null;
   analysis_json: { room_type?: string; depth_rating?: string; key_features?: string[]; composition?: string } | null;
@@ -47,9 +48,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
   const sinceIso = new Date(Date.now() - days * 86400000).toISOString();
 
+  // Mine from the `_complete` view (migration 015) so half-built
+  // iterations — rating without an analysis or director output — don't
+  // contaminate the bucket averages.
   const { data: rows, error } = await supabase
-    .from("prompt_lab_iterations")
-    .select("id, rating, tags, user_comment, refinement_instruction, clip_url, provider, analysis_json, director_output_json, created_at")
+    .from("prompt_lab_iterations_complete")
+    .select("id, rating, tags, user_comment, refinement_instruction, refiner_rationale, clip_url, provider, analysis_json, director_output_json, created_at")
     .gte("created_at", sinceIso)
     .not("rating", "is", null);
   if (error) return res.status(500).json({ error: error.message });
@@ -88,21 +92,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bucket: { room: b.room, camera_movement: b.movement, provider: b.provider },
       sample_size: b.allRatings.length,
       avg_rating: b.allRatings.reduce((s, n) => s + n, 0) / b.allRatings.length,
+      // Evidence split: user_comment is admin feedback,
+      // refiner_rationale is Claude's own self-explanation. Keeping
+      // them separate prevents the rule miner from treating Claude's
+      // rationale as authoritative admin intent.
       winners: b.winners.slice(0, 5).map((w) => ({
         iteration_id: w.id,
         rating: w.rating,
         prompt: w.director_output_json?.prompt ?? "",
         tags: w.tags ?? [],
-        comment: w.user_comment,
-        refinement: w.refinement_instruction,
+        admin_comment: w.user_comment,
+        admin_refinement: w.refinement_instruction,
+        refiner_rationale: w.refiner_rationale,
       })),
       losers: b.losers.slice(0, 5).map((l) => ({
         iteration_id: l.id,
         rating: l.rating,
         prompt: l.director_output_json?.prompt ?? "",
         tags: l.tags ?? [],
-        comment: l.user_comment,
-        refinement: l.refinement_instruction,
+        admin_comment: l.user_comment,
+        admin_refinement: l.refinement_instruction,
+        refiner_rationale: l.refiner_rationale,
       })),
     }));
 
