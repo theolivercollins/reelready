@@ -3,10 +3,10 @@ import { getPricingTiers } from "./pricing";
 import { getFaqs } from "./faqs";
 
 describe("getPricingTiers", () => {
-  it("lead tier starts at 380", async () => {
+  it("lead tier starts at 65", async () => {
     const tiers = await getPricingTiers();
     const lead = tiers.find(t => t.isLead);
-    expect(lead?.priceUsd).toBe(380);
+    expect(lead?.priceUsd).toBe(65);
   });
 });
 

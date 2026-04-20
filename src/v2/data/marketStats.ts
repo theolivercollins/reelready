@@ -24,7 +24,7 @@ const MOCK_ROWS: MarketStatRow[] = [
     // estate video in the U.S. ranges from $300 to $1,500 per video,"
     // with premium/cinematic packages running $1,000–$1,500+.
     market: { label: "$300–$1,500", numericMax: 1500 },
-    elevate: { label: "$380 starting", numericMax: 380 },
+    elevate: { label: "$65 starting", numericMax: 65 },
     source: {
       label: "HomeJab Real Estate Videography Pricing Guide (2024)",
       url: "https://homejab.com/how-much-do-real-estate-videos-cost/",

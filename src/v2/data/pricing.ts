@@ -11,7 +11,7 @@ const MOCK_TIERS: PricingTier[] = [
   {
     id: "starter",
     name: "Single Listing",
-    priceUsd: 380,
+    priceUsd: 65,
     tagline: "One listing, one video.",
     features: ["Up to 60 photos", "16:9 and 9:16 delivered", "Under 24 hours", "Unlimited minor edits"],
     isLead: true,
@@ -19,8 +19,8 @@ const MOCK_TIERS: PricingTier[] = [
   {
     id: "pro",
     name: "Five-Pack",
-    priceUsd: 1600,
-    tagline: "$320 per listing.",
+    priceUsd: 275,
+    tagline: "$55 per listing.",
     features: ["Everything in Single", "Voiceover included", "Priority queue"],
     isLead: false,
   },

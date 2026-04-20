@@ -23,7 +23,7 @@ const FAQS: Faq[] = [
   {
     id: "pricing",
     question: "How much does it cost?",
-    answer: "$380 for a single listing, $320 per listing on the five-pack. Brokerage volume pricing available.",
+    answer: "$65 for a single listing, $55 per listing on the five-pack. Brokerage volume pricing available.",
   },
   {
     id: "orientation",
