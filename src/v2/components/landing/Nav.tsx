@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { V2ThemeToggle } from "@/v2/components/primitives/V2ThemeToggle";
 
 export function Nav() {
   return (
@@ -29,7 +28,6 @@ export function Nav() {
         <a href="#faq" style={{ color: "var(--le-text-muted)" }}>FAQ</a>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <V2ThemeToggle />
         <Link to="/login" className="le-btn le-btn-ghost" style={{ padding: "7px 14px", fontSize: 13 }}>
           Sign in
         </Link>
