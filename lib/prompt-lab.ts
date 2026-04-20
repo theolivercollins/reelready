@@ -273,7 +273,7 @@ export async function retrieveMatchingRecipes(
   return data as RetrievedRecipe[];
 }
 
-function renderExemplarBlock(exemplars: RetrievedExemplar[]): string {
+export function renderExemplarBlock(exemplars: RetrievedExemplar[]): string {
   if (exemplars.length === 0) return "";
   const lines = exemplars.map((e, idx) => {
     const parts = [
@@ -288,7 +288,7 @@ function renderExemplarBlock(exemplars: RetrievedExemplar[]): string {
   return `\n\n━━━ PAST WINNERS ON STRUCTURALLY SIMILAR PHOTOS ━━━\nThese are ${exemplars.length} prior Lab iterations on photos whose analysis embedded close to this one, rated 4+ by the admin. They are evidence of what has worked on similar compositions. Bias toward their patterns unless the current photo's specifics argue otherwise.\n\n${lines.join("\n\n")}\n━━━ END PAST WINNERS ━━━`;
 }
 
-function renderLoserBlock(losers: RetrievedExemplar[]): string {
+export function renderLoserBlock(losers: RetrievedExemplar[]): string {
   if (losers.length === 0) return "";
   const lines = losers.map((e, idx) => {
     const parts = [
@@ -312,7 +312,7 @@ function renderPreviousAttemptsBlock(attempts: Array<{ camera_movement: string; 
   return `\n\n━━━ ALREADY TRIED ON THIS PHOTO — DO NOT REPEAT ━━━\nThe following prompts were already generated for this exact photo in previous iterations. They were NOT rated 5★. You MUST produce a meaningfully different camera_movement + prompt combination. Do not rephrase — pick a different verb or a different compositional target.\n\n${lines.join("\n")}\n━━━ END ALREADY TRIED ━━━`;
 }
 
-function renderRecipeBlock(recipes: RetrievedRecipe[]): string {
+export function renderRecipeBlock(recipes: RetrievedRecipe[]): string {
   if (recipes.length === 0) return "";
   const top = recipes[0];
   return `\n\n━━━ VALIDATED RECIPE MATCH ━━━\nArchetype "${top.archetype}" (room=${top.room_type}, movement=${top.camera_movement}, provider=${top.provider ?? "auto"}, applied ${top.times_applied}× before, distance ${top.distance.toFixed(3)}).\n\nRecipe template:\n  ${top.prompt_template}\n\nIf this photo fits the archetype, adapt the template by substituting the actual named feature from this photo's key_features. Keep the verb and structure. Deviate only if a specific key_feature makes the template awkward.\n━━━ END RECIPE MATCH ━━━`;

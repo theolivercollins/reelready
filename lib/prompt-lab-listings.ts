@@ -1,9 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "./client.js";
-import { analyzeSingleImage } from "./prompt-lab.js";
+import {
+  analyzeSingleImage,
+  retrieveMatchingRecipes,
+  retrieveSimilarIterations,
+  retrieveSimilarLosers,
+  renderRecipeBlock,
+  renderExemplarBlock,
+  renderLoserBlock,
+  type RetrievedRecipe,
+  type RetrievedExemplar,
+} from "./prompt-lab.js";
 import { parseDirectorIntent, type DirectorIntent } from "./prompts/director-intent.js";
 import { DIRECTOR_SYSTEM, buildDirectorUserPrompt } from "./prompts/director.js";
-import { buildAnalysisText, embedTextSafe, toPgVector } from "./embeddings.js";
+import { buildAnalysisText, embedTextSafe, fromPgVector, toPgVector } from "./embeddings.js";
 
 export interface PairResolution {
   endImageUrl: string | null;
@@ -106,7 +116,7 @@ export async function directListingScenes(listingId: string): Promise<void> {
 
   const { data: photos } = await supabase
     .from("prompt_lab_listing_photos")
-    .select("id, photo_index, image_url, analysis_json")
+    .select("id, photo_index, image_url, analysis_json, embedding")
     .eq("listing_id", listingId)
     .order("photo_index");
   if (!photos || photos.length === 0) throw new Error(`Listing ${listingId} has no photos`);
@@ -141,12 +151,51 @@ export async function directListingScenes(listingId: string): Promise<void> {
     };
   });
 
+  // Retrieve promoted recipes + past winners + past losers per photo,
+  // dedupe across photos, and inject as in-context examples. Restores
+  // the legacy recipe-driven director behavior that Lab sessions have
+  // always used. End-frame pairing is unaffected — the director still
+  // returns end_photo_id per scene and that flows through the same
+  // resolver below.
+  const recipeDedupe = new Map<string, RetrievedRecipe>();
+  const exemplarDedupe = new Map<string, RetrievedExemplar>();
+  const loserDedupe = new Map<string, RetrievedExemplar>();
+  for (let i = 0; i < photos.length; i++) {
+    const p = photos[i];
+    const pdata = photoData[i];
+    const vec = fromPgVector(p.embedding as string | null);
+    if (!vec) continue;
+    try {
+      const [recipes, winners, losers] = await Promise.all([
+        retrieveMatchingRecipes(vec, pdata.room_type, { limit: 1 }),
+        retrieveSimilarIterations(vec, { minRating: 4, limit: 3 }),
+        retrieveSimilarLosers(vec, { maxRating: 2, limit: 2 }),
+      ]);
+      for (const r of recipes) if (!recipeDedupe.has(r.archetype)) recipeDedupe.set(r.archetype, r);
+      for (const w of winners) if (!exemplarDedupe.has(w.id)) exemplarDedupe.set(w.id, w);
+      for (const l of losers) if (!loserDedupe.has(l.id)) loserDedupe.set(l.id, l);
+    } catch (err) {
+      // Retrieval is best-effort — a failing RPC must not block the
+      // director. The rulebook alone still produces valid output.
+      console.warn(`[directListingScenes] retrieval for photo ${p.id}:`, err);
+    }
+  }
+  const recipes = [...recipeDedupe.values()].slice(0, 5);
+  const exemplars = [...exemplarDedupe.values()].slice(0, 5);
+  const losers = [...loserDedupe.values()].slice(0, 3);
+
+  const userPrompt =
+    buildDirectorUserPrompt(photoData) +
+    renderRecipeBlock(recipes) +
+    renderExemplarBlock(exemplars) +
+    renderLoserBlock(losers);
+
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
     system: DIRECTOR_SYSTEM,
-    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) }],
+    messages: [{ role: "user", content: userPrompt }],
   });
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);

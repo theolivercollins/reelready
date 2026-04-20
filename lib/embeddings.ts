@@ -48,6 +48,21 @@ export function toPgVector(vector: number[]): string {
   return "[" + vector.join(",") + "]";
 }
 
+// Inverse of toPgVector. Supabase returns embeddings as pgvector-formatted
+// strings when you SELECT them; parse back to number[] for retrieval RPCs.
+export function fromPgVector(literal: string | null | undefined): number[] | null {
+  if (!literal) return null;
+  const trimmed = literal.trim().replace(/^\[|\]$/g, "");
+  if (!trimmed) return null;
+  const out: number[] = [];
+  for (const part of trimmed.split(",")) {
+    const n = Number(part);
+    if (!Number.isFinite(n)) return null;
+    out.push(n);
+  }
+  return out;
+}
+
 // Try to embed, never throw. Returns null if OPENAI_API_KEY is missing or
 // the call fails. Lab should degrade gracefully — no key == no retrieval.
 export async function embedTextSafe(
