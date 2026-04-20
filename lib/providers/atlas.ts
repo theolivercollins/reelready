@@ -56,8 +56,15 @@ export const ATLAS_MODELS: Record<string, AtlasModelDescriptor> = {
     slug: "kwaivgi/kling-v2.6-pro/image-to-video",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerSecond: 6,      // $0.060/s
-    priceCentsPerClip: 30,       // $0.300 for 5s
+    // OBSERVED 2026-04-20: wallet delta was $0.60 for a 5s render (expected $0.30
+    // from original docs reading). Atlas is billing at $0.12/s, not $0.06/s.
+    // Either the published docs were stale, Atlas applies a markup, or the clip
+    // silently ran at 10s. Updated provisionally to match observed billing.
+    // ⚠️  Other SKU rates have NOT been independently verified — cross-check
+    // kling-v3-pro, kling-v3-std, kling-v2-1-pair, and kling-o3-pro against
+    // Atlas invoice before high-volume Phase B work.
+    priceCentsPerSecond: 12,     // $0.120/s (observed — 2x our original reading; pending Atlas invoice verification)
+    priceCentsPerClip: 60,       // $0.600 for 5s
   },
   "kling-v2-1-pair": {
     slug: "kwaivgi/kling-v2.1-i2v-pro/start-end-frame",

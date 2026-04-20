@@ -46,8 +46,8 @@ export const LAB_MODELS: LabModelInfo[] = [
     slug: "kwaivgi/kling-v2.6-pro/image-to-video",
     label: "Kling 2.6 Pro",
     shortLabel: "v2.6 Pro",
-    priceCents: 30,
-    priceLabel: "$0.30",
+    priceCents: 60,              // Corrected 2026-04-20: observed $0.60/clip, was $0.30
+    priceLabel: "$0.60",
     supportsEndFrame: true,
     note: "Smoothest motion for single-image shots. Current strong default for interiors.",
   },

@@ -18,6 +18,7 @@ import {
   type LabListingIteration,
 } from "@/lib/labListingsApi";
 import { rateIteration as rateIterationApi } from "@/lib/labListingsApi";
+import { getLabModel } from "@/lib/labModels";
 
 export default function LabListingDetail() {
   const { id = "" } = useParams();
@@ -67,15 +68,18 @@ export default function LabListingDetail() {
     setActionLoading("render-all");
     try {
       const renderedSceneIds = new Set(iterations.map((i) => i.scene_id));
-      const unrendered = scenes
-        .filter((s) => !s.archived && !renderedSceneIds.has(s.id))
-        .map((s) => s.id);
-      if (unrendered.length === 0) return;
+      const unrenderedScenes = scenes.filter((s) => !s.archived && !renderedSceneIds.has(s.id));
+      if (unrenderedScenes.length === 0) return;
+      const totalCents = unrenderedScenes.reduce((sum, s) => {
+        const isPaired = Boolean(s.use_end_frame && s.end_image_url);
+        const modelKey = isPaired ? "kling-v2-1-pair" : (listing?.model_name ?? "kling-v2-6-pro");
+        return sum + (getLabModel(modelKey)?.priceCents ?? 0);
+      }, 0);
       const confirmed = window.confirm(
-        `Render ${unrendered.length} scenes at $0.095 each = $${(unrendered.length * 0.095).toFixed(2)}?`,
+        `Render ${unrenderedScenes.length} scene${unrenderedScenes.length === 1 ? "" : "s"} at $${(totalCents / 100).toFixed(2)} total (real SKU pricing)?`,
       );
       if (!confirmed) return;
-      await renderListing(id, { scene_ids: unrendered });
+      await renderListing(id, { scene_ids: unrenderedScenes.map((s) => s.id) });
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

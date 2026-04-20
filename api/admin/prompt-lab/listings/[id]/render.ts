@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../../../../lib/auth.js";
 import { getSupabase } from "../../../../../lib/client.js";
 import { AtlasProvider } from "../../../../../lib/providers/atlas.js";
+import { sanitizeDirectorPrompt } from "../../../../../lib/sanitize-prompt.js";
 
 // Kling v3 needs explicit stabilization language in the positive prompt
 // — "smooth / steady / cinematic" alone is insufficient. This prefix
@@ -78,13 +79,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // produces 400–500 char prompts that confuse video models).
     // Skip entirely when regenerating from a source iteration (the source
     // prompt already reflects prior refinements, or the user wants it verbatim).
-    let basePrompt = sourceIteration ? sourceIteration.director_prompt : scene.director_prompt;
-    if (!sourceIteration && scene.refinement_notes && scene.refinement_notes.trim().length > 0) {
+    let basePrompt = sanitizeDirectorPrompt(
+      sourceIteration ? sourceIteration.director_prompt : scene.director_prompt
+    );
+    // Belt-and-braces: also sanitize refinement_notes in case the stability
+    // prefix leaked into notes from an older chat session.
+    const sanitizedNotes = scene.refinement_notes
+      ? sanitizeDirectorPrompt(scene.refinement_notes)
+      : null;
+    if (!sourceIteration && sanitizedNotes && sanitizedNotes.trim().length > 0) {
       try {
         const { rewritePromptWithDirectives } = await import("../../../../../lib/refine-prompt.js");
         const { rewritten } = await rewritePromptWithDirectives({
           basePrompt,
-          directives: scene.refinement_notes,
+          directives: sanitizedNotes!,
           isPaired,
         });
         basePrompt = rewritten;
@@ -93,8 +101,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("id", sceneId);
       } catch (rewriteErr) {
         console.warn(`[render DQ.5] rewrite failed, falling back to concat:`, rewriteErr);
-        basePrompt = scene.refinement_notes
-          ? `${basePrompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${scene.refinement_notes}`
+        basePrompt = sanitizedNotes
+          ? `${basePrompt}\n\nADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:\n${sanitizedNotes}`
           : basePrompt;
       }
     }

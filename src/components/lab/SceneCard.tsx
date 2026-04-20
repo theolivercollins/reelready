@@ -2,6 +2,12 @@ import { useMemo, useState } from "react";
 import { Loader2, Star, Play, Sparkles, RotateCcw, X, Copy, Trash2, ChevronDown, ChevronRight, Archive, ArchiveRestore, Layers, SplitSquareHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PairVisualization } from "./PairVisualization";
 import { ChatPanel } from "./ChatPanel";
 import { RatingReasonsModal } from "./RatingReasonsModal";
@@ -488,20 +494,44 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
             )}
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => submitRender()} disabled={rendering} title={`Render with ${getLabModel(defaultModel)?.label ?? defaultModel}`}>
-              {rendering ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
-              Render {getLabModel(defaultModel)?.shortLabel ?? defaultModel}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setGenAllOpen(true)} disabled={rendering}>
-              <Layers className="mr-1 h-3 w-3" />
-              Compare models
-            </Button>
+            {(() => {
+              const isPaired = Boolean(scene.use_end_frame && scene.end_image_url);
+              const effectiveModelKey = isPaired ? "kling-v2-1-pair" : defaultModel;
+              const effectiveModel = getLabModel(effectiveModelKey);
+              return (
+                <Button
+                  size="sm"
+                  onClick={() => submitRender()}
+                  disabled={rendering}
+                  title={`Render with ${effectiveModel?.label ?? effectiveModelKey} · ${effectiveModel?.priceLabel ?? ""}`}
+                >
+                  {rendering ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
+                  Render {effectiveModel?.shortLabel ?? effectiveModelKey}
+                  {effectiveModel?.priceLabel && (
+                    <span className="ml-1.5 font-mono text-[10px] tabular-nums opacity-70">{effectiveModel.priceLabel}</span>
+                  )}
+                </Button>
+              );
+            })()}
             {iterations.filter((i) => i.clip_url).length >= 2 && (
               <Button size="sm" variant="outline" onClick={() => setCompareOpen(true)}>
                 <SplitSquareHorizontal className="mr-1 h-3 w-3" />
                 Compare
               </Button>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={rendering}>
+                  More <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setGenAllOpen(true)}>
+                  <Layers className="mr-2 h-3 w-3" /> Compare models…{" "}
+                  <span className="ml-2 text-[10px] text-muted-foreground">(multi-cost)</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

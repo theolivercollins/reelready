@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireAdmin } from "../../../../../../../lib/auth.js";
 import { getSupabase } from "../../../../../../../lib/client.js";
+import { computeClaudeCost } from "../../../../../../../lib/utils/claude-cost.js";
+import { sanitizeDirectorPrompt } from "../../../../../../../lib/sanitize-prompt.js";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -18,11 +20,47 @@ You have TWO tools — use them proactively:
 
 1. save_future_instruction(instruction) — append a concise directive to the scene's refinement notes. Applied alongside the director prompt on the NEXT render.
 
-2. update_director_prompt(new_prompt) — rewrite the scene's director prompt entirely. Use when the user wants a structural change, or when refinement notes have grown messy and should be folded cleanly into a single new prompt. Preserve the "LOCKED-OFF CAMERA..." stability preamble if present. Write the new prompt as a single paragraph of concrete visual language.
+2. update_director_prompt(new_prompt) — rewrite the scene's director prompt entirely. Use when the user wants a structural change, or when refinement notes have grown messy and should be folded cleanly into a single new prompt.
 
 Be decisive. Don't ask for confirmation on small tweaks. You can call multiple tools in one turn. After tool calls, add a brief 1-2 sentence confirmation.
 
-Keep replies tight. The user can watch the videos themselves — focus on translating their intent into concrete changes, and on connecting patterns across iterations (e.g., "iterations #1 and #4 both rated 4+ used slow push-in verbs; #2 and #3 with orbit were rated ≤2").`;
+Keep replies tight. The user can watch the videos themselves — focus on translating their intent into concrete changes, and on connecting patterns across iterations (e.g., "iterations #1 and #4 both rated 4+ used slow push-in verbs; #2 and #3 with orbit were rated ≤2").
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT STYLE — RULES FOR update_director_prompt
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+LENGTH LIMITS (hard):
+- Single-image scene (no end photo): ≤ 120 characters.
+- Paired scene (has both start and end photo): ≤ 250 characters.
+Character count includes spaces. Count before you emit.
+
+ONE SENTENCE ONLY. No em-dashes used as sentence breaks between independent clauses. No "Motion is fluid" or "not jerky" or "Emphasize X" or "Camera moves steadily…" filler. No trailing qualifiers like "without introducing any hallucinated geometry" or "as the focal destination."
+
+DO NOT include "LOCKED-OFF CAMERA" or "gimbal-stabilized" or "Steadicam rig" or "Zero camera shake" phrases. Those are render-time additions applied only on v3-family models. Your prompt goes into scene.director_prompt which is the base; the system prefixes stability language itself when appropriate. If you see those phrases in the current scene state, DO NOT copy them into new_prompt.
+
+REQUIRED PATTERN:
+- Single-image: "[pace] cinematic [movement] [preposition] [subject + key feature]"
+- Paired: "[pace] cinematic [movement] from [start feature] to [end feature]"
+
+GOOD example (55 chars): "slow cinematic push in toward the dark espresso island"
+BAD example (410 chars — DO NOT produce this): "LOCKED-OFF CAMERA on a gimbal-stabilized Steadicam rig. Smooth motorized dolly motion only. Zero camera shake, zero handheld jitter, tripod-stable framing. Strong steady push-in toward the dark espresso island while simultaneously drifting the frame gently leftward—a unified forward and leftward glide that reveals the open sliders and great room beyond without introducing any hallucinated geometry at frame edges."
+
+BANNED PHRASES (do not emit any of these):
+- "Motion is fluid and continuous"
+- "not jerky, not too slow"
+- "Emphasize the [anything]"
+- "Camera moves steadily forward"
+- "closing distance"
+- "focal destination"
+- "LOCKED-OFF CAMERA"
+- "gimbal-stabilized"
+- "Steadicam rig"
+- "Zero camera shake"
+- "motorized dolly motion only"
+- "tripod-stable framing"
+- Any trailing clause like "without introducing any hallucinated geometry"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
 function sse(res: VercelResponse, payload: unknown) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -45,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
   const { data: scene, error: sceneErr } = await supabase
     .from("prompt_lab_listing_scenes")
-    .select("id, scene_number, room_type, camera_movement, director_prompt, refinement_notes, chat_messages")
+    .select("id, listing_id, scene_number, room_type, camera_movement, director_prompt, refinement_notes, chat_messages")
     .eq("id", sceneId)
     .single();
   if (sceneErr || !scene) return res.status(404).json({ error: "scene not found" });
@@ -90,12 +128,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.flushHeaders?.();
 
   const client = new Anthropic();
+  const CHAT_MODEL = "claude-haiku-4-5-20251001";
   let assistantText = "";
   const savedInstructions: string[] = [];
 
   try {
     const stream = client.messages.stream({
-      model: "claude-haiku-4-5-20251001",
+      model: CHAT_MODEL,
       max_tokens: 2048,
       system: SYSTEM,
       tools: [
@@ -112,11 +151,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
         {
           name: "update_director_prompt",
-          description: "Rewrite the scene's director prompt entirely. Preserve the 'LOCKED-OFF CAMERA...' stability preamble if present.",
+          description: "Rewrite the scene's director prompt entirely. Follow the PROMPT STYLE rules in your system prompt: ≤120 chars (single-image) or ≤250 chars (paired), one sentence, no stability-prefix phrases.",
           input_schema: {
             type: "object",
             properties: {
-              new_prompt: { type: "string", description: "The complete new director prompt as a single paragraph." },
+              new_prompt: { type: "string", description: "The complete new director prompt. One concise cinematography sentence. No 'LOCKED-OFF CAMERA' or stability-prefix language." },
             },
             required: ["new_prompt"],
           },
@@ -135,6 +174,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const final = await stream.finalMessage();
+
+    // Record token cost for this chat turn (Haiku 4.5 — cheaper than Sonnet).
+    const cost = computeClaudeCost(final.usage, CHAT_MODEL);
+    await supabase.from("cost_events").insert({
+      property_id: null,
+      scene_id: sceneId,
+      stage: "chat",
+      provider: "anthropic",
+      units_consumed: cost.totalTokens,
+      unit_type: "tokens",
+      cost_cents: Math.round(cost.costCents),
+      metadata: { scope: "lab_listing_scene_chat", listing_id: (scene as { listing_id?: string }).listing_id ?? null, scene_id: sceneId, model: CHAT_MODEL },
+    });
+
     let promptUpdated: string | null = null;
     for (const block of final.content) {
       if (block.type === "tool_use" && block.name === "save_future_instruction") {
@@ -146,7 +199,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (block.type === "tool_use" && block.name === "update_director_prompt") {
         const input = block.input as { new_prompt?: string };
-        if (input.new_prompt) promptUpdated = input.new_prompt.trim();
+        if (input.new_prompt) promptUpdated = sanitizeDirectorPrompt(input.new_prompt.trim());
       }
     }
 

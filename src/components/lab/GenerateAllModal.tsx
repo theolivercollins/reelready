@@ -32,6 +32,10 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, usedModels = [], onG
   const totalCents = chosen.reduce((sum, m) => sum + m.priceCents, 0);
 
   async function submit() {
+    const confirmed = window.confirm(
+      `Fire ${chosen.length} render${chosen.length === 1 ? "" : "s"} at $${(totalCents / 100).toFixed(2)} total? This is a multi-model comparison — use only when you want to A/B test.`,
+    );
+    if (!confirmed) return;
     setSubmitting(true);
     try {
       await onGenerate([...selected]);
