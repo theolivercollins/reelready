@@ -24,8 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const body = (req.body ?? {}) as {
     scene_ids?: string[] | "all";
     model_override?: string;
+    models?: string[];
     source_iteration_id?: string;
   };
+  // When `models` is supplied, submit one iteration per model — the
+  // "Generate with all models" flow. model_override is ignored in
+  // that case; each model becomes its own iteration row.
+  const modelsToRender: string[] = body.models && body.models.length > 0
+    ? body.models
+    : [body.model_override ?? ""].filter(Boolean);
   const supabase = getSupabase();
   const { data: listing } = await supabase.from("prompt_lab_listings").select("model_name").eq("id", id).maybeSingle();
   if (!listing) return res.status(404).json({ error: "listing not found" });
@@ -70,37 +77,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: photo } = await supabase.from("prompt_lab_listing_photos")
       .select("image_url").eq("id", scene.photo_id).maybeSingle();
     if (!photo) continue;
-    const { data: existing } = await supabase.from("prompt_lab_listing_scene_iterations")
-      .select("iteration_number").eq("scene_id", sceneId)
-      .order("iteration_number", { ascending: false }).limit(1).maybeSingle();
-    const iterationNumber = (existing?.iteration_number ?? 0) + 1;
 
-    const { data: iter, error: iterErr } = await supabase.from("prompt_lab_listing_scene_iterations").insert({
-      scene_id: sceneId,
-      iteration_number: iterationNumber,
-      director_prompt: effectivePrompt,
-      model_used: body.model_override ?? listing.model_name,
-      status: "submitting",
-    }).select().single();
-    if (iterErr || !iter) continue;
+    const modelsForScene = modelsToRender.length > 0 ? modelsToRender : [listing.model_name];
+    for (const modelKey of modelsForScene) {
+      const { data: existing } = await supabase.from("prompt_lab_listing_scene_iterations")
+        .select("iteration_number").eq("scene_id", sceneId)
+        .order("iteration_number", { ascending: false }).limit(1).maybeSingle();
+      const iterationNumber = (existing?.iteration_number ?? 0) + 1;
 
-    try {
-      const job = await provider.generateClip({
-        sourceImage: Buffer.from(""),
-        sourceImageUrl: photo.image_url,
-        endImageUrl: effectiveEndImage,
-        prompt: effectivePrompt,
-        durationSeconds: 5,
-        aspectRatio: "16:9",
-        modelOverride: body.model_override,
-      });
-      await supabase.from("prompt_lab_listing_scene_iterations")
-        .update({ provider_task_id: job.jobId, status: "rendering" }).eq("id", iter.id);
-      results.push({ scene_id: sceneId, iteration_id: iter.id, task_id: job.jobId });
-    } catch (err) {
-      await supabase.from("prompt_lab_listing_scene_iterations")
-        .update({ status: "failed", render_error: err instanceof Error ? err.message : String(err) })
-        .eq("id", iter.id);
+      const { data: iter, error: iterErr } = await supabase.from("prompt_lab_listing_scene_iterations").insert({
+        scene_id: sceneId,
+        iteration_number: iterationNumber,
+        director_prompt: effectivePrompt,
+        model_used: modelKey,
+        status: "submitting",
+      }).select().single();
+      if (iterErr || !iter) continue;
+
+      try {
+        const job = await provider.generateClip({
+          sourceImage: Buffer.from(""),
+          sourceImageUrl: photo.image_url,
+          endImageUrl: effectiveEndImage,
+          prompt: effectivePrompt,
+          durationSeconds: 5,
+          aspectRatio: "16:9",
+          modelOverride: modelKey,
+        });
+        await supabase.from("prompt_lab_listing_scene_iterations")
+          .update({ provider_task_id: job.jobId, status: "rendering" }).eq("id", iter.id);
+        results.push({ scene_id: sceneId, iteration_id: iter.id, task_id: job.jobId });
+      } catch (err) {
+        await supabase.from("prompt_lab_listing_scene_iterations")
+          .update({ status: "failed", render_error: err instanceof Error ? err.message : String(err) })
+          .eq("id", iter.id);
+      }
     }
   }
 

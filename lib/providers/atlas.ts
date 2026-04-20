@@ -9,25 +9,57 @@ import type {
 // selectable via ATLAS_VIDEO_MODEL without touching call sites.
 export interface AtlasModelDescriptor {
   slug: string;                                   // `model` value Atlas expects
-  endFrameField: "end_image" | "last_image" | null;
-  allowedDurations: readonly number[] | "continuous";  // either a fixed set or a 2..15 range
-  durationRange?: { min: number; max: number };   // only when allowedDurations === "continuous"
-  priceCentsPerClip: number;                      // for cost tracking
+  endFrameField: "end_image" | null;
+  allowedDurations: readonly number[] | "continuous";
+  durationRange?: { min: number; max: number };
+  priceCentsPerClip: number;
 }
 
+// Seven Kling SKUs registered. End-frame support is set per-model:
+// - v3-pro / v3-std / v2-6-pro / o3-pro: accept `end_image` (works in
+//   our probes, matches Kling's native i2v API).
+// - v2-1-pair: the "start-end-frame" SKU purpose-built for paired
+//   renders. Best choice when user has a real paired scene.
+// - v2-master: master-class i2v that does NOT accept end_image in
+//   Kling native; forced to single-start. Our scene.use_end_frame
+//   toggle already lets the user render without a pair.
+// Prices are rounded UP to integer cents for cost_events accuracy.
 export const ATLAS_MODELS: Record<string, AtlasModelDescriptor> = {
   "kling-v3-pro": {
     slug: "kwaivgi/kling-v3.0-pro/image-to-video",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerClip: 10, // $0.095 rounded up to integer cents
+    priceCentsPerClip: 10, // $0.095
   },
-  "wan-2.7": {
-    slug: "alibaba/wan-2.7/image-to-video",
-    endFrameField: "last_image",
-    allowedDurations: "continuous",
-    durationRange: { min: 2, max: 15 },
-    priceCentsPerClip: 10, // $0.10 per clip
+  "kling-v3-std": {
+    slug: "kwaivgi/kling-v3.0-std/image-to-video",
+    endFrameField: "end_image",
+    allowedDurations: [5, 10],
+    priceCentsPerClip: 8, // $0.071
+  },
+  "kling-v2-6-pro": {
+    slug: "kwaivgi/kling-v2.6-pro/image-to-video",
+    endFrameField: "end_image",
+    allowedDurations: [5, 10],
+    priceCentsPerClip: 6, // $0.060
+  },
+  "kling-v2-1-pair": {
+    slug: "kwaivgi/kling-v2.1-i2v-pro/start-end-frame",
+    endFrameField: "end_image",
+    allowedDurations: [5, 10],
+    priceCentsPerClip: 8, // $0.076
+  },
+  "kling-v2-master": {
+    slug: "kwaivgi/kling-v2.0-i2v-master",
+    endFrameField: null,
+    allowedDurations: [5, 10],
+    priceCentsPerClip: 23, // $0.221
+  },
+  "kling-o3-pro": {
+    slug: "kwaivgi/kling-video-o3-pro/image-to-video",
+    endFrameField: "end_image",
+    allowedDurations: [5, 10],
+    priceCentsPerClip: 10, // $0.095
   },
 };
 
@@ -43,7 +75,6 @@ export interface AtlasSubmitBody {
   cfg_scale?: number;
   negative_prompt?: string;
   end_image?: string;
-  last_image?: string;
 }
 
 // Kling v3-pro introduces noticeable camera shake/vibration on push-ins

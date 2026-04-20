@@ -25,16 +25,23 @@ describe("buildAtlasRequestBody", () => {
     expect((body as unknown as Record<string, unknown>).last_image).toBeUndefined();
   });
 
-  it("maps GenerateClipParams to the Wan 2.7 body with last_image", () => {
+  it("maps GenerateClipParams to the Kling v2.1 pair body with end_image", () => {
     const body = buildAtlasRequestBody(
       { ...baseParams, endImageUrl: "https://cdn.example.com/end.jpg" },
-      ATLAS_MODELS["wan-2.7"],
+      ATLAS_MODELS["kling-v2-1-pair"],
     );
-    expect(body.model).toBe("alibaba/wan-2.7/image-to-video");
+    expect(body.model).toBe("kwaivgi/kling-v2.1-i2v-pro/start-end-frame");
     expect(body.image).toBe("https://cdn.example.com/start.jpg");
-    expect(body.last_image).toBe("https://cdn.example.com/end.jpg");
-    // Kling-only field must not leak onto Wan submissions.
+    expect(body.end_image).toBe("https://cdn.example.com/end.jpg");
+  });
+
+  it("omits end-frame field when the model's endFrameField is null (master i2v)", () => {
+    const body = buildAtlasRequestBody(
+      { ...baseParams, endImageUrl: "https://cdn.example.com/end.jpg" },
+      ATLAS_MODELS["kling-v2-master"],
+    );
     expect((body as unknown as Record<string, unknown>).end_image).toBeUndefined();
+    expect((body as unknown as Record<string, unknown>).last_image).toBeUndefined();
   });
 
   it("omits the end-frame field when endImageUrl is missing", () => {
@@ -59,23 +66,12 @@ describe("buildAtlasRequestBody", () => {
       { ...baseParams, durationSeconds: 3 },
       ATLAS_MODELS["kling-v3-pro"],
     );
-    expect(klingShort.duration).toBe(5); // Kling v3.0 Pro only allows 5 or 10
+    expect(klingShort.duration).toBe(5); // Kling only allows 5 or 10
     const klingLong = buildAtlasRequestBody(
       { ...baseParams, durationSeconds: 12 },
       ATLAS_MODELS["kling-v3-pro"],
     );
     expect(klingLong.duration).toBe(10);
-    // Wan allows arbitrary duration 2..15
-    const wanShort = buildAtlasRequestBody(
-      { ...baseParams, durationSeconds: 3 },
-      ATLAS_MODELS["wan-2.7"],
-    );
-    expect(wanShort.duration).toBe(3);
-    const wanLong = buildAtlasRequestBody(
-      { ...baseParams, durationSeconds: 20 },
-      ATLAS_MODELS["wan-2.7"],
-    );
-    expect(wanLong.duration).toBe(15);
   });
 });
 
@@ -115,8 +111,8 @@ describe("AtlasProvider.resolveModel (via submit)", () => {
   it("uses modelOverride when provided", () => {
     const provider = new AtlasProvider();
     // @ts-expect-error — access private for unit-test resolution
-    const resolved = provider.resolveModel("wan-2.7");
-    expect(resolved.slug).toBe("alibaba/wan-2.7/image-to-video");
+    const resolved = provider.resolveModel("kling-v2-master");
+    expect(resolved.slug).toBe("kwaivgi/kling-v2.0-i2v-master");
   });
 
   it("falls back to env model when override is absent", () => {

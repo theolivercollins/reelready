@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
-import { Loader2, Star, Play, Sparkles, RotateCcw, X, Copy, Trash2, ChevronDown, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
+import { Loader2, Star, Play, Sparkles, RotateCcw, X, Copy, Trash2, ChevronDown, ChevronRight, Archive, ArchiveRestore, Layers, SplitSquareHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PairVisualization } from "./PairVisualization";
 import { ChatPanel } from "./ChatPanel";
 import { RatingReasonsModal } from "./RatingReasonsModal";
+import { GenerateAllModal } from "./GenerateAllModal";
+import { CompareModal } from "./CompareModal";
 import {
   renderListing,
+  renderSceneWithModels,
   rateIteration,
   refineScenePrompt,
   chatSceneStream,
@@ -21,6 +24,7 @@ import {
   type LabListingIteration,
   type LabListingPhoto,
 } from "@/lib/labListingsApi";
+import { getLabModel } from "@/lib/labModels";
 
 interface SceneCardProps {
   listingId: string;
@@ -103,8 +107,6 @@ function IterationExpanded({ listingId, scene, iter, onReload }: {
     onReload();
   }
 
-  const otherModel = iter.model_used === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro";
-
   return (
     <>
       {ratingModalValue !== null && (
@@ -156,9 +158,6 @@ function IterationExpanded({ listingId, scene, iter, onReload }: {
             <Button size="sm" variant="outline" onClick={() => regenerate()} disabled={busy}>
               {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCcw className="mr-1 h-3 w-3" />}
               Regenerate
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => regenerate(otherModel)} disabled={busy}>
-              Try {otherModel === "kling-v3-pro" ? "Kling" : "Wan"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setPromptOpen((o) => !o)}>
               {promptOpen ? <ChevronDown className="mr-1 h-3 w-3" /> : <ChevronRight className="mr-1 h-3 w-3" />}
@@ -318,6 +317,8 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
   const [editing, setEditing] = useState(false);
   const [promptDraft, setPromptDraft] = useState(scene.director_prompt);
   const [showArchivedIters, setShowArchivedIters] = useState(false);
+  const [genAllOpen, setGenAllOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   // Newest first so the latest iteration is the default-expanded hero.
   const { orderedIters, archivedCount } = useMemo(() => {
@@ -448,16 +449,43 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
             )}
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => submitRender()} disabled={rendering}>
+            <Button size="sm" onClick={() => submitRender()} disabled={rendering} title={`Render with ${getLabModel(defaultModel)?.label ?? defaultModel}`}>
               {rendering ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
-              Render {defaultModel === "kling-v3-pro" ? "Kling" : "Wan"}
+              Render {getLabModel(defaultModel)?.shortLabel ?? defaultModel}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => submitRender(defaultModel === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro")} disabled={rendering}>
-              <RotateCcw className="mr-1 h-3 w-3" />
-              Try {defaultModel === "kling-v3-pro" ? "Wan 2.7" : "Kling 3.0"}
+            <Button size="sm" variant="outline" onClick={() => setGenAllOpen(true)} disabled={rendering}>
+              <Layers className="mr-1 h-3 w-3" />
+              Generate all
             </Button>
+            {iterations.filter((i) => i.clip_url).length >= 2 && (
+              <Button size="sm" variant="outline" onClick={() => setCompareOpen(true)}>
+                <SplitSquareHorizontal className="mr-1 h-3 w-3" />
+                Compare
+              </Button>
+            )}
           </div>
         </div>
+
+        {genAllOpen && (
+          <GenerateAllModal
+            sceneLabel={`Scene ${scene.scene_number} · ${scene.room_type} · ${scene.camera_movement}`}
+            useEndFrame={scene.use_end_frame}
+            onGenerate={async (models) => {
+              await renderSceneWithModels(listingId, scene.id, models);
+              onReload();
+            }}
+            onClose={() => setGenAllOpen(false)}
+          />
+        )}
+        {compareOpen && (
+          <CompareModal
+            listingId={listingId}
+            sceneLabel={`Scene ${scene.scene_number} · ${scene.room_type}`}
+            iterations={orderedIters.filter((i) => i.clip_url)}
+            onClose={() => setCompareOpen(false)}
+            onReload={onReload}
+          />
+        )}
 
         {orderedIters.length === 0 && (
           <p className="text-xs text-muted-foreground">No iterations yet. Click Render to generate the first clip.</p>

@@ -1,0 +1,77 @@
+// Kept in sync with lib/providers/atlas.ts::ATLAS_MODELS. Source of
+// truth for the UI — model labels, per-clip cost, end-frame support.
+// If a new model is registered server-side, add it here too.
+
+export interface LabModelInfo {
+  key: string;
+  slug: string;
+  label: string;
+  shortLabel: string;
+  priceCents: number;
+  priceLabel: string;
+  supportsEndFrame: boolean;
+  note?: string;
+}
+
+export const LAB_MODELS: LabModelInfo[] = [
+  {
+    key: "kling-v3-pro",
+    slug: "kwaivgi/kling-v3.0-pro/image-to-video",
+    label: "Kling 3.0 Pro",
+    shortLabel: "v3 Pro",
+    priceCents: 10,
+    priceLabel: "$0.095",
+    supportsEndFrame: true,
+  },
+  {
+    key: "kling-v3-std",
+    slug: "kwaivgi/kling-v3.0-std/image-to-video",
+    label: "Kling 3.0 Std",
+    shortLabel: "v3 Std",
+    priceCents: 8,
+    priceLabel: "$0.071",
+    supportsEndFrame: true,
+  },
+  {
+    key: "kling-v2-6-pro",
+    slug: "kwaivgi/kling-v2.6-pro/image-to-video",
+    label: "Kling 2.6 Pro",
+    shortLabel: "v2.6 Pro",
+    priceCents: 6,
+    priceLabel: "$0.060",
+    supportsEndFrame: true,
+  },
+  {
+    key: "kling-v2-1-pair",
+    slug: "kwaivgi/kling-v2.1-i2v-pro/start-end-frame",
+    label: "Kling 2.1 Start-End-Frame",
+    shortLabel: "v2.1 Pair",
+    priceCents: 8,
+    priceLabel: "$0.076",
+    supportsEndFrame: true,
+    note: "Purpose-built for paired scenes (start + end photo).",
+  },
+  {
+    key: "kling-v2-master",
+    slug: "kwaivgi/kling-v2.0-i2v-master",
+    label: "Kling 2.0 Master",
+    shortLabel: "v2 Master",
+    priceCents: 23,
+    priceLabel: "$0.221",
+    supportsEndFrame: false,
+    note: "Premium quality; single-frame only (no end-frame support).",
+  },
+  {
+    key: "kling-o3-pro",
+    slug: "kwaivgi/kling-video-o3-pro/image-to-video",
+    label: "Kling O3 Pro",
+    shortLabel: "O3 Pro",
+    priceCents: 10,
+    priceLabel: "$0.095",
+    supportsEndFrame: true,
+  },
+];
+
+export function getLabModel(key: string): LabModelInfo | undefined {
+  return LAB_MODELS.find((m) => m.key === key);
+}

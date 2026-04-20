@@ -11,7 +11,16 @@ export default function LabListingNew() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
-  const [model, setModel] = useState<"kling-v3-pro" | "wan-2.7">("kling-v3-pro");
+  const [model, setModel] = useState<string>("kling-v3-pro");
+
+  const MODEL_OPTIONS: Array<{ key: string; label: string; price: string }> = [
+    { key: "kling-v3-pro", label: "Kling 3.0 Pro", price: "$0.095" },
+    { key: "kling-v3-std", label: "Kling 3.0 Std", price: "$0.071" },
+    { key: "kling-v2-6-pro", label: "Kling 2.6 Pro", price: "$0.060" },
+    { key: "kling-v2-1-pair", label: "Kling 2.1 Start-End-Frame", price: "$0.076" },
+    { key: "kling-v2-master", label: "Kling 2.0 Master", price: "$0.221" },
+    { key: "kling-o3-pro", label: "Kling O3 Pro", price: "$0.095" },
+  ];
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ total: number; done: number }>({ total: 0, done: 0 });
@@ -63,22 +72,18 @@ export default function LabListingNew() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground">Model</label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setModel("kling-v3-pro")}
-              className={`border px-4 py-2 text-sm ${model === "kling-v3-pro" ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground"}`}
-            >
-              Kling 3.0 Pro ($0.095/clip)
-            </button>
-            <button
-              type="button"
-              onClick={() => setModel("wan-2.7")}
-              className={`border px-4 py-2 text-sm ${model === "wan-2.7" ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground"}`}
-            >
-              Wan 2.7 ($0.10/clip)
-            </button>
+          <label className="text-xs uppercase tracking-wider text-muted-foreground">Default model (use Generate-all on each scene to A/B)</label>
+          <div className="flex flex-wrap gap-2">
+            {MODEL_OPTIONS.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setModel(m.key)}
+                className={`border px-3 py-2 text-xs ${model === m.key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground"}`}
+              >
+                {m.label} <span className="opacity-70">{m.price}</span>
+              </button>
+            ))}
           </div>
         </div>
 

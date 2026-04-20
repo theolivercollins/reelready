@@ -288,6 +288,15 @@ export async function regenerateFromIteration(listingId: string, iterId: string,
   });
 }
 
+export async function renderSceneWithModels(listingId: string, sceneId: string, models: string[]): Promise<{
+  submitted: Array<{ scene_id: string; iteration_id: string; task_id: string }>;
+}> {
+  return authedFetch(`/api/admin/prompt-lab/listings/${listingId}/render`, {
+    method: "POST",
+    body: JSON.stringify({ scene_ids: [sceneId], models }),
+  });
+}
+
 export async function pinChatMessage(listingId: string, sceneId: string, iterationId: string, messageIndex: number, instruction: string): Promise<{
   scene: { id: string; refinement_notes: string | null };
 }> {
