@@ -1,25 +1,11 @@
-import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
+import { useV2Theme } from "@/v2/lib/theme-context";
 
 export function V2ThemeToggle() {
-  const initial = typeof window !== "undefined" && typeof window.localStorage?.getItem === "function"
-    ? (window.localStorage.getItem("le-theme") as "light" | "dark" | null) ?? "dark"
-    : "dark";
-  const [theme, setTheme] = useState<"light" | "dark">(initial);
-
-  useEffect(() => {
-    document.querySelectorAll<HTMLElement>(".le-root, [data-v2-root]").forEach(el => {
-      el.setAttribute("data-theme", theme);
-    });
-    document.documentElement.setAttribute("data-v2-theme", theme);
-    if (typeof window.localStorage?.setItem === "function") {
-      window.localStorage.setItem("le-theme", theme);
-    }
-  }, [theme]);
-
+  const { theme, toggleTheme } = useV2Theme();
   return (
     <button
-      onClick={() => setTheme(t => (t === "dark" ? "light" : "dark"))}
+      onClick={toggleTheme}
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
       className="le-btn le-btn-glass"
       style={{ padding: "6px 10px", borderRadius: 999 }}

@@ -9,14 +9,16 @@ import { FounderOffer } from "@/v2/components/landing/FounderOffer";
 import { FAQ } from "@/v2/components/landing/FAQ";
 import { FinalCTA } from "@/v2/components/landing/FinalCTA";
 import { Footer } from "@/v2/components/landing/Footer";
+import { V2ThemeProvider, useV2Theme } from "@/v2/lib/theme-context";
 
-export default function Landing() {
+function LandingShell() {
+  const { theme } = useV2Theme();
   return (
     <div
       data-testid="v2-landing-root"
       data-v2-root
       className="le-root"
-      data-theme={typeof window !== "undefined" && typeof window.localStorage?.getItem === "function" ? (window.localStorage.getItem("le-theme") ?? "dark") : "dark"}
+      data-theme={theme}
       style={{ minHeight: "100vh", background: "var(--le-bg)" }}
     >
       <div className="le-midnight-wash" data-theme="dark" style={{ position: "relative" }}>
@@ -32,5 +34,13 @@ export default function Landing() {
       <FinalCTA />
       <Footer />
     </div>
+  );
+}
+
+export default function Landing() {
+  return (
+    <V2ThemeProvider>
+      <LandingShell />
+    </V2ThemeProvider>
   );
 }
