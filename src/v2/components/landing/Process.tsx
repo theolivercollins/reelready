@@ -1,73 +1,189 @@
+import { LEIcon } from "@/v2/components/primitives/LEIcon";
+
+// Exact image URLs from landing.jsx (IMG_SHOWCASE_1/2/3).
+const IMG_SHOWCASE_1 =
+  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=80";
+const IMG_SHOWCASE_2 =
+  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80";
+const IMG_SHOWCASE_3 =
+  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1600&q=80";
+
 interface Step {
   n: string;
   title: string;
   body: string;
-  imageUrl: string;
+  img: string;
 }
 
 const STEPS: Step[] = [
   {
-    n: "01 / 03",
+    n: "01",
     title: "Upload",
     body: "Drop 20–60 photos. We handle exposure, orientation, and metadata. Takes a minute.",
-    imageUrl: "https://images.unsplash.com/photo-1613977257363-707ba9348227?w=900&q=80",
+    img: IMG_SHOWCASE_1,
   },
   {
-    n: "02 / 03",
+    n: "02",
     title: "Direct",
     body: "Our model scripts the shot plan — camera work, room order, voice, and mood.",
-    imageUrl: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900&q=80",
+    img: IMG_SHOWCASE_2,
   },
   {
-    n: "03 / 03",
+    n: "03",
     title: "Deliver",
     body: "A human editor reviews. You receive 16:9 and 9:16 cuts, ready to broadcast.",
-    imageUrl: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=900&q=80",
+    img: IMG_SHOWCASE_3,
   },
 ];
 
+/**
+ * Process — pixel-faithful port of landing.jsx lines 283-403.
+ *
+ * Customization preserved: the heading reads "Three steps. / One day."
+ * (24-hour turnaround) instead of the design's "Seventy-two hours." —
+ * our shorter SLA is the marketing win, so we keep it.
+ */
 export function Process() {
   return (
     <section
       id="process"
       style={{
-        background: "transparent",
-        color: "#fff",
-        padding: "140px 48px",
-        maxWidth: 1440,
-        margin: "0 auto",
+        padding: "140px 48px 120px",
+        background: "var(--le-bg)",
       }}
     >
-      <div className="le-eyebrow" style={{ marginBottom: 24 }}>— THE PROCESS</div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 80, gap: 48 }}>
-        <h2 className="le-display" style={{ fontSize: "clamp(48px, 6vw, 96px)", lineHeight: 1, margin: 0, color: "#fff" }}>
-          Three steps.
-          <br />
-          One day.
-        </h2>
-        <p style={{ maxWidth: 320, fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)" }}>
-          Every frame directed by our model. Every cut approved by a human editor. No templates, no stock, no crew.
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          marginBottom: 88,
+          gap: 48,
+        }}
+      >
+        <div>
+          <div className="le-eyebrow" style={{ marginBottom: 20 }}>
+            — The Process
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(48px, 6vw, 76px)",
+              lineHeight: 0.98,
+              margin: 0,
+              fontWeight: 500,
+              letterSpacing: "-0.035em",
+              maxWidth: 800,
+              fontFamily: "var(--le-font-sans)",
+              color: "var(--le-text)",
+            }}
+          >
+            Three steps.
+            <br />
+            One day.
+          </h2>
+        </div>
+        <p
+          style={{
+            maxWidth: 320,
+            color: "var(--le-text-muted)",
+            fontSize: 14,
+            lineHeight: 1.6,
+            marginBottom: 6,
+            fontFamily: "var(--le-font-sans)",
+          }}
+        >
+          Every frame directed by our model. Every cut approved by a human
+          editor. No templates, no stock, no crew.
         </p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 48 }}>
-        {STEPS.map(step => (
-          <div key={step.n}>
-            <div className="le-eyebrow" style={{ marginBottom: 16 }}>{step.n}</div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 1,
+          background: "var(--le-border)",
+        }}
+      >
+        {STEPS.map(s => (
+          <div
+            key={s.n}
+            style={{
+              padding: "44px 40px 48px",
+              background: "var(--le-bg)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 32,
+              minHeight: 520,
+            }}
+          >
             <div
-              className="le-img-placeholder"
               style={{
-                aspectRatio: "4 / 3",
-                backgroundImage: `url(${step.imageUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                marginBottom: 24,
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
               }}
-              aria-hidden
-            />
-            <h3 className="le-display" style={{ fontSize: 32, margin: "0 0 12px", color: "#fff" }}>{step.title}</h3>
-            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.6, fontFamily: "var(--le-font-sans)", margin: 0 }}>
-              {step.body}
-            </p>
+            >
+              <span
+                style={{
+                  fontFamily: "var(--le-font-mono)",
+                  fontSize: 11,
+                  letterSpacing: "0.18em",
+                  color: "var(--le-text-faint)",
+                }}
+              >
+                {s.n} / 03
+              </span>
+              <LEIcon name="arrowUpRight" size={14} color="var(--le-text-faint)" />
+            </div>
+
+            <div
+              style={{
+                width: "100%",
+                aspectRatio: "4 / 3",
+                overflow: "hidden",
+                background: "#000",
+              }}
+            >
+              <img
+                src={s.img}
+                alt=""
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  filter: "brightness(0.9)",
+                }}
+              />
+            </div>
+
+            <div>
+              <h3
+                style={{
+                  fontSize: 34,
+                  margin: 0,
+                  fontWeight: 500,
+                  letterSpacing: "-0.025em",
+                  lineHeight: 1,
+                  fontFamily: "var(--le-font-sans)",
+                  color: "var(--le-text)",
+                }}
+              >
+                {s.title}
+              </h3>
+              <p
+                style={{
+                  marginTop: 14,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: "var(--le-text-muted)",
+                  maxWidth: 360,
+                  fontFamily: "var(--le-font-sans)",
+                }}
+              >
+                {s.body}
+              </p>
+            </div>
           </div>
         ))}
       </div>
