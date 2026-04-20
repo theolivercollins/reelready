@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSupabase } from "../../lib/client.js";
-import { AtlasProvider } from "../../lib/providers/atlas.js";
+import { AtlasProvider, atlasClipCostCents } from "../../lib/providers/atlas.js";
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   const supabase = getSupabase();
@@ -29,16 +29,24 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         failed += 1;
         continue;
       }
+
+      // Cost is computed from the iteration's actual model_used — NOT
+      // from provider.checkStatus, which returns the AtlasProvider's
+      // default-model price regardless of which SKU rendered. Atlas
+      // bills per-second × clip duration; atlasClipCostCents wraps
+      // the ATLAS_MODELS lookup + default 5s clip multiplier.
+      const costCents = atlasClipCostCents(iter.model_used);
+
       await supabase
         .from("prompt_lab_listing_scene_iterations")
         .update({
           status: "rendered",
           clip_url: status.videoUrl,
-          cost_cents: status.costCents ?? 0,
+          cost_cents: costCents,
         })
         .eq("id", iter.id);
 
-      if (status.costCents && status.costCents > 0) {
+      if (costCents > 0) {
         // Direct cost_events insert — recordCostEvent's addPropertyCost
         // path needs a real property_id, which Lab listings don't have.
         // property_id is nullable on cost_events (ON DELETE SET NULL in
@@ -51,7 +59,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
             provider: "atlas",
             units_consumed: 1,
             unit_type: "renders",
-            cost_cents: Math.round(status.costCents),
+            cost_cents: costCents,
             metadata: { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used },
           });
         } catch (costErr) {

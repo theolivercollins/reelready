@@ -7,13 +7,25 @@ import type {
 
 // Atlas Cloud model descriptors. Add new entries here to make them
 // selectable via ATLAS_VIDEO_MODEL without touching call sites.
+//
+// IMPORTANT on pricing: Atlas's published rates on Kling SKUs (e.g.
+// "$0.095 for kling-v3-pro") are PER SECOND of generated video, not
+// per clip. A standard 5-second render bills 5x the per-second rate.
+// `priceCentsPerClip` below is the per-second rate × 5 (default clip
+// length). If the render duration differs, compute dynamically via
+// priceCentsPerSecond × actualSeconds.
 export interface AtlasModelDescriptor {
   slug: string;                                   // `model` value Atlas expects
   endFrameField: "end_image" | null;
   allowedDurations: readonly number[] | "continuous";
   durationRange?: { min: number; max: number };
-  priceCentsPerClip: number;
+  priceCentsPerSecond: number;   // canonical per-second rate
+  priceCentsPerClip: number;     // priceCentsPerSecond × 5 (standard clip)
 }
+
+// Default clip duration in seconds for cost estimation. Atlas accepts
+// 5 or 10 per its allowedDurations; we almost always render 5s.
+export const DEFAULT_ATLAS_CLIP_SECONDS = 5;
 
 // Seven Kling SKUs registered. End-frame support is set per-model:
 // - v3-pro / v3-std / v2-6-pro / o3-pro: accept `end_image` (works in
@@ -23,45 +35,62 @@ export interface AtlasModelDescriptor {
 // - v2-master: master-class i2v that does NOT accept end_image in
 //   Kling native; forced to single-start. Our scene.use_end_frame
 //   toggle already lets the user render without a pair.
-// Prices are rounded UP to integer cents for cost_events accuracy.
+// Prices below: priceCentsPerSecond rounded from Atlas's published
+// per-second rate. priceCentsPerClip = perSec × 5 (standard duration).
 export const ATLAS_MODELS: Record<string, AtlasModelDescriptor> = {
   "kling-v3-pro": {
     slug: "kwaivgi/kling-v3.0-pro/image-to-video",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerClip: 10, // $0.095
+    priceCentsPerSecond: 10,     // $0.095/s
+    priceCentsPerClip: 48,       // $0.475 for 5s
   },
   "kling-v3-std": {
     slug: "kwaivgi/kling-v3.0-std/image-to-video",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerClip: 8, // $0.071
+    priceCentsPerSecond: 8,      // $0.071/s
+    priceCentsPerClip: 36,       // $0.355 for 5s
   },
   "kling-v2-6-pro": {
     slug: "kwaivgi/kling-v2.6-pro/image-to-video",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerClip: 6, // $0.060
+    priceCentsPerSecond: 6,      // $0.060/s
+    priceCentsPerClip: 30,       // $0.300 for 5s
   },
   "kling-v2-1-pair": {
     slug: "kwaivgi/kling-v2.1-i2v-pro/start-end-frame",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerClip: 8, // $0.076
+    priceCentsPerSecond: 8,      // $0.076/s
+    priceCentsPerClip: 38,       // $0.380 for 5s
   },
   "kling-v2-master": {
     slug: "kwaivgi/kling-v2.0-i2v-master",
     endFrameField: null,
     allowedDurations: [5, 10],
-    priceCentsPerClip: 23, // $0.221
+    priceCentsPerSecond: 23,     // $0.221/s
+    priceCentsPerClip: 111,      // $1.105 for 5s
   },
   "kling-o3-pro": {
     slug: "kwaivgi/kling-video-o3-pro/image-to-video",
     endFrameField: "end_image",
     allowedDurations: [5, 10],
-    priceCentsPerClip: 10, // $0.095
+    priceCentsPerSecond: 10,     // $0.095/s
+    priceCentsPerClip: 48,       // $0.475 for 5s
   },
 };
+
+/** Compute the expected cost in cents for a finalized Atlas render.
+ *  Uses the model's per-second rate × clip duration (defaults to 5s).
+ *  Returns 0 if the model key is unknown.
+ */
+export function atlasClipCostCents(modelKey: string, durationSeconds: number = DEFAULT_ATLAS_CLIP_SECONDS): number {
+  const descriptor = ATLAS_MODELS[modelKey];
+  if (!descriptor) return 0;
+  return descriptor.priceCentsPerSecond * durationSeconds;
+}
 
 const ENDPOINT = "https://api.atlascloud.ai/api/v1/model/generateVideo";
 const PREDICTION_BASE = "https://api.atlascloud.ai/api/v1/model/prediction";
