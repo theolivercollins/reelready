@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { buildAtlasRequestBody, parseAtlasSubmitResponse, ATLAS_MODELS } from "../atlas.js";
+import { buildAtlasRequestBody, parseAtlasSubmitResponse, ATLAS_MODELS, AtlasProvider } from "../atlas.js";
 import type { GenerateClipParams } from "../provider.interface.js";
 
 const baseParams: GenerateClipParams = {
@@ -103,5 +103,32 @@ describe("parseAtlasSubmitResponse", () => {
     expect(() =>
       parseAtlasSubmitResponse({ code: 402, msg: "insufficient balance", data: null }),
     ).toThrow(/402|balance/i);
+  });
+});
+
+describe("AtlasProvider.resolveModel (via submit)", () => {
+  beforeEach(() => {
+    process.env.ATLASCLOUD_API_KEY = "test-key";
+    process.env.ATLAS_VIDEO_MODEL = "kling-v3-pro";
+  });
+
+  it("uses modelOverride when provided", () => {
+    const provider = new AtlasProvider();
+    // @ts-expect-error — access private for unit-test resolution
+    const resolved = provider.resolveModel("wan-2.7");
+    expect(resolved.slug).toBe("alibaba/wan-2.7/image-to-video");
+  });
+
+  it("falls back to env model when override is absent", () => {
+    const provider = new AtlasProvider();
+    // @ts-expect-error — access private
+    const resolved = provider.resolveModel(undefined);
+    expect(resolved.slug).toBe("kwaivgi/kling-v3.0-pro/image-to-video");
+  });
+
+  it("throws on unknown override", () => {
+    const provider = new AtlasProvider();
+    // @ts-expect-error — access private
+    expect(() => provider.resolveModel("kling-v99")).toThrow(/not registered/);
   });
 });

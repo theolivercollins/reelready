@@ -73,7 +73,7 @@ const Development = () => {
           </p>
         </Link>
         <Link
-          to="/dashboard/development/prompt-lab"
+          to="/dashboard/development/lab"
           className="group border border-border bg-background p-6 transition hover:border-foreground"
         >
           <div className="flex items-center gap-3">
@@ -82,7 +82,7 @@ const Development = () => {
             <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            Upload a test image, see the proposed director prompt, rate + chat feedback, refine until it&apos;s perfect. Optional real Kling/Runway render per iteration. Now with similarity retrieval — each new iteration is conditioned on past wins on structurally similar photos.
+            Upload a batch of photos as a &quot;listing&quot; (just like production). Director pairs photos into start+end keyframes, plans scenes with intent tags, and you render/rate each clip. Kling 3.0 default + Wan 2.7 toggle per scene.
           </p>
         </Link>
         <Link
@@ -123,6 +123,12 @@ const Development = () => {
           <p className="mt-3 text-sm text-muted-foreground">
             Every (room type × camera verb) cell colored by learning state. See at a glance which scenes the machine is great at (golden), okay at, weak at, and has never been tested in. Click any cell to drill into its iterations, recipes, overrides, and fail-tag patterns.
           </p>
+        </Link>
+      </div>
+
+      <div className="mt-8 text-right">
+        <Link to="/dashboard/development/prompt-lab" className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+          Legacy Prompt Lab (archived) →
         </Link>
       </div>
 
