@@ -59,12 +59,15 @@ export function CompareModal({ listingId, sceneLabel, iterations, onClose, onRel
             const rating = localRatings[iter.id] ?? null;
             return (
               <div key={iter.id} className="flex flex-col border border-border bg-muted/20">
-                <div className="flex items-center justify-between border-b border-border bg-background px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center border border-foreground bg-foreground text-sm font-semibold text-background">{letter}</span>
-                    <div>
+                <div className="flex items-start justify-between gap-2 border-b border-border bg-background px-3 py-2">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-foreground bg-foreground text-sm font-semibold text-background">{letter}</span>
+                    <div className="min-w-0">
                       <div className="text-xs font-medium">{model?.label ?? iter.model_used}</div>
                       <div className="font-mono text-[10px] text-muted-foreground">#{iter.iteration_number} · {model?.priceLabel ?? ""}</div>
+                      {model?.note && (
+                        <div className="mt-1 line-clamp-2 text-[10px] italic text-muted-foreground">{model.note}</div>
+                      )}
                     </div>
                   </div>
                   <Stars value={rating} onChange={(n) => handleRate(iter.id, n)} />

@@ -11,6 +11,7 @@ export interface LabModelInfo {
   priceLabel: string;
   supportsEndFrame: boolean;
   note?: string;
+  hidden?: boolean;
 }
 
 export const LAB_MODELS: LabModelInfo[] = [
@@ -22,6 +23,7 @@ export const LAB_MODELS: LabModelInfo[] = [
     priceCents: 10,
     priceLabel: "$0.095",
     supportsEndFrame: true,
+    note: "Newest. End-frame support. Known shake issue on single-image shots — stability prefix mitigation applied.",
   },
   {
     key: "kling-v3-std",
@@ -31,6 +33,8 @@ export const LAB_MODELS: LabModelInfo[] = [
     priceCents: 8,
     priceLabel: "$0.071",
     supportsEndFrame: true,
+    hidden: true,
+    note: "Like 3.0 Pro but lower quality. Hidden from picker — re-enable if ever needed.",
   },
   {
     key: "kling-v2-6-pro",
@@ -40,6 +44,7 @@ export const LAB_MODELS: LabModelInfo[] = [
     priceCents: 6,
     priceLabel: "$0.060",
     supportsEndFrame: true,
+    note: "Smoothest motion for single-image shots. Current strong default for interiors.",
   },
   {
     key: "kling-v2-1-pair",
@@ -49,7 +54,7 @@ export const LAB_MODELS: LabModelInfo[] = [
     priceCents: 8,
     priceLabel: "$0.076",
     supportsEndFrame: true,
-    note: "Purpose-built for paired scenes (start + end photo).",
+    note: "Purpose-built for paired scenes (start + end photo). Can use long, detailed prompts effectively.",
   },
   {
     key: "kling-v2-master",
@@ -59,7 +64,7 @@ export const LAB_MODELS: LabModelInfo[] = [
     priceCents: 23,
     priceLabel: "$0.221",
     supportsEndFrame: false,
-    note: "Premium quality; single-frame only (no end-frame support).",
+    note: "Premium quality; single-frame only (no end-frame support). Expensive — use for hero shots.",
   },
   {
     key: "kling-o3-pro",
@@ -69,6 +74,7 @@ export const LAB_MODELS: LabModelInfo[] = [
     priceCents: 10,
     priceLabel: "$0.095",
     supportsEndFrame: true,
+    note: "Minimal movement — tends to look static. Good for feature closeups, weak for dynamic shots.",
   },
 ];
 

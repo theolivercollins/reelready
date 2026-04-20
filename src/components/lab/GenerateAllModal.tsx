@@ -13,8 +13,9 @@ interface GenerateAllModalProps {
 
 export function GenerateAllModal({ sceneLabel, useEndFrame, usedModels = [], onGenerate, onClose }: GenerateAllModalProps) {
   const usedSet = new Set(usedModels);
+  const visibleModels = LAB_MODELS.filter((m) => !m.hidden);
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(LAB_MODELS.filter((m) => m.key !== "kling-v2-master" && !usedSet.has(m.key)).map((m) => m.key))
+    new Set(visibleModels.filter((m) => m.key !== "kling-v2-master" && !usedSet.has(m.key)).map((m) => m.key))
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,7 +28,7 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, usedModels = [], onG
     });
   }
 
-  const chosen = LAB_MODELS.filter((m) => selected.has(m.key));
+  const chosen = visibleModels.filter((m) => selected.has(m.key));
   const totalCents = chosen.reduce((sum, m) => sum + m.priceCents, 0);
 
   async function submit() {
@@ -57,7 +58,7 @@ export function GenerateAllModal({ sceneLabel, useEndFrame, usedModels = [], onG
         </div>
 
         <div className="mt-4 space-y-1">
-          {LAB_MODELS.map((m) => {
+          {visibleModels.map((m) => {
             const picked = selected.has(m.key);
             const used = usedSet.has(m.key);
             const pairIncompatible = useEndFrame && !m.supportsEndFrame;
