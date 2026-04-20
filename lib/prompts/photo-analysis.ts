@@ -36,7 +36,7 @@ EVALUATION CRITERIA
 
 3. depth_rating: "high" (clear foreground/midground/background separation, strong perspective lines) | "medium" | "low" (flat head-on shot).
 
-4. room_type: kitchen | living_room | master_bedroom | bedroom | bathroom | exterior_front | exterior_back | pool | aerial | dining | hallway | garage | foyer | other
+4. room_type: kitchen | living_room | master_bedroom | bedroom | bathroom | exterior_front | exterior_back | pool | aerial | dining | hallway | garage | foyer | office | laundry | closet | basement | deck | powder_room | stairs | media_room | gym | mudroom | other
 
 5. key_features: 3-6 SPECIFIC, NAMED features visible in this photo, ordered by visual prominence. NOT generic nouns ("granite island") but rich descriptive phrases the director can reference by name ("dark espresso waterfall island with three bronze pendant lights overhead", "stainless double wall oven and vented range hood", "picture window framing the pool and canal beyond"). See the per-room vocabularies below for what to look for.
 
@@ -62,46 +62,49 @@ EVALUATION CRITERIA
    - Strong leading lines or depth cues exist
    - For exteriors / drone shots: the house is the clear subject
 
-9. suggested_motion: if video_viable is true, pick ONE camera movement from this 14-verb vocabulary that best fits THIS photo's composition:
+9. suggested_motion: if video_viable is true, pick ONE camera movement from this 11-verb vocabulary that best fits THIS photo's composition:
 
-   push_in            — clear forward path toward focal subject (tunnel view of kitchen, hallway, tub)
-   pull_out           — start close on a feature, reveal the room
+   push_in            — clear forward path toward focal subject (tunnel view of kitchen, hallway, tub); also the default for any shot that WOULD want a pullout feel — the editor reverses a push_in in post when a pullout is wanted, so never pick pull_out yourself
    orbit              — interior arc around an anchor object (island, bed, dining table) OR exterior sweeping arc around the house
    parallax           — lateral move with strong foreground object (outdoor with foliage, lanai with columns, pool with landscaping)
    dolly_left_to_right — constant-distance slide sideways across a long subject (counter, bookshelf wall)
    dolly_right_to_left — same, opposite direction
    reveal             — camera starts with a FOREGROUND ELEMENT occluding a hero feature, then moves past the foreground to expose the feature. The photo must have an identifiable foreground element (wall edge, column, doorframe, potted plant, counter corner, archway) that the camera can physically pass in front of. If no such foreground element exists in the photo, DO NOT pick reveal — pick push_in or dolly instead.
-   drone_push_in      — aerial approach toward the property from a distance (aerial photos only)
-   drone_pull_back    — aerial retreat from the facade outward to reveal lot and neighborhood (aerial photos only)
+   drone_push_in      — aerial approach toward the property from a distance (aerial photos only); also the default for shots that WOULD want a drone_pull_back — editor reverses it in post
    top_down           — overhead bird's-eye view showing roofline, pool, or lot geometry (aerial photos only)
    low_angle_glide    — near-floor horizontal glide making ceilings feel taller (grand entry halls, great rooms with dramatic ceilings)
    feature_closeup    — extreme close-up on ONE hero feature with shallow depth of field. Use only when the photo frames a single statement element tightly enough that the model can keep the subject in focus and blur everything else: a standalone tub, a pendant chandelier, a fireplace mantel close-up, a chef's range, a vanity faucet, the front door with hardware. DO NOT pick feature_closeup on wide establishing shots — the feature must already dominate the frame.
+   rack_focus         — static camera, focus pulls between a near subject and a far subject (or vice versa). Use when the photo clearly has TWO subjects at different depths — a foreground detail and a background hero — and you want to emphasize the spatial relationship without any camera movement. Rare; usually only for interior detail shots with a strong foreground/background pairing.
 
+   DO NOT emit "pull_out" or "drone_pull_back" — both were removed from
+   the AI's vocabulary. If a shot would want a pullout feel, pick the
+   corresponding inward motion (push_in or drone_push_in); the editor
+   reverses the clip in post.
    DO NOT emit "slow_pan" (dead verb, 0% success rate).
    DO NOT emit "orbital_slow" (renamed to "orbit").
    DO NOT emit "tilt_up", "tilt_down", "crane_up", or "crane_down" — all
    four deleted. Vertical motions don't map to real-estate shot types:
    floors and ceilings aren't hero subjects, and the source photo has
    no overhead starting frame for a crane_down to descend from. Use
-   push_in, pull_out, dolly, reveal, or low_angle_glide instead.
+   push_in, dolly, reveal, or low_angle_glide instead.
 
    Motion-fit rules (strong defaults, use judgment):
-   - Kitchen with visible island + ceiling → dolly_left_to_right across the island or pull_out from the island
+   - Kitchen with visible island + ceiling → dolly_left_to_right across the island or push_in toward the island
    - Kitchen tunnel view down the counter → push_in
    - Kitchen side angle showing the full counter length → dolly_left_to_right or dolly_right_to_left
    - Kitchen with an occluding wall/column/corner in the foreground AND a clear hero feature behind → reveal (name the foreground element in motion_rationale)
-   - Living room with coffered/vaulted ceiling → low_angle_glide or pull_out
-   - Living room with picture window → low_angle_glide or pull_out
-   - Master bedroom with bed as focal → push_in toward the bed, OR pull_out revealing the suite
+   - Living room with coffered/vaulted ceiling → low_angle_glide or push_in
+   - Living room with picture window → low_angle_glide or push_in
+   - Master bedroom with bed as focal → push_in toward the bed
    - Bathroom with freestanding tub in tight frame → feature_closeup (shallow DOF) OR push_in toward the tub
    - Bathroom with double vanity → dolly_left_to_right across the vanity
    - Tight detail shot of a single statement object (chandelier, faucet, range, pendant cluster, hardware) → feature_closeup
+   - Two-subjects-at-different-depths photo (e.g., faucet in foreground with the tub visible behind) → rack_focus
    - Entry/foyer with staircase or chandelier → low_angle_glide or reveal — but reject as doorway trap if the front door/archway is open
    - Hallway → only pick if the vanishing point is a wall or niche, NOT a doorway. If a doorway is at the end, video_viable=false.
-   - Exterior front (ground level): pull_out centered on the facade, OR orbit if the photo shows a three-quarter angle
+   - Exterior front (ground level): push_in centered on the facade (editor reverses for a pullout feel), OR orbit if the photo shows a three-quarter angle
    - Exterior back / yard: parallax or dolly past a foreground element
    - Aerial pointing AT the house: drone_push_in
-   - Aerial pulling BACK from the house: drone_pull_back
    - Aerial directly overhead: top_down
    - Pool close-up with foreground foliage: parallax
    - Pool wide with the water as the subject: drone_push_in (if aerial) or orbit (if ground level)

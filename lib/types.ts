@@ -23,29 +23,43 @@ export type RoomType =
   | "hallway"
   | "garage"
   | "foyer"
+  // Added 2026-04-19 (Phase 2.5 vocab expansion).
+  | "office"
+  | "laundry"
+  | "closet"
+  | "basement"
+  | "deck"
+  | "powder_room"
+  | "stairs"
+  | "media_room"
+  | "gym"
+  | "mudroom"
   | "other";
 
 export type DepthRating = "high" | "medium" | "low";
 
-// 14-verb cinematography vocabulary matched to real-estate shot types.
+// 11-verb cinematography vocabulary matched to real-estate shot types.
+// Pullouts (pull_out, drone_pull_back) were removed 2026-04-19 — the AI
+// never generates outward motion; the assembly stage reverses an inward
+// clip in post when a pullout feel is wanted (see Phase 2.6).
 // See docs/PROJECT-STATE.md for the full taxonomy and per-room routing.
 export type CameraMovement =
-  // Kept from the original 7
+  // Active 11-verb vocabulary the AI is allowed to generate.
   | "push_in"
-  | "pull_out"
   | "orbit"                 // renamed from orbital_slow
   | "parallax"
   | "dolly_left_to_right"
   | "dolly_right_to_left"
-  // Added for room-appropriate motion
   | "reveal"                // pass foreground element to expose background
   | "drone_push_in"         // aerial approach
-  | "drone_pull_back"       // aerial retreat — the classic opening move
   | "top_down"              // overhead bird's-eye
   | "low_angle_glide"       // floor-height glide making ceilings feel taller
   | "feature_closeup"       // extreme close-up with shallow depth of field on one hero feature
+  | "rack_focus"            // 2026-04-19 — focus pull between near and far subject (static camera)
   // Legacy — present ONLY so historical scene rows still typecheck.
   // The photo analyzer and director MUST NOT emit these for new runs.
+  | "pull_out"              // deleted 2026-04-19 — pullouts reversed in post instead
+  | "drone_pull_back"       // deleted 2026-04-19 — same as pull_out, aerial variant
   | "orbital_slow"
   | "slow_pan"
   | "tilt_up"               // deleted — awkward
