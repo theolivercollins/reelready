@@ -438,7 +438,7 @@ RPC helpers: `match_rated_examples` (unified retrieval), `match_loser_examples` 
 
 TopNav sub-nav now: Overview · Pipeline · Listings · Logs · Finances · **Development** (dropdown) · Settings.
 
-Development dropdown: Overview · Learning · Prompt Lab · Recipes · Proposals.
+Development dropdown: Overview · Learning · Prompt Lab · Recipes · Proposals · **Rating ledger**.
 
 Legacy routes `/dashboard/learning` and `/dashboard/prompt-lab` 404 — all moved under `/dashboard/development/*`.
 
@@ -447,6 +447,14 @@ Development landing (`/dashboard/development`) shows:
 - Quick-link cards to Learning, Prompt Lab, Recipes, Proposals
 - Prompt revision changelog summary (latest version per prompt)
 - Static "How it works" reference: pipeline stages, router, vocabulary, key tables
+
+### Rating ledger (shipped 2026-04-21, Window C)
+
+`/dashboard/rating-ledger` is a read-only unified view of every rating Oliver has ever given: legacy Prompt Lab iterations, Phase 2.8 Listings Lab iterations, and production `scene_ratings`. `api/admin/rating-ledger.ts` normalizes the three surfaces into one paginated JSON with filters (`surface`, `sku`, `min_rating`, `has_comment`) and attaches the active recipe via `prompt_lab_recipes.source_iteration_id`. Each row shows image thumb → clip preview → SKU chip → stars → reasons + comment → surface chip → retrieval-status chip (green/amber/red indicating whether the rating is actually wired into director retrieval). Built to satisfy criterion #1 (no HITL) via transparency — Oliver can audit every rating linked back to image + clip + SKU + retrieval readiness.
+
+- `api/admin/rating-ledger.ts` — GET admin endpoint, unified ledger
+- `src/pages/dashboard/RatingLedger.tsx` — page UI
+- `src/lib/ratingLedgerApi.ts` — typed fetch helper
 
 ---
 
@@ -803,10 +811,13 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 | `api/admin/prompt-lab/promote-to-prod.ts` | Lab→prod promotion: readiness stats + promote override to prompt_revisions (NEW) |
 | `api/admin/prompt-lab/*` | Lab endpoints |
 | `api/admin/dev-notes.ts` | Development dashboard session notes |
+| `api/admin/rating-ledger.ts` | Unified rating ledger (legacy Lab + Listings Lab + prod scene_ratings); filters + retrieval-status per row (NEW 2026-04-21) |
 | `src/pages/dashboard/PromptLab.tsx` | Main Lab UI |
 | `src/pages/dashboard/PromptLabRecipes.tsx` | Recipe library |
 | `src/pages/dashboard/PromptProposals.tsx` | Rule-mining proposals |
 | `src/pages/dashboard/Development.tsx` | Dev landing page |
+| `src/pages/dashboard/RatingLedger.tsx` | Rating ledger page at `/dashboard/rating-ledger` (NEW 2026-04-21) |
+| `src/lib/ratingLedgerApi.ts` | Typed fetch helper for rating ledger (NEW 2026-04-21) |
 | `src/components/TopNav.tsx` | Global sticky nav with Development dropdown |
 | `docs/PROJECT-STATE.md` | This file |
 | `docs/PROMPT-LAB-PLAN.md` | Lab design + milestone status |
