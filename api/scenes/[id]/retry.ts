@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase, updateScene, log } from "../../../lib/db.js";
-import { selectProvider, getEnabledProviders } from "../../../lib/providers/router.js";
+import { selectDecision, buildProviderFromDecision, getEnabledProviders } from "../../../lib/providers/router.js";
 import { classifyProviderError } from "../../../lib/providers/errors.js";
 import type { CameraMovement, RoomType, VideoProvider } from "../../../lib/types.js";
 
@@ -71,8 +71,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     .eq("id", sceneId);
 
-  const photoResponse = await fetch(photo.file_url);
-  const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
+  // C.2 (base64→URL): providers all accept sourceImageUrl directly;
+  // skip the buffer fetch that was the source of base64 payloads.
+  const sourceImage = Buffer.alloc(0); // placeholder — providers use sourceImageUrl
   const roomType = (photo.room_type as RoomType) ?? "other";
   const movement = (camera_movement ?? (scene.camera_movement as CameraMovement)) ?? null;
 
@@ -81,7 +82,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let lastError: { message: string; kind: string; provider: string } | null = null;
 
   for (let attempt = 0; attempt <= maxFailovers; attempt++) {
-    const provider = selectProvider(roomType, movement, providerOverride ?? null, excluded);
+    const decision = selectDecision(roomType, movement, providerOverride ?? null, excluded);
+    const provider = buildProviderFromDecision(decision);
     try {
       const genJob = await provider.generateClip({
         sourceImage,
@@ -89,6 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prompt: prompt.trim(),
         durationSeconds: scene.duration_seconds,
         aspectRatio: "16:9",
+        modelOverride: decision.modelKey,
       });
 
       const nextAttemptCount = (scene.attempt_count ?? 0) + 1;

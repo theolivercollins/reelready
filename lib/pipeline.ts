@@ -27,7 +27,9 @@ import {
 import {
   DIRECTOR_SYSTEM,
   buildDirectorUserPrompt,
+  DURATION_PRESETS,
   type DirectorOutput,
+  type DurationTarget,
 } from "./prompts/director.js";
 import {
   STYLE_GUIDE_SYSTEM,
@@ -47,7 +49,7 @@ import {
 } from "./prompts/prompt-qa.js";
 import { resolveProductionPrompt } from "./prompts/resolve.js";
 import { resolveEndFrameUrl } from "./services/end-frame.js";
-import { selectProvider, getEnabledProviders } from "./providers/router.js";
+import { selectProviderForScene, buildProviderFromDecision, getEnabledProviders } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
 import { classifyProviderError } from "./providers/errors.js";
 
@@ -498,6 +500,32 @@ async function runScripting(propertyId: string): Promise<void> {
   // promoted via /api/admin/prompt-lab/promote-to-prod takes
   // precedence over the compile-time DIRECTOR_SYSTEM. Falls back
   // transparently on any error.
+  // C.3: Read selected_duration from the property row.
+  // properties.selected_duration is not yet persisted by the order form (that's
+  // Phase 2 — post-mastery). We query it optimistically: if it exists and is
+  // 15 | 30 | 60, use it; otherwise default to 60 and log which path we took
+  // so we can tell when persistence finally lands.
+  let duration: DurationTarget = 60;
+  try {
+    const { data: propRow } = await getSupabase()
+      .from("properties")
+      .select("selected_duration")
+      .eq("id", propertyId)
+      .maybeSingle();
+    const raw = (propRow as { selected_duration?: unknown } | null)?.selected_duration;
+    if (raw === 15 || raw === 30 || raw === 60) {
+      duration = raw as DurationTarget;
+      await log(propertyId, "scripting", "info",
+        `selected_duration=${duration}s read from property row`);
+    } else {
+      await log(propertyId, "scripting", "info",
+        `selected_duration not persisted yet (got ${JSON.stringify(raw)}) — defaulting to 60s`);
+    }
+  } catch {
+    await log(propertyId, "scripting", "warn",
+      "selected_duration lookup failed — defaulting to 60s");
+  }
+
   const effectiveDirector = await resolveProductionPrompt("director", DIRECTOR_SYSTEM);
   if (effectiveDirector.source === "lab_promotion") {
     await log(propertyId, "scripting", "info",
@@ -513,7 +541,7 @@ async function runScripting(propertyId: string): Promise<void> {
     model: DIRECTOR_MODEL,
     max_tokens: 4096,
     system: effectiveDirector.body,
-    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData) + learningBlock }],
+    messages: [{ role: "user", content: buildDirectorUserPrompt(photoData, duration) + learningBlock }],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
@@ -527,6 +555,16 @@ async function runScripting(propertyId: string): Promise<void> {
   const output: DirectorOutput = JSON.parse(jsonMatch[0]);
   const validPhotoIds = new Set(photos.map((p) => p.id));
   const validScenes = output.scenes.filter((s) => validPhotoIds.has(s.photo_id));
+
+  // C.3: Clamp per-clip duration to the preset value in case the LLM didn't
+  // follow the instruction reliably. This is the code-level enforcement: the
+  // director's suggested duration_seconds per scene is overridden to exactly
+  // the preset's clipDuration. Applies to all scenes in the run regardless of
+  // what the LLM returned in duration_seconds.
+  const targetClipDuration = DURATION_PRESETS[duration].clipDuration;
+  for (const scene of validScenes) {
+    scene.duration_seconds = targetClipDuration;
+  }
 
   // Phase 2.7: resolve end-frame URL for each scene before insert.
   // Build a lookup from photo id → file_url from the already-fetched
@@ -589,10 +627,13 @@ async function runScripting(propertyId: string): Promise<void> {
       model: DIRECTOR_MODEL,
       scene_count: validScenes.length,
       mood: output.mood,
+      duration_target: duration,
+      clip_duration_seconds: targetClipDuration,
       ...scriptUsage.breakdown,
     },
   });
-  await log(propertyId, "scripting", "info", `Shot plan: ${validScenes.length} scenes, mood: ${output.mood}`);
+  await log(propertyId, "scripting", "info",
+    `Shot plan: ${validScenes.length} scenes, mood: ${output.mood}, duration=${duration}s, clip=${targetClipDuration}s`);
 }
 
 // ─── STAGE 3.5: PRE-FLIGHT PROMPT QA ───────────────────────────
@@ -760,25 +801,41 @@ async function runGenerationSubmit(propertyId: string): Promise<void> {
       return;
     }
 
-    const photoResponse = await fetch(photo.file_url);
-    const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
-    const photoUrl = photo.file_url;
+    // C.2: Do NOT base64-encode the photo here. Providers that accept URLs
+    // (Kling, Atlas, Runway) use sourceImageUrl directly. The sourceImage
+    // Buffer is kept as a fallback for any provider that cannot fetch a URL,
+    // but none of our active providers require it — Atlas throws if it
+    // receives base64 and Kling/Runway both prefer URLs.
+    // Previous code: const photoResponse = await fetch(photo.file_url);
+    //                const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
+    // Fixed (C.2): pass an empty Buffer as placeholder; all active providers
+    // read sourceImageUrl instead.
+    const sourceImage = Buffer.alloc(0); // placeholder — providers use sourceImageUrl
+    const photoUrl = photo.file_url;     // Supabase Storage URL — providers fetch directly
     const roomType = (photo.room_type as RoomType) ?? "other";
     const cameraMovement = scene.camera_movement as CameraMovement | null;
     const preference = scene.provider as VideoProvider | null;
 
-    // Build the failover sequence: preferred provider first, then the
-    // rest of the enabled set (minus any we've already tried). Only
-    // advance through the sequence on PERMANENT errors, per the
-    // classification in `providers/errors.ts`. Transient + capacity
-    // errors mark the scene `needs_review` for the cron retry path
-    // without burning the provider out of rotation.
+    // C.1: Build the failover sequence using the new ProviderDecision shape.
+    // selectProviderForScene handles the paired-scene rule (end_photo_id set
+    // → atlas + kling-v2-1-pair) before delegating to the movement table.
+    // The decision's .fallback chain carries the next provider to try on
+    // permanent errors, so we don't need to re-call the router mid-loop.
     const excluded: VideoProvider[] = [];
     const maxFailovers = Math.max(getEnabledProviders().length - 1, 1);
     let lastError: { message: string; kind: string; provider: string } | null = null;
 
     for (let attempt = 0; attempt <= maxFailovers; attempt++) {
-      const provider = selectProvider(roomType, cameraMovement, preference, excluded);
+      const decision = selectProviderForScene(
+        {
+          endPhotoId: scene.end_photo_id ?? null,
+          movement: cameraMovement,
+          roomType,
+          preference,
+        },
+        excluded,
+      );
+      const provider = buildProviderFromDecision(decision);
       try {
         const genJob = await provider.generateClip({
           sourceImage,
@@ -787,6 +844,10 @@ async function runGenerationSubmit(propertyId: string): Promise<void> {
           durationSeconds: scene.duration_seconds,
           aspectRatio: "16:9",
           endImageUrl: scene.end_image_url ?? undefined,
+          // C.1: forward the Atlas SKU override from the decision so AtlasProvider
+          // calls kling-v2-1-pair (or whichever model the router selected) rather
+          // than the ATLAS_VIDEO_MODEL env default.
+          modelOverride: decision.modelKey,
         });
 
         await supabase
@@ -800,9 +861,10 @@ async function runGenerationSubmit(propertyId: string): Promise<void> {
           })
           .eq("id", scene.id);
 
+        const modelNote = decision.modelKey ? ` model=${decision.modelKey}` : "";
         await log(propertyId, "generation", "info",
-          `Scene ${scene.scene_number}: submitted to ${provider.name}${attempt > 0 ? ` (failover ${attempt})` : ""}`,
-          { jobId: genJob.jobId, attempt: attempt + 1 }, scene.id);
+          `Scene ${scene.scene_number}: submitted to ${provider.name}${modelNote}${attempt > 0 ? ` (failover ${attempt})` : ""}`,
+          { jobId: genJob.jobId, attempt: attempt + 1, modelKey: decision.modelKey }, scene.id);
         return;
       } catch (err) {
         const classified = classifyProviderError(err);
@@ -817,7 +879,7 @@ async function runGenerationSubmit(propertyId: string): Promise<void> {
           break;
         }
 
-        // Permanent error: try the next enabled provider.
+        // Permanent error: exclude this provider and try the next decision.
         excluded.push(provider.name as VideoProvider);
         await log(propertyId, "generation", "warn",
           `Scene ${scene.scene_number}: ${provider.name} permanent error, failing over: ${classified.message}`,

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase, updateScene, log, recordCostEvent } from "../../../lib/db.js";
-import { selectProvider, getEnabledProviders } from "../../../lib/providers/router.js";
+import { selectDecision, buildProviderFromDecision, getEnabledProviders } from "../../../lib/providers/router.js";
 import { classifyProviderError } from "../../../lib/providers/errors.js";
 import type { CameraMovement, RoomType, VideoProvider } from "../../../lib/types.js";
 
@@ -83,8 +83,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     .eq("id", sceneId);
 
-  const photoResponse = await fetch(photo.file_url);
-  const sourceImage = Buffer.from(await photoResponse.arrayBuffer());
+  // C.2 (base64→URL): providers all accept sourceImageUrl directly;
+  // skip the buffer fetch that was the source of base64 payloads.
+  const sourceImage = Buffer.alloc(0); // placeholder — providers use sourceImageUrl
   const roomType = (photo.room_type as RoomType) ?? "other";
 
   const excluded: VideoProvider[] = [];
@@ -92,7 +93,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let lastError: { message: string; kind: string; provider: string } | null = null;
 
   for (let attempt = 0; attempt <= maxFailovers; attempt++) {
-    const provider = selectProvider(roomType, finalMovement ?? null, providerOverride ?? null, excluded);
+    const decision = selectDecision(roomType, finalMovement ?? null, providerOverride ?? null, excluded);
+    const provider = buildProviderFromDecision(decision);
     try {
       const genJob = await provider.generateClip({
         sourceImage,
@@ -100,6 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prompt: finalPrompt,
         durationSeconds: finalDuration,
         aspectRatio: "16:9",
+        modelOverride: decision.modelKey,
       });
 
       const nextAttemptCount = (scene.attempt_count ?? 0) + 1;
@@ -145,7 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       excluded.push(provider.name as VideoProvider);
       await log(scene.property_id, "generation", "warn",
         `Scene ${scene.scene_number}: ${provider.name} permanent error on resubmit, failing over: ${classified.message}`,
-        { status: classified.status, kind: classified.kind, excluded }, sceneId);
+        { status: classified.status, kind: classified.kind, excluded, modelKey: decision.modelKey }, sceneId);
       // Silence unused-import warning on recordCostEvent (reserved for future
       // per-retry cost attribution; currently the cron records the cost once
       // the clip lands).

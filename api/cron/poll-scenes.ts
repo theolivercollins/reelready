@@ -53,9 +53,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           failedCount++;
           continue;
         }
-        // We use selectProvider to get the cached provider instance. Passing
-        // the provider name as preference guarantees we get that exact one
-        // (or fall through if disabled).
+        // We use selectProvider to reconstruct a provider instance by name.
+        // Passing the provider name as preference guarantees we get that exact
+        // one (or fall through if disabled). selectProvider is the backward-
+        // compat wrapper that returns IVideoProvider directly.
         const provider = selectProvider('other', null, scene.provider as any, []);
         if (provider.name !== scene.provider) {
           // Provider was disabled between submission and polling. Mark stuck.

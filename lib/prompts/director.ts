@@ -19,7 +19,39 @@ export interface DirectorOutput {
   scenes: DirectorSceneOutput[];
 }
 
-export const DIRECTOR_SYSTEM = `You are a real estate cinematographer planning a 30-60 second property walkthrough video for an AI video-generation pipeline (Runway gen4_turbo + Kling v2-master). You produce an ordered shot list as JSON.
+// ─── DURATION PRESETS ────────────────────────────────────────────────────────
+//
+// Phase C.3: duration-aware director. Each preset defines how many scenes to
+// plan and how long each clip should run. The director is given this as a
+// DURATION TARGET block in the user prompt. If the LLM doesn't follow the
+// clip-duration instruction reliably, the pipeline enforces it in code by
+// clamping scene.duration_seconds after parsing (see buildDirectorUserPrompt
+// and pipeline.ts runScripting).
+//
+// Default (duration=60) preserves the existing 12-scene / 5s behaviour so
+// existing callers that don't pass duration are unaffected.
+
+export const DURATION_PRESETS = {
+  15: {
+    sceneCount: 4,
+    clipDuration: 4,
+    mode: "PROMINENT FEATURES ONLY — one best shot per room plus the curb appeal hero. Skip secondary rooms if unable to fit within 4 scenes.",
+  },
+  30: {
+    sceneCount: 7,
+    clipDuration: 5,
+    mode: "ADD DETAIL — include secondary features and one feature closeup. Maintain room-type quota balance.",
+  },
+  60: {
+    sceneCount: 12,
+    clipDuration: 5,
+    mode: "FULL DETAIL PASS — include all room quotas per the allocation table.",
+  },
+} as const;
+
+export type DurationTarget = keyof typeof DURATION_PRESETS;
+
+export const DIRECTOR_SYSTEM = `You are a real estate cinematographer planning a property walkthrough video for an AI video-generation pipeline (Runway gen4_turbo + Kling v2-master). You produce an ordered shot list as JSON.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PROMPT STYLE — SHORT, CRISP, CINEMATOGRAPHY-VERB ONLY
@@ -402,10 +434,23 @@ DURATIONS:
 - Exterior establishing / closing / aerial: 4 seconds
 - Interior rooms: 3-3.5 seconds
 - Pool / lanai highlight: 3.5-4 seconds
-- Total across all scenes: 30-60 seconds
+- Default: ~12 scenes, 30-60 seconds total
+- When a DURATION TARGET block appears in the user message, follow its scene
+  count and per-clip duration EXACTLY. That block overrides the defaults above.
 
 Return ONLY a JSON object. Not every photo needs to be used.`;
 
+/**
+ * Build the director user prompt for a property.
+ *
+ * Phase C.3: accepts an optional `duration` parameter (15 | 30 | 60 seconds).
+ * When provided, injects a DURATION TARGET block that tells the director how
+ * many scenes to plan and what per-clip duration to use.
+ *
+ * Defaults to 60s (preserves existing 12-scene behaviour for all callers that
+ * don't pass duration — including the Lab director call which is ad-hoc and
+ * not duration-meaningful).
+ */
 export function buildDirectorUserPrompt(
   photos: Array<{
     id: string;
@@ -417,7 +462,8 @@ export function buildDirectorUserPrompt(
     composition?: string | null;
     suggested_motion?: string | null;
     motion_rationale?: string | null;
-  }>
+  }>,
+  duration?: DurationTarget,
 ): string {
   const photoList = photos
     .map((p) => {
@@ -444,8 +490,22 @@ export function buildDirectorUserPrompt(
     .map(([rt, n]) => `${rt}=${n}`)
     .join(", ");
 
-  return `Plan the shot list for this property. Apply the room-type quotas from the system prompt. Target 10-16 scenes and 30-60 seconds total duration.
+  // C.3: Inject duration target block when a duration is specified.
+  // The block overrides the system prompt's default scene count / duration rules.
+  // duration=60 is treated as the default and produces the same output as
+  // the old prompt (no block injected — system prompt defaults cover it).
+  const preset = duration ? DURATION_PRESETS[duration] : DURATION_PRESETS[60];
+  const durationBlock = duration
+    ? `\nDURATION TARGET: ${duration}s total. Plan exactly ${preset.sceneCount} scenes, each ${preset.clipDuration}s long. Mode: ${preset.mode}\n`
+    : "";
 
+  // The scene count target for the reminder line varies with duration.
+  const sceneTarget = duration
+    ? `exactly ${preset.sceneCount} scenes and ${duration}s total duration`
+    : "10-16 scenes and 30-60 seconds total duration";
+
+  return `Plan the shot list for this property. Apply the room-type quotas from the system prompt. Target ${sceneTarget}.
+${durationBlock}
 Available room counts: ${roomSummary}
 
 Photos:
