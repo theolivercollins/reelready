@@ -105,7 +105,7 @@ export function Hero() {
             fontFamily: "var(--le-font-sans)",
           }}
         >
-          <LECyclingWord words={["Take", "Sell", "Retain"]} /> more listings.
+          <LECyclingWord words={["Win", "Sell", "Retain"]} /> more listings.
         </h1>
         <p
           style={{

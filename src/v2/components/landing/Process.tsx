@@ -48,53 +48,15 @@ export function Process() {
     <section
       id="process"
       style={{
-        padding: "140px 48px 120px",
+        padding: "112px 48px 120px",
         background: "var(--le-bg)",
       }}
     >
       <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          marginBottom: 88,
-          gap: 48,
-        }}
+        className="le-eyebrow"
+        style={{ marginBottom: 48 }}
       >
-        <div>
-          <div className="le-eyebrow" style={{ marginBottom: 20 }}>
-            — The Process
-          </div>
-          <h2
-            style={{
-              fontSize: "clamp(48px, 6vw, 76px)",
-              lineHeight: 0.98,
-              margin: 0,
-              fontWeight: 500,
-              letterSpacing: "-0.035em",
-              maxWidth: 800,
-              fontFamily: "var(--le-font-sans)",
-              color: "var(--le-text)",
-            }}
-          >
-            Three steps.
-            <br />
-            One day.
-          </h2>
-        </div>
-        <p
-          style={{
-            maxWidth: 320,
-            color: "var(--le-text-muted)",
-            fontSize: 14,
-            lineHeight: 1.6,
-            marginBottom: 6,
-            fontFamily: "var(--le-font-sans)",
-          }}
-        >
-          Every frame directed by our model. Every cut approved by a human
-          editor. No templates, no stock, no crew.
-        </p>
+        — The Process
       </div>
 
       <div

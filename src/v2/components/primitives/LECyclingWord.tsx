@@ -21,28 +21,47 @@ export function LECyclingWord({ words, interval = 3400 }: LECyclingWordProps) {
   }, [idx, interval, words]);
 
   const word = words[idx] ?? "";
+  // Reserve layout space for the widest word so the trailing copy
+  // ("more listings.") stays pinned and doesn't shift between swaps.
+  const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), "");
 
   return (
     <span
       style={{
+        position: "relative",
         display: "inline-block",
         verticalAlign: "baseline",
         fontVariantNumeric: "tabular-nums",
         fontFeatureSettings: "'tnum'",
       }}
     >
-      {word.split("").map((ch, i) => (
-        <span
-          key={`${idx}-${i}`}
-          style={{
-            display: "inline-block",
-            animation: "le-cascade 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both",
-            animationDelay: `${i * 45}ms`,
-          }}
-        >
-          {ch === " " ? "\u00A0" : ch}
-        </span>
-      ))}
+      {/* Invisible ghost: holds the width of the widest word */}
+      <span aria-hidden="true" style={{ visibility: "hidden", whiteSpace: "pre" }}>
+        {longest}
+      </span>
+      {/* Animated word, absolutely positioned over the ghost */}
+      <span
+        aria-live="polite"
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          whiteSpace: "pre",
+        }}
+      >
+        {word.split("").map((ch, i) => (
+          <span
+            key={`${idx}-${i}`}
+            style={{
+              display: "inline-block",
+              animation: "le-cascade 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both",
+              animationDelay: `${i * 45}ms`,
+            }}
+          >
+            {ch === " " ? "\u00A0" : ch}
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
