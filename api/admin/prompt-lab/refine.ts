@@ -45,13 +45,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Save feedback onto the previous iteration.
+  // M.2a: dropped deprecated `tags` + `refinement_instruction` writes;
+  // columns stay in DB for historical reads but new writes go to the
+  // Phase 2.8 tables (prompt_lab_listing_scene_iterations).
   await supabase
     .from("prompt_lab_iterations")
     .update({
       rating: typeof rating === "number" ? rating : prev.rating,
-      tags: Array.isArray(tags) ? tags : prev.tags,
       user_comment: typeof comment === "string" ? comment : prev.user_comment,
-      refinement_instruction: chat_instruction,
     })
     .eq("id", iteration_id);
 

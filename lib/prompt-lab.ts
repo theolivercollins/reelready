@@ -291,7 +291,7 @@ export function renderExemplarBlock(exemplars: RetrievedExemplar[]): string {
   if (exemplars.length === 0) return "";
   const lines = exemplars.map((e, idx) => {
     const parts = [
-      `  ${idx + 1}. [${e.rating}★ · ${e.room_type} · ${e.camera_movement} · ${e.provider ?? "?"}]`,
+      `  ${idx + 1}. [${e.rating}★ · ${e.room_type} · ${e.camera_movement} · ${e.model_used ?? e.provider ?? "?"}]`,
       `     prompt: "${e.prompt}"`,
     ];
     if (e.tags?.length) parts.push(`     tags: ${e.tags.join(", ")}`);
@@ -306,7 +306,7 @@ export function renderLoserBlock(losers: RetrievedExemplar[]): string {
   if (losers.length === 0) return "";
   const lines = losers.map((e, idx) => {
     const parts = [
-      `  ${idx + 1}. [${e.rating}★ · ${e.room_type} · ${e.camera_movement} · ${e.provider ?? "?"}]`,
+      `  ${idx + 1}. [${e.rating}★ · ${e.room_type} · ${e.camera_movement} · ${e.model_used ?? e.provider ?? "?"}]`,
       `     prompt: "${e.prompt}"`,
     ];
     if (e.tags?.length) parts.push(`     tags: ${e.tags.join(", ")}`);
@@ -329,7 +329,7 @@ function renderPreviousAttemptsBlock(attempts: Array<{ camera_movement: string; 
 export function renderRecipeBlock(recipes: RetrievedRecipe[]): string {
   if (recipes.length === 0) return "";
   const top = recipes[0];
-  return `\n\n━━━ VALIDATED RECIPE MATCH ━━━\nArchetype "${top.archetype}" (room=${top.room_type}, movement=${top.camera_movement}, provider=${top.provider ?? "auto"}, applied ${top.times_applied}× before, distance ${top.distance.toFixed(3)}).\n\nRecipe template:\n  ${top.prompt_template}\n\nIf this photo fits the archetype, adapt the template by substituting the actual named feature from this photo's key_features. Keep the verb and structure. Deviate only if a specific key_feature makes the template awkward.\n━━━ END RECIPE MATCH ━━━`;
+  return `\n\n━━━ VALIDATED RECIPE MATCH ━━━\nArchetype "${top.archetype}" (room=${top.room_type}, movement=${top.camera_movement}, model=${top.model_used ?? top.provider ?? "auto"}, applied ${top.times_applied}× before, distance ${top.distance.toFixed(3)}).\n\nRecipe template:\n  ${top.prompt_template}\n\nIf this photo fits the archetype, adapt the template by substituting the actual named feature from this photo's key_features. Keep the verb and structure. Deviate only if a specific key_feature makes the template awkward.\n━━━ END RECIPE MATCH ━━━`;
 }
 
 // ---- Run director on a single-photo input ----
