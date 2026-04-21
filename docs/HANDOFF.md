@@ -12,7 +12,7 @@ See also:
 
 ## Right now
 
-**Phase M.2 shipped.** Current next action: **Phase B — model head-to-head** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md), section "Phase B"). This REQUIRES Oliver's rating hands — not a pure-coding phase. Plan: one fresh listing, 6 SKUs per scene, rate the grid, produce `lib/providers/router-table.ts`.
+**DA.1 Gemini-eyes landed on branch `session/da1-land-2026-04-21`** (Window B, 2026-04-21) — 5 commits, analyzer smoke-tested + director-prompt E2E verified on listing `5dfd9008`. Not yet merged to `main`; coordinator review pending. Next action after merge: **Phase B — model head-to-head** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md), section "Phase B"). This REQUIRES Oliver's rating hands — not a pure-coding phase. Plan: one fresh listing, 6 SKUs per scene, rate the grid, produce `lib/providers/router-table.ts`.
 
 ## Plan state
 
@@ -33,6 +33,11 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-21 — `6c7cc6d` — DA.1 smoke tests + cost-reconcile note + STACK update (Window B, part 5/5, on branch)
+- 2026-04-21 — `47010d4` — DA.1 Gemini-first prod + Lab analysis + DA.3 motion_headroom validator (Window B, part 4/5, on branch)
+- 2026-04-21 — `921c3dd` — DA.2 director motion_headroom hard bans + camera-state block (Window B, part 3/5, on branch)
+- 2026-04-21 — `ae25541` — DA.1 Gemini 3 Flash analyzer with motion_headroom + @google/genai dep (Window B, part 2/5, on branch)
+- 2026-04-21 — `9fae141` — DA.1 migration 030 photos.analysis_json + analysis_provider (Window B, part 1/5, on branch)
 - 2026-04-21 — `5b07ce3` — M.2 backfill script widened to all unembedded scenes (17/24 embedded)
 - 2026-04-21 — `f1bf53a` — M.2b removed dead match_lab_iterations RPC + prompt-qa dead code
 - 2026-04-21 — `1938317` — M.2d exemplar/recipe/loser blocks now surface model_used SKU to director
