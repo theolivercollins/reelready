@@ -847,7 +847,7 @@ const Upload = () => {
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   background: "transparent", color: submitting ? "rgba(255,255,255,0.32)" : "#fff",
-                  border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2,
+                  border: "1px solid rgba(220,230,255,0.18)", borderRadius: 4,
                   padding: "10px 16px", fontSize: 13, fontWeight: 500,
                   cursor: submitting ? "not-allowed" : "pointer",
                   fontFamily: "var(--le-font-sans)",
@@ -864,7 +864,7 @@ const Upload = () => {
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   background: !canAdvance ? "rgba(255,255,255,0.25)" : "#fff",
-                  color: "#07080c", border: "none", borderRadius: 2,
+                  color: "#07080c", border: "none", borderRadius: 4,
                   padding: "10px 20px", fontSize: 13, fontWeight: 500,
                   cursor: !canAdvance ? "not-allowed" : "pointer",
                   fontFamily: "var(--le-font-sans)",
@@ -880,7 +880,7 @@ const Upload = () => {
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   background: !canSubmit || submitting ? "rgba(255,255,255,0.25)" : "#fff",
-                  color: "#07080c", border: "none", borderRadius: 2,
+                  color: "#07080c", border: "none", borderRadius: 4,
                   padding: "12px 24px", fontSize: 14, fontWeight: 500,
                   cursor: !canSubmit || submitting ? "not-allowed" : "pointer",
                   fontFamily: "var(--le-font-sans)",

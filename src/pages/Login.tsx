@@ -334,7 +334,7 @@ export default function Login() {
                   padding: "14px 24px",
                   fontSize: 14,
                   fontWeight: 500,
-                  borderRadius: 2,
+                  borderRadius: 4,
                   cursor: submitting || !email ? "not-allowed" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",

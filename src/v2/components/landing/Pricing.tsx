@@ -47,12 +47,12 @@ export function Pricing() {
                 style={t.isLead ? {
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
                   width: "100%", padding: "10px 16px", fontSize: 13, fontWeight: 500,
-                  background: "#fff", color: "#07080c", borderRadius: 2,
+                  background: "#fff", color: "#07080c", borderRadius: 4,
                   textDecoration: "none", fontFamily: "var(--le-font-sans)", letterSpacing: "-0.005em",
                 } : {
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
                   width: "100%", padding: "10px 16px", fontSize: 13, fontWeight: 500,
-                  background: "transparent", color: "var(--le-text)", borderRadius: 2,
+                  background: "transparent", color: "var(--le-text)", borderRadius: 4,
                   border: "1px solid var(--le-border-strong)",
                   textDecoration: "none", fontFamily: "var(--le-font-sans)", letterSpacing: "-0.005em",
                 }}

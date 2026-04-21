@@ -193,6 +193,7 @@ export default function PricingCalculator() {
                       color: listings === n ? WHITE : DIM,
                       border: `1px solid ${listings === n ? "oklch(0.97 0 0 / 25%)" : LINE}`,
                       background: listings === n ? "oklch(0.97 0 0 / 8%)" : "transparent",
+                      borderRadius: 4,
                     }}
                   >
                     {n}
@@ -215,6 +216,7 @@ export default function PricingCalculator() {
                     style={{
                       border: `1px solid ${videoType === type ? "oklch(0.97 0 0 / 25%)" : LINE}`,
                       background: videoType === type ? "oklch(0.97 0 0 / 6%)" : "transparent",
+                      borderRadius: 4,
                     }}
                   >
                     <span className="text-[11px] tracking-[0.12em] uppercase block mb-1" style={{ color: videoType === type ? WHITE : DIM }}>

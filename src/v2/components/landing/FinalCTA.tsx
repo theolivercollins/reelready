@@ -77,7 +77,7 @@ export function FinalCTA() {
               alignItems: "center",
               gap: 10,
               letterSpacing: "-0.005em",
-              borderRadius: 2,
+              borderRadius: 4,
               textDecoration: "none",
               fontFamily: "var(--le-font-sans)",
             }}
