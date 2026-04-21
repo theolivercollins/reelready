@@ -1,9 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, Plus, Trash2, Sparkles, FlaskConical, ArrowRight, GitPullRequest, Map as MapIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import "@/v2/styles/v2.css";
+
+const EYEBROW: CSSProperties = { fontFamily: "var(--le-font-mono)", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" };
+const PAGE_H1: CSSProperties = { fontFamily: "var(--le-font-sans)", fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 500, letterSpacing: "-0.035em", lineHeight: 0.98, color: "#fff", margin: 0 };
+const SECTION_H3: CSSProperties = { fontFamily: "var(--le-font-sans)", fontSize: 20, fontWeight: 500, letterSpacing: "-0.025em", color: "#fff", margin: 0 };
+const PRIMARY_BTN: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", fontSize: 12, fontWeight: 500, background: "#fff", color: "#07080c", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" };
+const GHOST_BTN: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" };
 import {
   listDevNotes,
   createDevNote,
@@ -50,8 +56,8 @@ const Development = () => {
   return (
     <div className="space-y-16">
       <div>
-        <span className="label text-muted-foreground">— Development</span>
-        <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">Progress, schema, and plans</h2>
+        <span style={EYEBROW}>— Development</span>
+        <h2 className="mt-3" style={PAGE_H1}>Progress, schema, and plans</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Working log of session objectives and outcomes, the live prompt changelog, a pointer to the prompt lab and learning feedback, and a running reference for how the pipeline actually works today.
         </p>
@@ -140,13 +146,13 @@ const Development = () => {
       <section>
         <div className="flex items-center justify-between">
           <div>
-            <span className="label text-muted-foreground">Session notes</span>
-            <h3 className="mt-2 text-xl font-semibold tracking-tight">Working log</h3>
+            <span style={EYEBROW}>Session notes</span>
+            <h3 className="mt-2" style={SECTION_H3}>Working log</h3>
           </div>
           {!creating && (
-            <Button size="sm" onClick={() => setCreating(true)}>
+            <button onClick={() => setCreating(true)} style={PRIMARY_BTN}>
               <Plus className="mr-2 h-3.5 w-3.5" /> New session note
-            </Button>
+            </button>
           )}
         </div>
 
@@ -180,17 +186,16 @@ const Development = () => {
               />
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
+              <button
                 onClick={() => {
                   setCreating(false);
                   setDraft({ objective: "", accomplishments: "", session_date: new Date().toISOString().slice(0, 10) });
                 }}
+                style={GHOST_BTN}
               >
                 Cancel
-              </Button>
-              <Button size="sm" onClick={handleCreate}>Save note</Button>
+              </button>
+              <button onClick={handleCreate} style={PRIMARY_BTN}>Save note</button>
             </div>
           </div>
         )}
@@ -216,8 +221,8 @@ const Development = () => {
 
       {/* Prompt changelog */}
       <section>
-        <span className="label text-muted-foreground">Prompt changelog</span>
-        <h3 className="mt-2 text-xl font-semibold tracking-tight">Director + analyzer prompt versions</h3>
+        <span style={EYEBROW}>Prompt changelog</span>
+        <h3 className="mt-2" style={SECTION_H3}>Director + analyzer prompt versions</h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Every pipeline run hashes each system prompt and records a revision if the body changed. The full list with expandable bodies lives under{" "}
           <Link to="/dashboard/development/learning" className="underline">Learning → Changelog</Link>.
@@ -249,8 +254,8 @@ const Development = () => {
 
       {/* How it works */}
       <section>
-        <span className="label text-muted-foreground">How the product works</span>
-        <h3 className="mt-2 text-xl font-semibold tracking-tight">Pipeline + schema reference</h3>
+        <span style={EYEBROW}>How the product works</span>
+        <h3 className="mt-2" style={SECTION_H3}>Pipeline + schema reference</h3>
         <div className="mt-6 space-y-6 text-sm">
           <div className="border border-border bg-background p-6">
             <div className="label text-muted-foreground">Pipeline (6 stages, fire-and-forget)</div>
@@ -334,8 +339,8 @@ function NoteRow({ note, onUpdated }: { note: DevNote; onUpdated: () => void }) 
         <Textarea value={draft.objective} onChange={(e) => setDraft((d) => ({ ...d, objective: e.target.value }))} placeholder="Objective" />
         <Textarea value={draft.accomplishments} onChange={(e) => setDraft((d) => ({ ...d, accomplishments: e.target.value }))} placeholder="Accomplishments" className="min-h-[100px]" />
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => { setEditing(false); setDraft({ session_date: note.session_date, objective: note.objective ?? "", accomplishments: note.accomplishments ?? "" }); }}>Cancel</Button>
-          <Button size="sm" onClick={save}>Save</Button>
+          <button onClick={() => { setEditing(false); setDraft({ session_date: note.session_date, objective: note.objective ?? "", accomplishments: note.accomplishments ?? "" }); }} style={GHOST_BTN}>Cancel</button>
+          <button onClick={save} style={PRIMARY_BTN}>Save</button>
         </div>
       </div>
     );

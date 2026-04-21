@@ -1,11 +1,42 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2, Upload as UploadIcon, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import { createListing } from "@/lib/labListingsApi";
+import "@/v2/styles/v2.css";
+
+const EYEBROW: CSSProperties = {
+  fontFamily: "var(--le-font-mono)",
+  fontSize: 10,
+  letterSpacing: "0.22em",
+  textTransform: "uppercase",
+  color: "rgba(255,255,255,0.45)",
+};
+const PAGE_H1: CSSProperties = {
+  fontFamily: "var(--le-font-sans)",
+  fontSize: "clamp(28px, 4vw, 44px)",
+  fontWeight: 500,
+  letterSpacing: "-0.035em",
+  lineHeight: 0.98,
+  color: "#fff",
+  margin: 0,
+};
+const PRIMARY_BTN: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "8px 14px",
+  fontSize: 12,
+  fontWeight: 500,
+  background: "#fff",
+  color: "#07080c",
+  border: "none",
+  borderRadius: 2,
+  cursor: "pointer",
+  fontFamily: "var(--le-font-sans)",
+};
 
 export default function LabListingNew() {
   const navigate = useNavigate();
@@ -50,20 +81,20 @@ export default function LabListingNew() {
   return (
     <div className="space-y-10">
       <div>
-        <Link to="/dashboard/development/lab" className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+        <Link to="/dashboard/development/lab" className="inline-flex items-center gap-1 hover:text-foreground" style={EYEBROW}>
           <ArrowLeft className="h-3 w-3" /> back to listings
         </Link>
-        <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">Create listing</h2>
+        <h2 className="mt-3" style={PAGE_H1}>Create listing</h2>
       </div>
 
       <div className="max-w-2xl space-y-5">
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground">Name (optional)</label>
+          <label style={EYEBROW}>Name (optional)</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Miami waterfront test" />
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground">Model</label>
+          <label style={EYEBROW}>Model</label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -83,12 +114,12 @@ export default function LabListingNew() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</label>
+          <label style={EYEBROW}>Notes</label>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What are you testing?" className="min-h-24" />
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground">Photos (10-30 recommended)</label>
+          <label style={EYEBROW}>Photos (10-30 recommended)</label>
           <Input
             type="file"
             multiple
@@ -102,18 +133,23 @@ export default function LabListingNew() {
 
         {error && <p className="text-xs text-destructive">{error}</p>}
 
-        <Button onClick={handleCreate} disabled={uploading || files.length === 0} size="lg">
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={uploading || files.length === 0}
+          style={{ ...PRIMARY_BTN, padding: "10px 18px", fontSize: 13, opacity: uploading || files.length === 0 ? 0.5 : 1 }}
+        >
           {uploading ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Uploading {progress.done}/{progress.total}
             </>
           ) : (
             <>
-              <UploadIcon className="mr-2 h-4 w-4" /> Upload &amp; Analyze
+              <UploadIcon className="h-4 w-4" /> Upload &amp; Analyze
             </>
           )}
-        </Button>
+        </button>
       </div>
     </div>
   );

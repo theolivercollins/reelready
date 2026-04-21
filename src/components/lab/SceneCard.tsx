@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Loader2, Star, Play, Sparkles, RotateCcw, MessageSquare, X, Copy, Trash2, ChevronDown, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import "@/v2/styles/v2.css";
 import { PairVisualization } from "./PairVisualization";
 import { ChatPanel } from "./ChatPanel";
 import { RatingReasonsModal } from "./RatingReasonsModal";
@@ -119,7 +119,7 @@ function IterationRow({ listingId, scene, iter, onReload }: {
   const otherModel = iter.model_used === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro";
 
   return (
-    <div className={`border p-3 ${iter.archived ? "border-dashed border-border/60 bg-muted/30 opacity-70" : "border-border"}`}>
+    <div className={`border p-3 ${iter.archived ? "border-dashed border-border/60 bg-muted/30 opacity-70" : "border-border"}`} style={{ borderRadius: 0 }}>
       {ratingModalValue !== null && (
         <RatingReasonsModal
           rating={ratingModalValue}
@@ -138,7 +138,7 @@ function IterationRow({ listingId, scene, iter, onReload }: {
             iter.status === "rendered" || iter.status === "rated" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" :
             iter.status === "failed" ? "border-red-400/40 bg-red-400/10 text-red-700" :
             "border-amber-400/40 bg-amber-400/10 text-amber-700"
-          }`}>
+          }`} style={{ borderRadius: 0, fontFamily: "var(--le-font-mono)" }}>
             {iter.status}
           </span>
           {iter.archived && (
@@ -180,30 +180,30 @@ function IterationRow({ listingId, scene, iter, onReload }: {
       {iter.clip_url && (
         <>
           <div className="mt-3 flex flex-wrap gap-1">
-            <Button size="sm" variant="outline" onClick={() => regenerate()} disabled={busy} title="Render another iteration with this exact prompt">
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.5 : 1, fontFamily: "var(--le-font-sans)" }} onClick={() => regenerate()} disabled={busy} title="Render another iteration with this exact prompt">
               {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCcw className="mr-1 h-3 w-3" />}
               Regenerate
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => regenerate(otherModel)} disabled={busy} title={`Render with ${otherModel}`}>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.5 : 1, fontFamily: "var(--le-font-sans)" }} onClick={() => regenerate(otherModel)} disabled={busy} title={`Render with ${otherModel}`}>
               Try {otherModel === "kling-v3-pro" ? "Kling" : "Wan"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setPromptOpen((o) => !o)}>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => setPromptOpen((o) => !o)}>
               {promptOpen ? <ChevronDown className="mr-1 h-3 w-3" /> : <ChevronRight className="mr-1 h-3 w-3" />}
               Prompt
-            </Button>
-            <Button size="sm" variant="ghost" onClick={copyPrompt} title="Copy prompt to clipboard">
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "transparent", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, color: "#fff", cursor: "pointer" }} onClick={copyPrompt} title="Copy prompt to clipboard">
               <Copy className="h-3 w-3" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={toggleArchived} title={iter.archived ? "Unarchive" : "Archive (keeps rating signal)"}>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "transparent", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, color: "#fff", cursor: "pointer" }} onClick={toggleArchived} title={iter.archived ? "Unarchive" : "Archive (keeps rating signal)"}>
               {iter.archived ? <ArchiveRestore className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={remove} title="Permanently delete" className="text-destructive hover:text-destructive">
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "transparent", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, color: "rgba(220,80,80,0.9)", cursor: "pointer" }} onClick={remove} title="Permanently delete">
               <Trash2 className="h-3 w-3" />
-            </Button>
+            </button>
           </div>
 
           {promptOpen && (
-            <pre className="mt-2 whitespace-pre-wrap rounded border border-border bg-muted p-2 font-mono text-[11px] text-foreground">{iter.director_prompt}</pre>
+            <pre className="mt-2 whitespace-pre-wrap border p-2 text-[11px] text-foreground" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(220,230,255,0.09)", borderRadius: 0, fontFamily: "var(--le-font-mono)" }}>{iter.director_prompt}</pre>
           )}
 
           <div className="mt-3">
@@ -218,10 +218,10 @@ function IterationRow({ listingId, scene, iter, onReload }: {
           </div>
 
           <div className="mt-2">
-            <Button size="sm" variant="ghost" onClick={() => setChatOpen((o) => !o)}>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => setChatOpen((o) => !o)}>
               <MessageSquare className="mr-1 h-3 w-3" />
               {chatOpen ? "Hide chat" : (iter.chat_messages.length > 0 ? `Chat (${iter.chat_messages.length})` : "Chat")}
-            </Button>
+            </button>
           </div>
 
           {chatOpen && (
@@ -239,9 +239,9 @@ function IterationRow({ listingId, scene, iter, onReload }: {
               {scene.refinement_notes && (
                 <div className="mt-2 flex items-center justify-between border border-emerald-500/40 bg-emerald-500/10 p-2 text-xs text-emerald-800">
                   <span>Instructions saved for future renders</span>
-                  <Button size="sm" variant="outline" onClick={async () => { await renderListing(listingId, { scene_ids: [scene.id] }); onReload(); }} className="h-6 border-emerald-700 text-emerald-800 hover:bg-emerald-500/20">
+                  <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#4ade80", border: "1px solid rgba(74,222,128,0.4)", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={async () => { await renderListing(listingId, { scene_ids: [scene.id] }); onReload(); }}>
                     <RotateCcw className="mr-1 h-3 w-3" /> Render with new instructions
-                  </Button>
+                  </button>
                 </div>
               )}
             </div>
@@ -292,8 +292,8 @@ function RefinementNotesPanel({ listingId, scene, onReload }: {
         <span className="label text-amber-800">Future-render instructions</span>
         {!editing && (
           <div className="flex gap-1">
-            <Button size="sm" variant="ghost" onClick={() => { setDraft(notes); setEditing(true); }}>Edit</Button>
-            <Button size="sm" variant="ghost" onClick={clear}><X className="h-3 w-3" /></Button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => { setDraft(notes); setEditing(true); }}>Edit</button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, background: "transparent", border: "none", borderRadius: 2, color: "rgba(255,255,255,0.45)", cursor: "pointer" }} onClick={clear}><X className="h-3 w-3" /></button>
           </div>
         )}
       </div>
@@ -301,8 +301,8 @@ function RefinementNotesPanel({ listingId, scene, onReload }: {
         <div className="mt-2 space-y-2">
           <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="text-xs" />
           <div className="flex gap-2">
-            <Button size="sm" onClick={save}>Save</Button>
-            <Button size="sm" variant="outline" onClick={() => { setEditing(false); setDraft(notes); }}>Cancel</Button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "#fff", color: "#07080c", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={save}>Save</button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => { setEditing(false); setDraft(notes); }}>Cancel</button>
           </div>
         </div>
       ) : (
@@ -357,13 +357,13 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
   }
 
   return (
-    <div className="border border-border bg-background p-5">
+    <div className="border border-border bg-background p-5" style={{ background: "#0b0f1c", border: "1px solid rgba(220,230,255,0.09)", borderRadius: 0 }}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <span className="label text-muted-foreground">Scene {scene.scene_number}</span>
           <div className="mt-1 flex gap-2">
-            <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{scene.room_type}</span>
-            <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{scene.camera_movement}</span>
+            <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ borderRadius: 0, fontFamily: "var(--le-font-mono)" }}>{scene.room_type}</span>
+            <span className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ borderRadius: 0, fontFamily: "var(--le-font-mono)" }}>{scene.camera_movement}</span>
             {endPhoto && (
               <span className="border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-700">paired</span>
             )}
@@ -403,16 +403,16 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
           <div className="mt-2 space-y-2">
             <Textarea value={promptDraft} onChange={(e) => setPromptDraft(e.target.value)} className="text-sm" />
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleRefine}>Save</Button>
-              <Button size="sm" variant="outline" onClick={() => { setEditing(false); setPromptDraft(scene.director_prompt); }}>Cancel</Button>
+              <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "#fff", color: "#07080c", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={handleRefine}>Save</button>
+              <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => { setEditing(false); setPromptDraft(scene.director_prompt); }}>Cancel</button>
             </div>
           </div>
         ) : (
           <div className="mt-2 flex items-start justify-between gap-4">
             <p className="flex-1 font-mono text-sm">{scene.director_prompt}</p>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => setEditing(true)}>
               <Sparkles className="mr-1 h-3 w-3" /> Refine
-            </Button>
+            </button>
           </div>
         )}
       </div>
@@ -422,10 +422,10 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
       </div>
 
       <div className="mt-3">
-        <Button size="sm" variant="ghost" onClick={() => setSceneChatOpen((o) => !o)}>
+        <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={() => setSceneChatOpen((o) => !o)}>
           <MessageSquare className="mr-1 h-3 w-3" />
           {sceneChatOpen ? "Hide scene chat" : (scene.chat_messages.length > 0 ? `Scene chat (${scene.chat_messages.length})` : "Scene chat — shape intent before first render")}
-        </Button>
+        </button>
         {sceneChatOpen && (
           <div className="mt-2">
             <ChatPanel
@@ -457,14 +457,14 @@ export function SceneCard({ listingId, scene, iterations, photos, defaultModel, 
             )}
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => submitRender()} disabled={rendering}>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "#fff", color: "#07080c", border: "none", borderRadius: 2, cursor: rendering ? "not-allowed" : "pointer", opacity: rendering ? 0.5 : 1, fontFamily: "var(--le-font-sans)" }} onClick={() => submitRender()} disabled={rendering}>
               {rendering ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
               Render {defaultModel === "kling-v3-pro" ? "Kling" : "Wan"}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => submitRender(defaultModel === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro")} disabled={rendering}>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: rendering ? "not-allowed" : "pointer", opacity: rendering ? 0.5 : 1, fontFamily: "var(--le-font-sans)" }} onClick={() => submitRender(defaultModel === "kling-v3-pro" ? "wan-2.7" : "kling-v3-pro")} disabled={rendering}>
               <RotateCcw className="mr-1 h-3 w-3" />
               Try {defaultModel === "kling-v3-pro" ? "Wan 2.7" : "Kling 3.0"}
-            </Button>
+            </button>
           </div>
         </div>
 

@@ -211,7 +211,7 @@ function HeroNav() {
           textDecoration: "none",
         }}
       >
-        <LELogoMark size={30} variant="light" />
+        <LELogoMark size={38} variant="light" />
       </Link>
 
       <div

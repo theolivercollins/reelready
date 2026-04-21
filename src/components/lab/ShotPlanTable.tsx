@@ -14,7 +14,7 @@ export function ShotPlanTable({ scenes, iterations, photos, selectedSceneId, onS
 
   return (
     <div className="border border-border">
-      <div className="grid grid-cols-[60px_40px_1fr_120px_80px_80px_80px_110px] items-center gap-3 border-b border-border bg-muted/50 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[60px_40px_1fr_120px_80px_80px_80px_110px] items-center gap-3 border-b border-border bg-muted/50 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", fontFamily: "var(--le-font-mono)", fontSize: 10, letterSpacing: "0.18em" }}>
         <span />
         <span>#</span>
         <span>Scene</span>
@@ -59,8 +59,9 @@ export function ShotPlanTable({ scenes, iterations, photos, selectedSceneId, onS
             className={`grid w-full grid-cols-[60px_40px_1fr_120px_80px_80px_80px_110px] items-center gap-3 border-b border-border px-3 py-2 text-left text-xs transition-colors last:border-b-0 ${
               selected ? "bg-foreground/5" : "hover:bg-muted/40"
             }`}
+            style={{ fontFamily: "var(--le-font-mono)" }}
           >
-            <div className="relative h-9 w-14 overflow-hidden border border-border bg-muted">
+            <div className="relative h-9 w-14 overflow-hidden border border-border bg-muted" style={{ borderRadius: 0 }}>
               {photo && <img src={photo.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />}
             </div>
             <span className="font-mono text-muted-foreground">{String(s.scene_number).padStart(2, "0")}</span>
@@ -85,7 +86,7 @@ export function ShotPlanTable({ scenes, iterations, photos, selectedSceneId, onS
               {cost > 0 ? `$${(cost / 100).toFixed(2)}` : "—"}
             </span>
             <span className="text-right">
-              <span className={`inline-block border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${statusColor}`}>
+              <span className={`inline-block border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${statusColor}`} style={{ borderRadius: 0 }}>
                 {latestStatus}
               </span>
             </span>

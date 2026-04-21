@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MarketComparison } from "./MarketComparison";
 
 beforeEach(() => {
@@ -11,30 +11,30 @@ beforeEach(() => {
   }
   (globalThis as any).IntersectionObserver = MockIO as unknown as typeof IntersectionObserver;
   vi.stubGlobal("matchMedia", (q: string) => ({
-    matches: true, // reduced-motion on, easier to assert
-    media: q, onchange: null,
-    addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    matches: true,
+    media: q,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
   }));
 });
 
 describe("MarketComparison", () => {
-  it("renders all market-stat rows loaded from the data module", async () => {
+  it("renders the intro headline without crashing", () => {
     render(<MarketComparison />);
-    await waitFor(() => {
-      expect(screen.getByText("Cost per listing video")).toBeTruthy();
-      expect(screen.getByText("Turnaround")).toBeTruthy();
-    });
+    expect(
+      screen.getByText(/Why agents who use Listing Elevate/i)
+    ).toBeTruthy();
   });
 
-  it("renders an accessible link for each citation", async () => {
+  it("renders the section headers for each pitch prong", () => {
     render(<MarketComparison />);
-    await waitFor(() => {
-      const links = screen.getAllByRole("link");
-      expect(links.length).toBeGreaterThanOrEqual(3);
-      for (const a of links) {
-        expect(a.getAttribute("href")).toMatch(/^https?:\/\//);
-      }
-    });
+    expect(screen.getByText(/Win more listings/i)).toBeTruthy();
+    expect(screen.getByText(/Retain every client/i)).toBeTruthy();
+    expect(screen.getByText(/Sell faster/i)).toBeTruthy();
+    expect(screen.getByText(/The math/i)).toBeTruthy();
   });
 });

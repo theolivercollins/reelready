@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, RefreshCw, Play, Archive, Images } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import "@/v2/styles/v2.css";
 import { SceneCard } from "@/components/lab/SceneCard";
 import { ShotPlanTable } from "@/components/lab/ShotPlanTable";
 import {
@@ -127,29 +127,29 @@ export default function LabListingDetail() {
         </Link>
       </div>
 
-      <div className="border border-border bg-background">
+      <div className="border border-border bg-background" style={{ background: "var(--le-bg-elev, #0b0f1c)", border: "1px solid rgba(220,230,255,0.09)" }}>
         <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
           <div className="min-w-0">
-            <h2 className="truncate text-2xl font-semibold tracking-[-0.02em]">{listing.name}</h2>
+            <h2 className="truncate text-2xl font-semibold tracking-[-0.02em]" style={{ fontWeight: 500, letterSpacing: "-0.035em", fontFamily: "var(--le-font-sans)" }}>{listing.name}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              <span className="border border-border px-2 py-0.5 uppercase tracking-wider">{listing.status}</span>
-              <span className="border border-border px-2 py-0.5 uppercase tracking-wider">{listing.model_name}</span>
+              <span className="border border-border px-2 py-0.5 uppercase tracking-wider" style={{ borderRadius: 0, fontFamily: "var(--le-font-mono)", fontSize: 9, letterSpacing: "0.18em" }}>{listing.status}</span>
+              <span className="border border-border px-2 py-0.5 uppercase tracking-wider" style={{ borderRadius: 0, fontFamily: "var(--le-font-mono)", fontSize: 9, letterSpacing: "0.18em" }}>{listing.model_name}</span>
               {listing.notes && <span className="truncate italic">{listing.notes}</span>}
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={reload}>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: "pointer", fontFamily: "var(--le-font-sans)" }} onClick={reload}>
               <RefreshCw className="mr-1 h-3 w-3" /> Refresh
-            </Button>
-            <Button variant="outline" size="sm" onClick={rerunDirector} disabled={actionLoading === "direct"}>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", fontSize: 11, fontWeight: 500, background: "transparent", color: "#fff", border: "1px solid rgba(220,230,255,0.18)", borderRadius: 2, cursor: actionLoading === "direct" ? "not-allowed" : "pointer", opacity: actionLoading === "direct" ? 0.5 : 1, fontFamily: "var(--le-font-sans)" }} onClick={rerunDirector} disabled={actionLoading === "direct"}>
               {actionLoading === "direct" && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
               Re-direct
-            </Button>
-            <Button size="sm" onClick={renderAllUnrendered} disabled={actionLoading === "render-all"}>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", fontSize: 11, fontWeight: 500, background: "#fff", color: "#07080c", border: "none", borderRadius: 2, cursor: actionLoading === "render-all" ? "not-allowed" : "pointer", opacity: actionLoading === "render-all" ? 0.5 : 1, fontFamily: "var(--le-font-sans)" }} onClick={renderAllUnrendered} disabled={actionLoading === "render-all"}>
               {actionLoading === "render-all" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
               Render all
-            </Button>
-            <Button variant="ghost" size="sm" onClick={archive}><Archive className="h-3 w-3" /></Button>
+            </button>
+            <button type="button" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "transparent", border: "none", borderRadius: 2, color: "rgba(255,255,255,0.45)", cursor: "pointer" }} onClick={archive}><Archive className="h-3 w-3" /></button>
           </div>
         </div>
         <div className="grid grid-cols-2 border-t border-border text-xs sm:grid-cols-4 lg:grid-cols-5">
@@ -215,10 +215,10 @@ export default function LabListingDetail() {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
   return (
-    <div className="border-r border-border px-5 py-3 last:border-r-0">
-      <div className="label text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-lg font-semibold tabular-nums">{value}</div>
-      {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
+    <div style={{ borderRight: "1px solid rgba(220,230,255,0.09)", padding: "12px 20px" }} className="last:border-r-0">
+      <div style={{ fontFamily: "var(--le-font-mono)", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>{label}</div>
+      <div style={{ fontFamily: "var(--le-font-mono)", fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em", color: "#fff", marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontFamily: "var(--le-font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }

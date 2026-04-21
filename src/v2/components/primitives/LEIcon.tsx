@@ -142,6 +142,13 @@ function buildIcons(color: string): Record<string, ReactNode> {
       </>
     ),
     ruler: <path d="M2 12l10-10 10 10-10 10zM6 12l1 1M10 8l1 1M14 12l1 1M10 16l1 1" />,
+    plus: (
+      <>
+        <rect x="11" y="4" width="2" height="16" />
+        <rect x="4" y="11" width="16" height="2" />
+      </>
+    ),
+    minus: <rect x="4" y="11" width="16" height="2" />,
   };
 }
 
@@ -177,7 +184,9 @@ export type LEIconName =
   | "more"
   | "bed"
   | "bath"
-  | "ruler";
+  | "ruler"
+  | "plus"
+  | "minus";
 
 interface LEIconProps {
   name: LEIconName;
