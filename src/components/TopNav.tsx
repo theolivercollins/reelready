@@ -26,7 +26,7 @@ import {
   ChevronDown,
   GitPullRequest,
 } from "lucide-react";
-import { Wordmark } from "@/components/brand/Wordmark";
+import { LELogoMark } from "@/v2/components/primitives/LELogoMark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
 
 const dashboardNav = [
@@ -113,7 +113,13 @@ export function TopNav() {
       <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-6 md:h-[72px] md:px-10">
         {/* Brand — identical size/layout on every page */}
         <div className="flex items-center gap-3">
-          <Wordmark size="md" to={inDashboard ? "/dashboard" : "/"} />
+          <Link
+            to={inDashboard ? "/dashboard" : "/"}
+            className="inline-flex items-center"
+            aria-label="Listing Elevate"
+          >
+            <LELogoMark size={30} variant="light" />
+          </Link>
           {inDashboard && (
             <>
               <span className="h-3 w-px bg-border" aria-hidden />
@@ -240,14 +246,29 @@ export function TopNav() {
             <>
               <ThemeToggle />
               <Link
-                to="/login"
+                to="/?login=1"
                 className="label hidden text-muted-foreground transition-colors hover:text-foreground md:inline"
               >
                 Sign in
               </Link>
-              <Button asChild size="sm">
-                <Link to="/login">Get started</Link>
-              </Button>
+              <Link
+                to="/upload"
+                style={{
+                  background: "#fff",
+                  color: "#07080c",
+                  borderRadius: 4,
+                  padding: "8px 16px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  fontFamily: "var(--le-font-sans)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                Get started
+              </Link>
             </>
           )}
         </div>

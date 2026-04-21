@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
 import { LEIcon } from "@/v2/components/primitives/LEIcon";
+import { useLoginDialog } from "@/v2/components/auth/LoginDialogContext";
 
 const BG =
   "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=2400&q=85";
 
 export function FinalCTA() {
+  const { openLogin } = useLoginDialog();
   return (
     <section
       style={{
@@ -84,9 +86,14 @@ export function FinalCTA() {
           >
             Start a video <LEIcon name="arrow" size={14} color="#07080c" />
           </Link>
-          <Link
-            to="/login"
+          <button
+            type="button"
+            onClick={openLogin}
             style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
               fontSize: 14,
               color: "rgba(255,255,255,0.78)",
               textDecoration: "underline",
@@ -95,7 +102,7 @@ export function FinalCTA() {
             }}
           >
             Sign in to your account
-          </Link>
+          </button>
         </div>
       </div>
     </section>

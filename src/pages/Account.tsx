@@ -1,5 +1,6 @@
 import { Outlet, NavLink } from "react-router-dom";
 import { FileVideo, CreditCard, User } from "lucide-react";
+import { SiteNav } from "@/v2/components/SiteNav";
 import "@/v2/styles/v2.css";
 
 const navItems = [
@@ -13,8 +14,9 @@ export default function Account() {
     <div
       className="le-root"
       data-theme="dark"
-      style={{ minHeight: "100vh", background: "var(--le-bg)", color: "var(--le-text)" }}
+      style={{ minHeight: "100vh", background: "var(--le-bg)", color: "var(--le-text)", paddingTop: 80 }}
     >
+      <SiteNav showSectionLinks={false} />
       <div style={{ borderBottom: "1px solid var(--le-border)" }}>
         <div className="mx-auto flex max-w-[1280px] items-end justify-between gap-6 px-8 pb-6 pt-12 md:px-12">
           <div>

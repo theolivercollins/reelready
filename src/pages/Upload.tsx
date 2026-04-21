@@ -27,6 +27,7 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { getPresets, savePreset, type Preset } from "@/lib/presets";
 import { createProperty } from "@/lib/api";
+import { SiteNav } from "@/v2/components/SiteNav";
 import "@/v2/styles/v2.css";
 
 interface UploadedFile {
@@ -295,7 +296,8 @@ const Upload = () => {
 
   // ─── main ───
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: "#050710", color: "#fff", fontFamily: "var(--le-font-sans)" }}>
+    <div className="flex min-h-screen flex-col" style={{ background: "#050710", color: "#fff", fontFamily: "var(--le-font-sans)", paddingTop: 80 }}>
+      <SiteNav showSectionLinks={false} />
       {/* Step header */}
       <div style={{ borderBottom: "1px solid rgba(220,230,255,0.09)" }}>
         <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-6 px-8 py-8 md:px-12">
