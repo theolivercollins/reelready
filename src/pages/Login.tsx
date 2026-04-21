@@ -4,7 +4,7 @@ import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { Mail, Lock, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { LELogoMark } from "@/v2/components/primitives/LELogoMark";
 
@@ -18,9 +18,22 @@ const eyebrowStyle: React.CSSProperties = {
   color: "rgba(255,255,255,0.55)",
 };
 
+const inputStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(220,230,255,0.18)",
+  borderRadius: 4,
+  color: "#fff",
+  fontFamily: "var(--le-font-sans)",
+  height: 48,
+};
+
+type Mode = "password" | "magic";
+
 export default function Login() {
-  const { user, profile, loading, signInWithMagicLink } = useAuth();
+  const { user, profile, loading, signInWithMagicLink, signInWithPassword } = useAuth();
+  const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -35,10 +48,21 @@ export default function Login() {
     setError("");
     setSubmitting(true);
     try {
-      await signInWithMagicLink(email);
-      setSent(true);
+      if (mode === "password") {
+        await signInWithPassword(email, password);
+        // Auth state listener will redirect via the Navigate above.
+      } else {
+        await signInWithMagicLink(email);
+        setSent(true);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send magic link");
+      setError(
+        err instanceof Error
+          ? err.message
+          : mode === "password"
+          ? "Sign in failed"
+          : "Failed to send magic link",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -84,9 +108,14 @@ export default function Login() {
           }}
         />
 
-        {/* Content above image */}
+        {/* Top-left logo — matches the Hero nav placement */}
         <div style={{ position: "relative", zIndex: 1 }}>
-          <LELogoMark size={28} variant="light" />
+          <Link
+            to="/"
+            style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+          >
+            <LELogoMark size={38} variant="light" />
+          </Link>
         </div>
 
         <motion.div
@@ -104,6 +133,7 @@ export default function Login() {
               lineHeight: 0.98,
               margin: "24px 0 0",
               color: "#fff",
+              fontFamily: "var(--le-font-sans)",
             }}
           >
             Cinema for
@@ -116,6 +146,7 @@ export default function Login() {
               fontSize: 14,
               lineHeight: 1.6,
               color: "rgba(255,255,255,0.62)",
+              fontFamily: "var(--le-font-sans)",
             }}
           >
             Sign in to access your video library, manage in-flight productions, and submit new listings.
@@ -149,29 +180,22 @@ export default function Login() {
           justifyContent: "space-between",
           padding: "48px 64px",
           background: "#050710",
+          fontFamily: "var(--le-font-sans)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <LELogoMark size={22} variant="light" />
-          <Link
-            to="/"
-            style={{
-              fontSize: 11,
-              fontFamily: "var(--le-font-mono)",
-              letterSpacing: "0.1em",
-              color: "rgba(255,255,255,0.55)",
-              textDecoration: "none",
-            }}
-          >
-            Home
-          </Link>
-        </div>
+        {/* No duplicate logo header — left panel owns the brand on this page */}
+        <div />
 
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: EASE }}
-          style={{ width: "100%", maxWidth: 360, flexShrink: 0, alignSelf: "center", paddingTop: 48 }}
+          style={{
+            width: "100%",
+            maxWidth: 360,
+            flexShrink: 0,
+            alignSelf: "center",
+          }}
         >
           <span style={eyebrowStyle}>— Sign in</span>
           <h2
@@ -181,6 +205,7 @@ export default function Login() {
               letterSpacing: "-0.035em",
               margin: "16px 0 0",
               color: "#fff",
+              fontFamily: "var(--le-font-sans)",
             }}
           >
             Welcome back.
@@ -190,9 +215,12 @@ export default function Login() {
               fontSize: 14,
               color: "rgba(255,255,255,0.62)",
               marginTop: 12,
+              fontFamily: "var(--le-font-sans)",
             }}
           >
-            Enter your email — we'll send a one-time link.
+            {mode === "password"
+              ? "Enter your email and password."
+              : "We'll send a one-time link to your inbox."}
           </p>
 
           {sent ? (
@@ -228,11 +256,19 @@ export default function Login() {
                   fontWeight: 500,
                   letterSpacing: "-0.02em",
                   color: "#fff",
+                  fontFamily: "var(--le-font-sans)",
                 }}
               >
                 Check your inbox.
               </h3>
-              <p style={{ marginTop: 12, fontSize: 14, color: "rgba(255,255,255,0.62)" }}>
+              <p
+                style={{
+                  marginTop: 12,
+                  fontSize: 14,
+                  color: "rgba(255,255,255,0.62)",
+                  fontFamily: "var(--le-font-sans)",
+                }}
+              >
                 Magic link sent to{" "}
                 <span style={{ fontWeight: 500, color: "#fff" }}>{email}</span>. Click it to sign in.
               </p>
@@ -261,7 +297,7 @@ export default function Login() {
           ) : (
             <form
               onSubmit={handleSubmit}
-              style={{ marginTop: 48, display: "flex", flexDirection: "column", gap: 24 }}
+              style={{ marginTop: 48, display: "flex", flexDirection: "column", gap: 20 }}
             >
               <div>
                 <Label
@@ -298,17 +334,59 @@ export default function Login() {
                     required
                     autoFocus
                     className="pl-11"
-                    style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(220,230,255,0.18)",
-                      borderRadius: 2,
-                      color: "#fff",
-                      fontFamily: "var(--le-font-sans)",
-                      height: 48,
-                    }}
+                    style={inputStyle}
                   />
                 </div>
               </div>
+
+              {mode === "password" && (
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Label
+                      htmlFor="password"
+                      style={{
+                        fontFamily: "var(--le-font-mono)",
+                        fontSize: 10,
+                        letterSpacing: "0.22em",
+                        textTransform: "uppercase",
+                        color: "rgba(255,255,255,0.55)",
+                      }}
+                    >
+                      Password
+                    </Label>
+                  </div>
+                  <div style={{ position: "relative", marginTop: 12 }}>
+                    <Lock
+                      style={{
+                        pointerEvents: "none",
+                        position: "absolute",
+                        left: 16,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        width: 16,
+                        height: 16,
+                        color: "rgba(255,255,255,0.32)",
+                      }}
+                    />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="pl-11"
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div
@@ -316,26 +394,41 @@ export default function Login() {
                     border: "1px solid rgba(255,80,80,0.4)",
                     background: "rgba(255,80,80,0.08)",
                     padding: 16,
-                    borderRadius: 2,
+                    borderRadius: 4,
                   }}
                 >
-                  <p style={{ fontSize: 12, color: "rgba(255,120,120,0.9)", margin: 0 }}>{error}</p>
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(255,120,120,0.9)",
+                      margin: 0,
+                      fontFamily: "var(--le-font-sans)",
+                    }}
+                  >
+                    {error}
+                  </p>
                 </div>
               )}
 
               <button
                 type="submit"
-                disabled={submitting || !email}
+                disabled={submitting || !email || (mode === "password" && !password)}
                 style={{
                   width: "100%",
-                  background: submitting || !email ? "rgba(255,255,255,0.3)" : "#fff",
+                  background:
+                    submitting || !email || (mode === "password" && !password)
+                      ? "rgba(255,255,255,0.3)"
+                      : "#fff",
                   color: "#07080c",
                   border: "none",
                   padding: "14px 24px",
                   fontSize: 14,
                   fontWeight: 500,
                   borderRadius: 4,
-                  cursor: submitting || !email ? "not-allowed" : "pointer",
+                  cursor:
+                    submitting || !email || (mode === "password" && !password)
+                      ? "not-allowed"
+                      : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -347,7 +440,18 @@ export default function Login() {
               >
                 {submitting ? (
                   <>
-                    <Loader2 style={{ width: 16, height: 16, animation: "spin 1s linear infinite" }} /> Sending
+                    <Loader2
+                      style={{
+                        width: 16,
+                        height: 16,
+                        animation: "spin 1s linear infinite",
+                      }}
+                    />{" "}
+                    {mode === "password" ? "Signing in" : "Sending"}
+                  </>
+                ) : mode === "password" ? (
+                  <>
+                    Sign in <ArrowRight style={{ width: 16, height: 16 }} />
                   </>
                 ) : (
                   <>
@@ -356,11 +460,35 @@ export default function Login() {
                 )}
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setMode(mode === "password" ? "magic" : "password");
+                }}
+                style={{
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.55)",
+                  background: "none",
+                  border: "none",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 4,
+                  cursor: "pointer",
+                  padding: 0,
+                  fontFamily: "var(--le-font-sans)",
+                  alignSelf: "center",
+                }}
+              >
+                {mode === "password" ? "Email me a magic link instead" : "Sign in with password instead"}
+              </button>
+
               <p
                 style={{
                   fontSize: 12,
                   color: "rgba(255,255,255,0.45)",
                   textAlign: "center",
+                  marginTop: 8,
+                  fontFamily: "var(--le-font-sans)",
                 }}
               >
                 Don't have an account?{" "}

@@ -97,6 +97,9 @@ export function TopNav() {
   // Index.tsx renders its own hero-style navigation with auth modal hookup.
   if (location.pathname === "/") return null;
 
+  // Login + auth callback render their own editorial branding.
+  if (location.pathname === "/login" || location.pathname.startsWith("/auth")) return null;
+
   const isAdmin = profile?.role === "admin";
   const inDashboard = location.pathname.startsWith("/dashboard");
 
