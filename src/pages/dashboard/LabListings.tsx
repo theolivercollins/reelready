@@ -103,11 +103,6 @@ export default function LabListings() {
         </div>
       )}
 
-      <div className="mt-16 border-t border-border pt-6">
-        <Link to="/dashboard/development/prompt-lab" className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
-          Legacy Prompt Lab (archived) →
-        </Link>
-      </div>
     </div>
   );
 }

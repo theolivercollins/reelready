@@ -86,19 +86,6 @@ const Development = () => {
           </p>
         </Link>
         <Link
-          to="/dashboard/development/prompt-lab/recipes"
-          className="group border border-border bg-background p-6 transition hover:border-foreground"
-        >
-          <div className="flex items-center gap-3">
-            <FlaskConical className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
-            <div className="label text-muted-foreground group-hover:text-foreground">Recipe library</div>
-            <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-          </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Validated director prompts keyed by archetype. Promoted from 5★ Lab iterations. When a new photo matches a recipe within distance threshold, the director is told to use the recipe verbatim.
-          </p>
-        </Link>
-        <Link
           to="/dashboard/development/proposals"
           className="group border border-border bg-background p-6 transition hover:border-foreground"
         >
@@ -123,12 +110,6 @@ const Development = () => {
           <p className="mt-3 text-sm text-muted-foreground">
             Every (room type × camera verb) cell colored by learning state. See at a glance which scenes the machine is great at (golden), okay at, weak at, and has never been tested in. Click any cell to drill into its iterations, recipes, overrides, and fail-tag patterns.
           </p>
-        </Link>
-      </div>
-
-      <div className="mt-8 text-right">
-        <Link to="/dashboard/development/prompt-lab" className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
-          Legacy Prompt Lab (archived) →
         </Link>
       </div>
 
