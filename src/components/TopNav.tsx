@@ -25,6 +25,7 @@ import {
   Code2,
   ChevronDown,
   GitPullRequest,
+  ListChecks,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
@@ -74,6 +75,11 @@ function DevelopmentNav() {
         <DropdownMenuItem asChild>
           <Link to="/dashboard/development/proposals" className="cursor-pointer">
             <GitPullRequest className="mr-2 h-3.5 w-3.5" /> Proposals
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/rating-ledger" className="cursor-pointer">
+            <ListChecks className="mr-2 h-3.5 w-3.5" /> Rating ledger
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -33,6 +33,7 @@ import DashboardKnowledgeMapCell from "./pages/dashboard/KnowledgeMapCell";
 import DashboardLabListings from "./pages/dashboard/LabListings";
 import DashboardLabListingNew from "./pages/dashboard/LabListingNew";
 import DashboardLabListingDetail from "./pages/dashboard/LabListingDetail";
+import DashboardRatingLedger from "./pages/dashboard/RatingLedger";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -84,6 +85,7 @@ const App = () => (
                   <Route path="development/lab/new" element={<DashboardLabListingNew />} />
                   <Route path="development/lab/:id" element={<DashboardLabListingDetail />} />
                   <Route path="development/prompt-lab/:sessionId" element={<Navigate to="/dashboard/development/lab" replace />} />
+                  <Route path="rating-ledger" element={<DashboardRatingLedger />} />
                   <Route path="finances" element={<DashboardFinances />} />
                   <Route path="settings" element={<DashboardSettings />} />
                 </Route>

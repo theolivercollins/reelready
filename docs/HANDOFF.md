@@ -33,6 +33,7 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-21 — `TBD` — Window C Rating Ledger UI: /dashboard/rating-ledger + /api/admin/rating-ledger (unified legacy Lab + Listings Lab + prod scene_ratings)
 - 2026-04-21 — `5b07ce3` — M.2 backfill script widened to all unembedded scenes (17/24 embedded)
 - 2026-04-21 — `f1bf53a` — M.2b removed dead match_lab_iterations RPC + prompt-qa dead code
 - 2026-04-21 — `1938317` — M.2d exemplar/recipe/loser blocks now surface model_used SKU to director
