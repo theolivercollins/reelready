@@ -31,6 +31,15 @@ Branch: `session/da1-land-2026-04-21` (5 commits). Coordinator review pending.
 | Tests | `scripts/test-gemini-analyzer.ts` (one-photo probe; verified on aerial + bathroom — bathroom correctly `orbit=F drone_push_in=F`). `scripts/test-gemini-director-e2e.ts` (3 photos → Gemini → `buildDirectorUserPrompt`; all 5 new fields present in assembled prompt; transcript to `/tmp/director-prompt-e2e-*.md`). No renders executed. |
 | Known gaps (not blocking landing) | (1) `mapCameraMovementToHeadroomKey('drone_push_in')` returns only `drone_push_in`, not both `push_in` and `drone_push_in` — edge case where `push_in=false, drone_push_in=true` photo would slip past validator. (2) SDK warns when both `GEMINI_API_KEY` and `GOOGLE_API_KEY` are set; harmless. (3) Gemini marks non-overhead aerials `top_down=true` (can rise further to overhead) — semantically correct per system prompt wording; may want stricter tuning. |
 
+### Round 2 regression-diff verdict (2026-04-21 evening)
+
+**NECESSARY BUT NOT SUFFICIENT** (full audit: [`docs/audits/REGRESSION-DIFF-2026-04-21.md`](../audits/REGRESSION-DIFF-2026-04-21.md)). Two rendered anchors on `kling-v2-6-pro` 5s, total spend $1.22:
+
+1. **Kittiwake `1406-213` master_bedroom** (money shot): Legacy pipeline picked `push_in` on 5/5 iterations; 3/5 produced `hallucinated architecture`. DA.1 Gemini returned `motion_headroom.orbit=F, drone_push_in=F, parallax=T` and suggested `parallax`. Sonnet director picked `parallax` (not `push_in`). Clip: `https://v16-kling-fdl.klingai.com/...e698746f501011f548607d1e63cb1358...`. DA.1 provably reshaped motion choice in a hallucination-reducing direction.
+2. **Kittiwake `1406-940` aerial** (non-degradation check): Gemini `motion_headroom` all-true (Gemini's "could-rise-further" aerial quirk from carry-forward gap #3). Director still converged on Legacy-5★ motion `drone_push_in` with equivalent prompt. Clip: `https://v16-kling-fdl.klingai.com/...dbe9f959c7bb69fe8e3b27963ee834d7...`. Pipeline doesn't regress on a known-good anchor.
+
+**To escalate to CLOSED:** Oliver rates both DA.1 clips. If parallax master_bedroom is clean (no hallucinated architecture) and aerial matches Legacy 5★, regression fix is confirmed in pixels. Render harness for re-running: `scripts/regression-diff-render.ts` (commit `bfc7eed`).
+
 ---
 
 ## 2026-04-20 — Back-on-track execution

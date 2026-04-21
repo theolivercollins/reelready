@@ -12,7 +12,7 @@ See also:
 
 ## Right now
 
-**DA.1 Gemini-eyes landed on branch `session/da1-land-2026-04-21`** (Window B, 2026-04-21) — 5 commits, analyzer smoke-tested + director-prompt E2E verified on listing `5dfd9008`. Not yet merged to `main`; coordinator review pending. Next action after merge: **Phase B — model head-to-head** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md), section "Phase B"). This REQUIRES Oliver's rating hands — not a pure-coding phase. Plan: one fresh listing, 6 SKUs per scene, rate the grid, produce `lib/providers/router-table.ts`.
+**DA.1 landed on branch + Round 2 regression-diff evidence captured** (Window B, 2026-04-21). Branch `session/da1-land-2026-04-21` — Round 1: analyzer + pipeline + validator + smoke tests (6 commits). Round 2: 2 rendered anchors + verdict doc ([`audits/REGRESSION-DIFF-2026-04-21.md`](./audits/REGRESSION-DIFF-2026-04-21.md)) — **NECESSARY BUT NOT SUFFICIENT**: master_bedroom anchor (`kittiwake-1406-213`) demonstrably shifted motion choice from Legacy's failing `push_in` → DA.1's `parallax` via Gemini's motion_headroom; aerial anchor (`kittiwake-1406-940`) shows non-degradation. Oliver rating on the two DA.1 clips needed to escalate to CLOSED. Not pushed. Next action after coord review: **Phase B — model head-to-head** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md)).
 
 ## Plan state
 
@@ -33,6 +33,9 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-21 — `e023ff9` — DA.1 regression-diff verdict doc (Window B Round 2, 2/3, on branch) — NECESSARY BUT NOT SUFFICIENT pending Oliver rating
+- 2026-04-21 — `bfc7eed` — Round 2 regression-diff render harness (Window B Round 2, 1/3, on branch)
+- 2026-04-21 — `7df7361` — DA.1 docs — HANDOFF + PROJECT-STATE + memory (Window B Round 1, 6/5, on branch)
 - 2026-04-21 — `6c7cc6d` — DA.1 smoke tests + cost-reconcile note + STACK update (Window B, part 5/5, on branch)
 - 2026-04-21 — `47010d4` — DA.1 Gemini-first prod + Lab analysis + DA.3 motion_headroom validator (Window B, part 4/5, on branch)
 - 2026-04-21 — `921c3dd` — DA.2 director motion_headroom hard bans + camera-state block (Window B, part 3/5, on branch)
