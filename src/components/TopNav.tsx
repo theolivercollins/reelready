@@ -19,9 +19,10 @@ import {
   Building2,
   FileText,
   Settings as SettingsIcon,
-  Sparkles,
   DollarSign,
   FlaskConical,
+  Beaker,
+  BookOpen,
   Code2,
   ChevronDown,
   GitPullRequest,
@@ -63,13 +64,18 @@ function DevelopmentNav() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/dashboard/development/learning" className="cursor-pointer">
-            <Sparkles className="mr-2 h-3.5 w-3.5" /> Learning
+          <Link to="/dashboard/development/lab" className="cursor-pointer">
+            <FlaskConical className="mr-2 h-3.5 w-3.5" /> Lab
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/dashboard/development/lab" className="cursor-pointer">
-            <FlaskConical className="mr-2 h-3.5 w-3.5" /> Lab
+          <Link to="/dashboard/development/prompt-lab" className="cursor-pointer">
+            <Beaker className="mr-2 h-3.5 w-3.5" /> Prompt Lab (legacy)
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/development/prompt-lab/recipes" className="cursor-pointer">
+            <BookOpen className="mr-2 h-3.5 w-3.5" /> Recipes
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

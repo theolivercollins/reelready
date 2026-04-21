@@ -25,8 +25,9 @@ import PropertyDetail from "./pages/dashboard/PropertyDetail";
 import DashboardLogs from "./pages/dashboard/Logs";
 import DashboardFinances from "./pages/dashboard/Finances";
 import DashboardSettings from "./pages/dashboard/Settings";
-import DashboardLearning from "./pages/dashboard/Learning";
 import DashboardDevelopment from "./pages/dashboard/Development";
+import DashboardPromptLab from "./pages/dashboard/PromptLab";
+import DashboardPromptLabRecipes from "./pages/dashboard/PromptLabRecipes";
 import DashboardPromptProposals from "./pages/dashboard/PromptProposals";
 import DashboardKnowledgeMap from "./pages/dashboard/KnowledgeMap";
 import DashboardKnowledgeMapCell from "./pages/dashboard/KnowledgeMapCell";
@@ -75,16 +76,15 @@ const App = () => (
                   <Route path="properties/:id" element={<PropertyDetail />} />
                   <Route path="logs" element={<DashboardLogs />} />
                   <Route path="development" element={<DashboardDevelopment />} />
-                  <Route path="development/learning" element={<DashboardLearning />} />
-                  <Route path="development/prompt-lab" element={<Navigate to="/dashboard/development/lab" replace />} />
-                  <Route path="development/prompt-lab/recipes" element={<Navigate to="/dashboard/development/lab" replace />} />
+                  <Route path="development/prompt-lab" element={<DashboardPromptLab />} />
+                  <Route path="development/prompt-lab/recipes" element={<DashboardPromptLabRecipes />} />
+                  <Route path="development/prompt-lab/:sessionId" element={<DashboardPromptLab />} />
                   <Route path="development/proposals" element={<DashboardPromptProposals />} />
                   <Route path="development/knowledge-map" element={<DashboardKnowledgeMap />} />
                   <Route path="development/knowledge-map/:cellKey" element={<DashboardKnowledgeMapCell />} />
                   <Route path="development/lab" element={<DashboardLabListings />} />
                   <Route path="development/lab/new" element={<DashboardLabListingNew />} />
                   <Route path="development/lab/:id" element={<DashboardLabListingDetail />} />
-                  <Route path="development/prompt-lab/:sessionId" element={<Navigate to="/dashboard/development/lab" replace />} />
                   <Route path="rating-ledger" element={<DashboardRatingLedger />} />
                   <Route path="finances" element={<DashboardFinances />} />
                   <Route path="settings" element={<DashboardSettings />} />
