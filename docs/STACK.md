@@ -22,8 +22,9 @@ NPM: `@anthropic-ai/sdk ^0.39.0`. OpenAI called via raw fetch in `lib/embeddings
 
 | Provider | Status | Strengths | Notes |
 |---|---|---|---|
-| **Atlas Cloud** | Active (Lab listings) | Aggregator exposing 6 Kling SKUs via one key + endpoint; supports `negative_prompt`, `cfg_scale`, `end_image` | Env `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v3-pro`). Models registered: kling-v3-pro ($0.095), kling-v3-std ($0.071), kling-v2-6-pro ($0.060), kling-v2-1-pair ($0.076, start-end-frame SKU), kling-v2-master ($0.221, no end-frame), kling-o3-pro ($0.095) |
-| Kling (native) | Active (legacy Lab + prod) | Interiors, dolly/parallax/reveal | 5-concurrent trial cap, auto-fallback to Runway |
+| **Atlas Cloud** | Active (Lab listings) | Aggregator exposing 6 Kling SKUs via one key + endpoint; supports `negative_prompt`, `cfg_scale`, `end_image` | Env `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default **`kling-v2-6-pro`**, changed 2026-04-20). Models: kling-v3-pro ($0.095), kling-v3-std ($0.071), kling-v2-6-pro ($0.060 = **$0.60/clip**), kling-v2-1-pair ($0.076, start-end-frame SKU, auto-selected for paired scenes), kling-v2-master ($0.221, no end-frame), kling-o3-pro ($0.095) |
+| **Kling (native)** | Active (Lab listings) | Oliver's pre-paid Kling credits; $0 variable cost | Model key `kling-v2-native`. Routes via `lib/providers/kling.ts`. 402/credit-exhaustion auto-failovers to Atlas `kling-v2-master`. Cost events: `provider='kling', billing='prepaid_credits'`. Wired 2026-04-20. |
+| Kling (legacy) | Active (legacy Lab + prod) | Interiors, dolly/parallax/reveal | 5-concurrent trial cap, auto-fallback to Runway |
 | Runway Gen-4 Turbo | Active (legacy Lab + prod) | Exteriors, push_in/pull_out/drone | URL-based image input |
 | Luma Ray2 | Coded, not wired | | `lib/providers/luma.ts` |
 | Higgsfield | Scaffolded, deferred permanently | | See `docs/HIGGSFIELD-INTEGRATION.md` |
@@ -62,7 +63,7 @@ Router logic (prod + legacy Lab): movement-first, room-type tiebreaker. See `lib
 
 - **PostgreSQL** via Supabase
 - **pgvector** extension — HNSW indexes, cosine distance (`<=>` operator)
-- **27 migrations** in `supabase/migrations/` (001–027). Latest: 023 (lab listings tables), 024 (iteration chat + scene refinement notes), 025 (scene.use_end_frame), 026 (scene chat + iteration archive + rating reasons), 027 (scene.archived).
+- **27 migrations** in `supabase/migrations/` (001–027). Latest: 023 (lab listings tables), 024 (iteration chat + scene refinement notes), 025 (scene.use_end_frame), 026 (scene chat + iteration archive + rating reasons), 027 (scene.archived). Migration 028 pending (M.2d — `model_used` on `prompt_lab_recipes`).
 
 ### Listings Lab tables (Phase 2.8)
 
@@ -105,6 +106,8 @@ Legacy: `match_lab_iterations` (unused since unified embeddings shipped).
 
 | Variable | Provider |
 |---|---|
+| `ATLASCLOUD_API_KEY` | Atlas Cloud (Lab listings — required for Lab video generation) |
+| `ATLAS_VIDEO_MODEL` | Atlas Cloud default model (default: `kling-v2-6-pro`, changed 2026-04-20) |
 | `LUMA_API_KEY` | Luma Ray2 (coded, not wired) |
 | `SHOTSTACK_API_KEY` | Shotstack production |
 | `SHOTSTACK_API_KEY_STAGE` | Shotstack staging (fallback to `SHOTSTACK_API_KEY`) |
@@ -127,7 +130,7 @@ Legacy: `match_lab_iterations` (unused since unified embeddings shipped).
 | `KLING_CONCURRENCY_LIMIT` | `4` | Max concurrent Kling jobs (Lab + prod) |
 | `KLING_CENTS_PER_UNIT` | `0` | Cost estimate per Kling unit |
 | `RUNWAY_CENTS_PER_CREDIT` | `1` | Cost estimate per Runway credit |
-| `SHOTSTACK_CENTS_PER_MINUTE` | `20` | Shotstack cost per output-minute (rounded up). Ingest plan = 20¢, Create plan = 50¢. Replaces deprecated `SHOTSTACK_CENTS_PER_RENDER`. |
+| `SHOTSTACK_CENTS_PER_MINUTE` | `20` | Shotstack cost per output-minute (rounded up). Ingest plan = 20¢, Create plan = 50¢. **Replaces deprecated `SHOTSTACK_CENTS_PER_RENDER=10`** (shim still honored for backward compat). Changed 2026-04-20 (CI.3). |
 | `SHOTSTACK_ENV` | `stage` | `stage` or `production` |
 | `GENERATION_CONCURRENCY` | `4` | Max parallel generation submits in pipeline |
 | `QC_AUTO_APPROVE_ALL` | `false` | Skip QC approval (dead code path, but env checked) |
@@ -142,12 +145,14 @@ api/                    Vercel serverless functions
   pipeline/             Production pipeline entrypoint
   scenes/[id]/          Scene actions (resubmit, rate, approve, skip, retry)
 lib/                    Shared server-side code
-  providers/            Kling, Runway, Luma, Higgsfield, Shotstack, router, errors
+  providers/            Kling, Runway, Luma, Higgsfield, Shotstack, router, errors, dispatch
   prompts/              System prompts (director, photo-analysis, style-guide, resolve)
   pipeline.ts           Production orchestrator
   prompt-lab.ts         Lab core helpers
-  embeddings.ts         OpenAI embedding wrapper
-  db.ts                 DB helpers (recordCostEvent, embedScene, etc.)
+  embeddings.ts         OpenAI embedding wrapper (embedText now returns usage.costCents)
+  sanitize-prompt.ts    Strip LOCKED-OFF CAMERA stability prefix variants (NEW 2026-04-20)
+  refine-prompt.ts      Sonnet 4.6 prompt rewrite incorporating refinement_notes (NEW 2026-04-20)
+  db.ts                 DB helpers (recordCostEvent, embedScene, computeClaudeCost, etc.)
 src/                    Frontend (Vite + React)
   pages/dashboard/      Dashboard pages (PromptLab, Recipes, Proposals, etc.)
   components/           Shared UI components

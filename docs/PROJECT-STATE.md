@@ -1,8 +1,90 @@
 # Listing Elevate — Project State (Handoff)
 
-Last updated: **2026-04-20 (evening)** — Phase 2.8 listings Lab shipped: Atlas Cloud + 6 Kling SKUs, multi-photo listings, scene-level master-detail UI, streaming scene chat with Haiku 4.5 + rewrite tool, end-frame pairing, scene + iteration archive, rating reasons taxonomy, generate-all-models + side-by-side compare, recipe retrieval restored in listings director.
+Last updated: **2026-04-20 (back-on-track execution)** — Phases A (Lab UX spine), M.1 (director-prompt trace audit), DQ (director concise prompts), DM (dev/legacy merge), and CI.1–CI.4 (cost integrity) all shipped. Phase 2.8 listings Lab previously shipped: Atlas Cloud + 6 Kling SKUs, multi-photo listings, scene-level master-detail UI, streaming scene chat with Haiku 4.5 + rewrite tool, end-frame pairing, scene + iteration archive, rating reasons taxonomy, generate-all-models + side-by-side compare, recipe retrieval restored in listings director.
 
 Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
+
+---
+
+## 2026-04-20 — Back-on-track execution
+
+Spec: `docs/superpowers/specs/2026-04-20-back-on-track-design.md`. Five phases shipped in one day on branch `feature/back-on-track`, merged to `main`.
+
+### Phase A — Lab UX "next-action spine"
+
+| Item | Detail |
+|---|---|
+| `NextActionBanner` | Colored per state; one-click advances the next stuck scene (commits: `14bdfed`, `858577c`) |
+| Per-scene status chips in `ShotPlanTable` | `needs_rating / failed / iterating / needs_first_render / rendering / done / archived`; rows priority-sorted |
+| Pure resolvers | `src/lib/labSceneStatus.ts` + `src/lib/labNextAction.ts`; 17 unit tests (`d6c57a0`) |
+| Optimistic mutations | Rate + scene-archive mutations in `LabListingDetail.tsx` (`7818cfd`, `9995657`) |
+| `SceneCard` | Added `data-scene-id` for scroll-to behavior |
+| Resolver patch | "iterating" triggers when all iterations are rated but none hit 4★+ (vs falling through to needs_rating) |
+| Done color | Changed from emerald → slate (grey) to distinguish from teal "rate" action |
+
+### Phase M.1 — Director-prompt trace audit
+
+New scripts: `scripts/trace-director-prompt.ts` + `scripts/trace-director-prompt.impl.ts`
+
+- Reconstructs the director's user message for any listing or property
+- Runs retrieval RPCs live; writes transcript + audit checklist to `/tmp/director-trace-<id>.md`
+
+**Verdict: WORKING WITH GAPS**
+
+| Finding | Detail |
+|---|---|
+| Learning chain | Rating → embedding → retrieval → director-injection is wired end-to-end |
+| Rated legacy Lab iterations | 108 actively feeding retrieval |
+| Lab→prod promotion | NEVER used — 0 overrides ever promoted |
+| Prod scene embeddings | 7/24 populated (partial) |
+
+Full report: `docs/ML-AUDIT-2026-04-20.md`. Raw traces: `docs/traces/`.
+
+### Phase DQ — Director concise prompts
+
+| Item | Detail |
+|---|---|
+| `DIRECTOR_SYSTEM` rewrite | New PROMPT STYLE section: ≤120 chars single-image, ≤250 paired, single-sentence. Banned phrases: "Motion is fluid", "Emphasize X", "Camera moves steadily…", em-dash trajectories, trailing qualifiers. Legacy 5★ examples as patterns. Guardrail: "exemplars are CONTENT patterns not LENGTH permission". |
+| `CAMERA_STABILITY_PREFIX` | Now gated to `kling-v3-*` only. v2.x and o3 no longer receive 180 chars of fluff; Atlas `negative_prompt` still carries shake mitigation. |
+| Paired-scene auto-routing | `scene.use_end_frame && end_image_url` auto-routes to `kling-v2-1-pair` unless caller explicitly picks models via `body.models[]` (Compare flow). |
+| Default model | Changed `kling-v3-pro` → `kling-v2-6-pro` for new listings. |
+| `lib/refine-prompt.ts` | New helper; uses Sonnet 4.6 to rewrite `scene.director_prompt` incorporating `refinement_notes`, replacing the previous raw `ADDITIONAL USER DIRECTIVES…` concat at render time. |
+
+### Phase DM — Dev / Legacy merge
+
+| Item | Detail |
+|---|---|
+| `lib/sanitize-prompt.ts` | Strips `LOCKED-OFF CAMERA…` variants from any prompt string. Called on every `update_director_prompt` tool write AND at render time. |
+| Scene Editor system prompt | Haiku 4.5 now carries same PROMPT STYLE rules as DQ.1 (char limits, banned phrases, GOOD/BAD examples, "DO NOT include LOCKED-OFF CAMERA"). |
+| UI demotions | "Compare models" → `More ▾` dropdown on SceneCard. Submit has `window.confirm()` with dollar total. Primary Render button shows SKU + cost inline (e.g. `Render v2.6 Pro $0.60`). "Render all" shows true multi-SKU total. |
+| Native Kling added | `kling-v2-native` added to model registry — first in picker. Routes via `lib/providers/kling.ts` using Oliver's pre-paid credits. On 402/credit-exhaustion auto-failovers to Atlas `kling-v2-master`. Cost events logged with `provider='kling', billing='prepaid_credits'`. |
+| `lib/providers/dispatch.ts` | New — `pickProvider(modelKey)` + `isNativeKling(modelKey)`. |
+| Legacy Lab UI retired | `/dashboard/development/prompt-lab/*` redirects to `/dashboard/development/lab`. `PromptLab.tsx` + `PromptLabRecipes.tsx` dead code (not imported). Data preserved — legacy tables still feed retrieval. |
+
+### Phase CI — Cost Integrity (CI.1–CI.4 shipped; CI.5 pending)
+
+| Sub-phase | What shipped |
+|---|---|
+| **CI.1** Claude model-aware pricing | `computeClaudeCost(usage, model)` — rate tables for Opus 4.x / Sonnet 4.x / Haiku 4.5. All call sites now pass model. Scene chat, iteration chat, rule mining, listings director, refine-prompt all log `cost_events`. Haiku 4.5 no longer billed at Sonnet rates. |
+| **CI.2** OpenAI embedding tracking | `embedText` returns `usage: { totalTokens, costCents }`. 5 call sites now log `cost_events` with `provider='openai', unit_type='tokens', stage='embedding'`. |
+| **CI.3** Shotstack per-minute pricing | `shotstackCostCents(durationSeconds)` = `ceil(minutes) × SHOTSTACK_CENTS_PER_MINUTE` (default 20¢/min). Replaces flat `SHOTSTACK_CENTS_PER_RENDER=10`. Uses API-returned duration; falls back to summed clip durations. |
+| **CI.4** Failed-render cost policy | Atlas failed renders log full SKU cost with `metadata.render_outcome='failed'` (over-attribute; reconcile vs invoice). Native Kling failed renders log $0 with `metadata.billing='prepaid_credits_failed_refunded'`. |
+| **Atlas v2.6-pro pricing correction** | Observed bill $0.60/clip (was estimated $0.30). `ATLAS_MODELS` updated: `priceCentsPerSecond: 12, priceCentsPerClip: 60`. 12 historical rows backfilled. Listing `dd552c89` now shows $30.20 (was $4.80). |
+| **`scripts/cost-reconcile.ts`** | Dumps `cost_events` + iteration costs by provider/SKU for a date range. Run weekly. Output to `/tmp/cost-reconcile-*.md`. |
+| **Bug: Atlas cost two compounding bugs** | (1) `checkStatus` returned default model's price regardless of SKU; (2) `priceCentsPerClip` was set to per-second rate. Both fixed (commit `124adfc`). |
+
+**Cost-tracking first-class directive**: every API call logs `cost_events` (even $0 ones). No null/0 cost fields on finalized renders. Saved to memory at `feedback_cost_tracking_first_class.md`.
+
+### New helper libs / scripts added 2026-04-20
+
+| File | Purpose |
+|---|---|
+| `lib/sanitize-prompt.ts` | Strip `LOCKED-OFF CAMERA…` stability prefix variants |
+| `lib/refine-prompt.ts` | Sonnet 4.6 prompt rewrite at render time incorporating refinement_notes |
+| `lib/providers/dispatch.ts` | `pickProvider(modelKey)` + `isNativeKling(modelKey)` |
+| `scripts/trace-director-prompt.ts` | CLI entry point for director-prompt trace audit |
+| `scripts/trace-director-prompt.impl.ts` | Implementation: retrieval RPCs, transcript + audit checklist writer |
+| `scripts/cost-reconcile.ts` | Cost reconciliation dump by provider/SKU for a date range |
 
 ---
 
@@ -69,9 +151,18 @@ Movement first, room type as tiebreaker. `lib/providers/router.ts`.
 
 ---
 
-## Phase 2.8 — Prompt Lab Listings (shipped 2026-04-20 evening)
+## Phase 2.8 — Prompt Lab Listings (shipped 2026-04-20 evening; refined same day)
 
-A second-generation Lab at `/dashboard/development/lab`, distinct from the legacy single-photo session Lab at `/dashboard/development/prompt-lab` (which is preserved and still functional). Listings group multiple photos, the director plans a shot sequence (scenes), and each scene carries iterations rendered via Atlas Cloud.
+A second-generation Lab at `/dashboard/development/lab`. The legacy Lab at `/dashboard/development/prompt-lab` has been retired — routes redirect here. Legacy tables (`prompt_lab_sessions`, `prompt_lab_iterations`, `prompt_lab_recipes`) are preserved and feed unified retrieval. Listings group multiple photos, the director plans a shot sequence (scenes), and each scene carries iterations rendered via Atlas Cloud or native Kling.
+
+**Changes from back-on-track phases (DQ/DM/CI):**
+- Default model: `kling-v3-pro` → **`kling-v2-6-pro`** (better motion, lower cost)
+- `CAMERA_STABILITY_PREFIX` now gated to `kling-v3-*` only (was prepended to all renders)
+- Paired scenes (`use_end_frame && end_image_url`) auto-route to `kling-v2-1-pair`
+- `lib/refine-prompt.ts` rewrites the prompt at render time instead of raw concat
+- `lib/sanitize-prompt.ts` strips any residual stability-prefix artifacts on write + render
+- Scene Editor (Haiku 4.5) carries full PROMPT STYLE rules (char limits, banned phrases)
+- Native Kling (`kling-v2-native`) first in model picker, routes through pre-paid credits
 
 ### Hierarchy
 
@@ -125,10 +216,10 @@ Director prompt explicitly tells Claude that single-image i2v is the right defau
 
 ### Shake mitigation (Kling v3 issue)
 
-Kling v3.0-pro renders visibly shakier than v2. Two levers applied on every render:
+Kling v3.0-pro renders visibly shakier than v2. Two levers:
 
-- **Positive prefix** injected by render.ts: `"LOCKED-OFF CAMERA on a gimbal-stabilized Steadicam rig. Smooth motorized dolly motion only. Zero camera shake, zero handheld jitter, tripod-stable framing."` — idempotent (skipped if already present)
-- **Negative prompt** field on `AtlasSubmitBody`: `"shaky camera, handheld, wobble, vibration, jitter, camera shake, rolling shutter, unstable motion"` (default on every request)
+- **Positive prefix** (`CAMERA_STABILITY_PREFIX`) — injected by render.ts for `kling-v3-*` models only (NOT v2.x or o3). Was previously added to every render; gated 2026-04-20 (Phase DQ.2). Residual stability prefixes sanitized from persisted prompts by `lib/sanitize-prompt.ts`.
+- **Negative prompt** field on `AtlasSubmitBody`: `"shaky camera, handheld, wobble, vibration, jitter, camera shake, rolling shutter, unstable motion"` — still applied on every Atlas request as a belt-and-braces measure.
 
 ### Rating + reasons
 
@@ -306,6 +397,9 @@ RPC helpers: `match_rated_examples` (unified retrieval), `match_loser_examples` 
 | `api/admin/prompt-lab/proposals.ts` | List + apply/reject |
 | `api/cron/poll-lab-renders.ts` | Phase 1 submit queued + Phase 2 finalize in-flight (rewritten 2026-04-15) |
 | `scripts/backfill-scene-embeddings.ts` | One-shot: embed existing prod scenes (ran, 7 scenes) |
+| `scripts/trace-director-prompt.ts` | CLI: reconstruct + audit director user message for any listing/property (NEW 2026-04-20) |
+| `scripts/trace-director-prompt.impl.ts` | Implementation for trace script — retrieval RPCs, transcript writer (NEW 2026-04-20) |
+| `scripts/cost-reconcile.ts` | Dump cost_events by provider/SKU for a date range; run weekly (NEW 2026-04-20) |
 | `src/pages/dashboard/PromptLab.tsx` | Main Lab UI (list + detail) |
 | `src/pages/dashboard/PromptLabRecipes.tsx` | Recipe library UI |
 | `src/pages/dashboard/PromptProposals.tsx` | Rule-mining proposals UI |
@@ -329,24 +423,37 @@ Development landing (`/dashboard/development`) shows:
 
 ---
 
-## Providers (credit status 2026-04-19)
+## Providers (credit status 2026-04-20)
 
 | Provider | Status | Notes |
 |---|---|---|
-| **Atlas Cloud** | Active (Lab listings) | 6 Kling SKUs registered (v2.6-pro default, v3-pro, v3-std, v2.1-pair, v2-master, o3-pro). Env: `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v2-6-pro`, changed 2026-04-20). Accepts `negative_prompt` + `cfg_scale` per request. |
-| Runway | Active (legacy Lab + prod) | URL-based image input. Fallback target when Kling is full |
-| Kling (native) | Active (legacy Lab + prod) | 4-concurrent cap, auto-fallback to Runway, explicit queues with 30-min expiry |
+| **Atlas Cloud** | Active (Lab listings) | 6 Kling SKUs registered (v2.6-pro default, v3-pro, v3-std, v2.1-pair, v2-master, o3-pro). Env: `ATLASCLOUD_API_KEY`, `ATLAS_VIDEO_MODEL` (default `kling-v2-6-pro`). Accepts `negative_prompt` + `cfg_scale` per request. Per-SKU pricing: v3-pro/o3-pro $0.095, v3-std $0.071, **v2.6-pro $0.060** ($0.60/clip at Atlas billing), v2.1-pair $0.076, v2-master $0.221. |
+| **Kling (native)** | Active (Lab listings) | Oliver's pre-paid Kling credits via native API. Model key `kling-v2-native`. Routes through `lib/providers/kling.ts`. On 402/credit-exhaustion auto-failovers to Atlas `kling-v2-master`. Cost logged with `provider='kling', billing='prepaid_credits'`. Variable cost = $0. |
+| Runway | Active (legacy + prod) | URL-based image input. Fallback when Kling is full |
+| Kling (legacy) | Active (legacy + prod) | 4-concurrent cap, auto-fallback to Runway, explicit queues with 30-min expiry |
 | Luma | Coded, not wired | |
-| Higgsfield | Scaffolded, not wired (deferred — see `docs/HIGGSFIELD-INTEGRATION.md`) | |
-| Shotstack | Active if key set. Stage + prod keys exist in `.env` | |
-| OpenAI | Embeddings for Lab + prod scene retrieval (unified pool). `OPENAI_API_KEY` live in Vercel prod + preview |
-| Anthropic | Claude Sonnet 4.6 (director), Claude Haiku 4.5 (scene chat, streaming via SSE) |
+| Higgsfield | Scaffolded, deferred — see `docs/HIGGSFIELD-INTEGRATION.md` | |
+| Shotstack | Active if key set. Stage + prod keys exist in `.env`. Per-minute pricing: `SHOTSTACK_CENTS_PER_MINUTE=20` (Ingest plan). | |
+| OpenAI | Embeddings for Lab + prod scene retrieval (unified pool). `OPENAI_API_KEY` live in Vercel prod + preview. Costs tracked in `cost_events` since CI.2. |
+| Anthropic | Sonnet 4.6 (director, refine-prompt), Haiku 4.5 (scene chat, streaming SSE). Model-aware pricing since CI.1. |
 
 ---
 
 ## Cost tracking
 
-`cost_events` table, `recordCostEvent` helper in `lib/db.ts`. Every Claude call + Runway/Kling/Shotstack render logged with tokens / credits / units + cent estimates. Lab iterations include analysis + director + render cost in `prompt_lab_iterations.cost_cents` (rounded to int — non-int fractional cents caused a 500 early in the Lab build).
+`cost_events` table, `recordCostEvent` helper in `lib/db.ts`. Every API call logs a cost event — even $0 ones — for audit. No null/0 cost fields on finalized renders.
+
+| What | How |
+|---|---|
+| Claude | `computeClaudeCost(usage, model)` — model-aware rate tables (Opus 4.x / Sonnet 4.x / Haiku 4.5). Every call site passes its model. |
+| Atlas renders | Per-SKU pricing from `ATLAS_MODELS.priceCentsPerSecond`. Failed renders still log full cost (`render_outcome='failed'`). |
+| Native Kling | $0 variable cost; `billing='prepaid_credits'`. Failed renders log $0 (`billing='prepaid_credits_failed_refunded'`). |
+| Runway | `RUNWAY_CENTS_PER_CREDIT`. |
+| Shotstack | `shotstackCostCents(durationSeconds)` = `ceil(minutes) × SHOTSTACK_CENTS_PER_MINUTE`. |
+| OpenAI embeddings | `embedText` returns `usage.costCents`; all 5 call sites log events with `provider='openai', stage='embedding'`. |
+| Reconciliation | `scripts/cost-reconcile.ts` — run weekly before high-volume sessions. |
+
+Lab iterations include analysis + director + render cost in `prompt_lab_iterations.cost_cents` (rounded to int — fractional cents caused a 500 early in the Lab build). Atlas v2.6-pro real billing: $0.60/clip (12¢/sec). Historical rows backfilled 2026-04-20.
 
 ---
 
@@ -356,6 +463,12 @@ Development landing (`/dashboard/development`) shows:
 - **Production pipeline base64 image input** — 4 places in `lib/pipeline.ts` still use base64 instead of URL. Lab is fixed; prod is not.
 - **File-revert mystery** — unresolved. All Shotstack MVP files + the entire Lab build survived multiple sessions; probably dormant or specific to certain paths.
 - **Prompt QA dead code** — `lib/prompts/prompt-qa.ts` + body of `runPreflightQA` in pipeline.ts still present. Never called. Prune later.
+
+### Fixed 2026-04-20 (back-on-track phases)
+
+- **Atlas cost off by 5–7×** — two compounding bugs: (1) `checkStatus` returned default model's price regardless of SKU rendered; (2) `priceCentsPerClip` was set to per-second value, not per-clip. Both fixed. Listing `dd552c89` dashboard: $4.80 → $30.20 (12 historical rows backfilled).
+- **Scene Editor writing verbose trajectories** — Haiku 4.5 system prompt was generating 400+ char prompts with `LOCKED-OFF CAMERA…` prefix baked in. Fixed on 3 layers: system prompt PROMPT STYLE rules, `lib/sanitize-prompt.ts` on write, render-time sanitizer.
+- **`CAMERA_STABILITY_PREFIX` polluting v2/o3 prompts** — prefix was prepended on every render regardless of model. Now gated to `kling-v3-*` only.
 
 ### Fixed since last refresh (2026-04-19 production-readiness merge)
 
@@ -624,17 +737,15 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## Immediate next actions (start here next session)
 
-0. **Back-on-track plan in flight (spec `docs/superpowers/specs/2026-04-20-back-on-track-design.md`).** Phase A (Lab UX "next-action spine" redesign) is code-complete on branch `feature/back-on-track` — needs browser verification (run `npm run dev` in `.worktrees/back-on-track`, open any listing, check banner + chips + optimistic rate/archive). Phase M.1 verdict: **WORKING WITH GAPS** — learning loop is wired end-to-end (refutes "ML failed" hypothesis). Full audit at `docs/ML-AUDIT-2026-04-20.md`; raw traces at `docs/traces/`. Top fixes identified: back-fill prod scene embeddings (7/24 → 24/24), stop writing deprecated capture fields (`tags`, `refinement_instruction`), add UI nudge when Lab overrides become promotable.
-
-1. **Validate shake fix on new renders** — the stability prefix + negative_prompt ship on every NEW Atlas render but won't improve existing iterations. Render one push-in or top-down and visually confirm reduced shake. If still shaky, lower cfg_scale (Atlas default ~0.5, try 0.3–0.4).
-2. **Phase 3 prerequisites (autonomous iterator foundations)**:
-   - **Prompt rewrite pass** — replace the raw "ADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:" concat in render.ts with a Sonnet call that rewrites director_prompt cleanly incorporating refinement_notes. Partially covered by the chat `update_director_prompt` tool but not automatic at render time.
-   - **Expand v_rated_pool retrieval** — currently pooled for director input; autonomous iterator will also need it for scene-level decisioning ("which model did 5★ kitchens use?").
-3. **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed; prod needs the same treatment.
-4. **Use the listings Lab for data generation** — rate aggressively, archive junk, use Generate-all + Compare for A/B feedback. Recipe retrieval feeds back into every new listing's director.
-5. **Route paired scenes to kling-v2-1-pair** — the SKU is purpose-built for start+end-frame rendering. Not yet auto-selected; user toggles it via "Generate all" for now.
-6. **Spatial grounding** — designed (`docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`), PAUSED. Would give the director coordinate-level composition awareness.
-7. **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos discussed but not built. Lab listings don't assemble to a final video yet.
+1. **CI.5 cost dashboard drill-down** — in progress, not yet shipped. Per-listing and per-batch cost breakdown UI with provider/SKU breakdown; links to `cost_events` rows.
+2. **Phase M.2 — ML consolidation + SKU signal capture**
+   - M.2a–c: backfill prod scene embeddings (7/24 → 24/24), stop writing deprecated capture fields (`tags`, `refinement_instruction`), add UI nudge when Lab overrides become promotable.
+   - M.2d: migration 028 adds `model_used` to `prompt_lab_recipes`; retrieval extended to surface winning SKU to the director.
+3. **Phase B — model head-to-head** — one fresh listing, Generate-all across all SKUs, rate every iteration. Now feasible with trustworthy per-render cost tracking.
+4. **Phase C — production end-to-end**
+   - Router swap: Atlas + native Kling + Runway in prod pipeline
+   - **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still use base64. Lab fixed; prod not yet.
+   - Duration-aware director: 15s → 4 scenes, 30s → 6–8, 60s → 12
 
 ---
 
@@ -652,7 +763,10 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 | `lib/providers/router.ts` | Camera-movement-first routing |
 | `lib/providers/errors.ts` | Error classification: permanent/capacity/transient/unknown (NEW) |
 | `lib/providers/runway.ts` / `kling.ts` | Generation providers |
+| `lib/providers/dispatch.ts` | `pickProvider(modelKey)` + `isNativeKling(modelKey)` (NEW 2026-04-20) |
 | `lib/providers/shotstack.ts` | Assembly provider (active if key) |
+| `lib/sanitize-prompt.ts` | Strip `LOCKED-OFF CAMERA…` stability prefix from any prompt string (NEW 2026-04-20) |
+| `lib/refine-prompt.ts` | Sonnet 4.6 rewrite of director_prompt incorporating refinement_notes (NEW 2026-04-20) |
 | `lib/prompts/resolve.ts` | `resolveProductionPrompt` — reads Lab-promoted revisions at runtime (NEW) |
 | `lib/db.ts` | DB helpers including recordCostEvent, upsertSceneRating, fetchRatedExamples, recordPromptRevisionIfChanged |
 | `api/pipeline/[propertyId].ts` | Production pipeline entrypoint |
@@ -677,4 +791,4 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 
 ## One-liner for next session
 
-> Read `docs/PROJECT-STATE.md` first. Prod pipeline is fire-and-forget + cron; all 6 stages unchanged. **Phase 2.8 (2026-04-20 evening)**: new listings-based Lab at `/dashboard/development/lab` on Atlas Cloud with 6 Kling SKUs (v3-pro default, Wan removed), multi-photo master-detail UI with ShotPlanTable + focused SceneCard, streaming scene chat via Haiku 4.5 with `save_future_instruction` + `update_director_prompt` tools, rating reasons taxonomy, scene + iteration archive, end-frame toggle (crop fallback dropped), shake fix (stability prefix + negative_prompt on every render), recipe + exemplar + loser retrieval restored in listings director, Generate-all-models + A/B/C Compare modal. Legacy Lab at `/dashboard/development/prompt-lab` still live. Next: validate shake on fresh renders, build prompt-rewrite pass for autonomous iterator, prod base64→URL fix.
+> Read `docs/PROJECT-STATE.md` first. **Back-on-track execution (2026-04-20)**: Phases A (Lab UX spine — banner, status chips, optimistic mutations), M.1 (director-prompt trace audit — WORKING WITH GAPS), DQ (director concise prompts — ≤120 char, banned phrases, v3-only stability prefix, paired auto-routing, default → v2.6-pro), DM (dev/legacy merge — native Kling revived, legacy Lab UI retired, sanitize-prompt, scene editor hygiene), CI.1–4 (model-aware Claude + OpenAI embedding + Shotstack per-minute + failed-render cost policy; Atlas cost tracking was off 5–7×, now fixed). Next: CI.5 cost dashboard → Phase M.2 ML consolidation + SKU capture → Phase B model head-to-head → Phase C prod end-to-end (base64→URL fix, router swap, duration-aware director).

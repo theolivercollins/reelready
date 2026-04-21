@@ -4,46 +4,97 @@ See `docs/PROJECT-STATE.md` for full project state and `docs/PROMPT-LAB-PLAN.md`
 
 ## Critical (blocking quality)
 
-- [ ] **Validate shake fix on fresh Atlas renders** — stability prefix + `negative_prompt` now ship every render but only affect new iterations. Render one push-in and one top-down, visually confirm reduced shake. If still shaky, lower cfg_scale (Atlas default ~0.5, try 0.3–0.4).
-- [ ] **Production pipeline base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed (URL-based); prod needs the same treatment.
-
-## Phase 3 prerequisites (autonomous iterator foundations)
-
-- [ ] **Prompt rewrite pass at render time** — replace the raw `"ADDITIONAL USER DIRECTIVES FROM PRIOR ITERATIONS:"` concat in render.ts with a Sonnet call that rewrites director_prompt cleanly incorporating refinement_notes. The `update_director_prompt` chat tool is a partial fix but not automatic.
-- [ ] **Route paired scenes to `kling-v2-1-pair`** — it's the purpose-built start-end-frame SKU at $0.076. Currently only reachable via "Generate all" checkboxes. Should auto-select when `scene.use_end_frame=true && scene.end_photo_id != null`.
-- [ ] **Expanded v_rated_pool usage** — the listings director now reads it for retrieval. Autonomous iterator will also need it for scene-level decisions (which model performs best on kitchens, etc.). Build `rated-pool-analytics.ts` helpers.
-- [ ] **Budget + stop conditions** — per-listing and per-scene spend caps, stop at 4★+ reached or N iterations. Needed before enabling any autonomous loop.
-- [ ] **Scene prioritization logic** — which scene does the iterator tackle first? Lowest best-rating? Most variance across iterations? Oldest unreviewed?
+- [ ] **Production pipeline base64→URL fix** — 4 places in `lib/pipeline.ts` still send base64. Lab is fixed (URL-based); prod needs the same treatment. Tracked as Phase C scope.
 
 ## High priority
 
+- [ ] **CI.5 cost dashboard drill-down** — per-listing + per-batch breakdown UI with provider/SKU detail and links to `cost_events` rows. In progress.
+- [ ] **Phase M.2a–d — ML consolidation + SKU capture**
+  - M.2a: backfill prod scene embeddings (7/24 → 24/24)
+  - M.2b: stop writing deprecated capture fields (`tags`, `refinement_instruction`)
+  - M.2c: UI nudge when Lab overrides become promotable
+  - M.2d: migration 028 — `model_used` on `prompt_lab_recipes`; retrieval surfaces winning SKU to director
+- [ ] **Phase B — model head-to-head** — one fresh listing, Generate-all across all SKUs, rate every iteration; cost tracking now reliable.
+- [ ] **Phase C — production end-to-end** — router swap (Atlas + native Kling + Runway), production base64→URL fix, duration-aware director (15s=4 scenes, 30s=6–8, 60s=12)
+
+## Phase 3 prerequisites (autonomous iterator foundations)
+
+- [ ] **Expanded v_rated_pool usage** — autonomous iterator will need it for scene-level decisions (which model performs best on kitchens, etc.). Build `rated-pool-analytics.ts` helpers.
+- [ ] **Budget + stop conditions** — per-listing and per-scene spend caps, stop at 4★+ reached or N iterations. Needed before enabling any autonomous loop.
+- [ ] **Scene prioritization logic** — which scene does the iterator tackle first? Lowest best-rating? Most variance across iterations? Oldest unreviewed?
+
+## Medium priority
+
 - [ ] **Spatial grounding** — designed in `docs/superpowers/specs/2026-04-15-spatial-grounding-design.md`. Coordinate-level composition awareness for motion planning. Plan at `docs/superpowers/plans/2026-04-15-spatial-grounding.md`. PAUSED.
-- [ ] **Shotstack assembly for Lab listings** — the legacy Lab and prod both assemble final videos via Shotstack, but listings Lab currently produces standalone iterations only. Wire in a "Assemble listing" action that composes the top-rated iteration per scene into a final walkthrough.
-- [ ] **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos. Discussed but not built.
+- [ ] **Shotstack assembly for Lab listings** — listings Lab produces standalone iterations only. Wire in a "Assemble listing" action composing top-rated iteration per scene into a final walkthrough.
 - [ ] **Client-side photo compression** — resize to 2048px / JPEG 85 before upload to cut transfer + storage cost.
-- [ ] **Delete legacy iteration chat UI path** — the endpoint + DB column remain but unused. Once confident no downstream code reads it, remove.
+- [ ] **Delete legacy iteration chat UI path** — endpoint + DB column still exist but unused. Once confident, remove.
 
 ## Medium priority
 
 - [ ] **Supabase Realtime subscriptions** — dashboard polls every 5s (listing detail while analyzing/directing/rendering). Switch to Realtime for cheaper live updates.
-- [ ] **Email/webhook notifications** — notify submitting agent when a video is complete.
 - [ ] **daily_stats aggregation cron** — table exists, nothing populates it.
 - [ ] **Hourly throughput stats endpoint** — Overview dashboard chart.
 - [ ] **Settings page backend** — persist to DB (currently React state only).
-- [ ] **Lab cost dashboard** — sum of Lab `cost_cents` per batch, visible on the list header. Listings side partially covered by the per-model breakdown in header stats.
 - [ ] **Recipe analytics for listings Lab** — surface which recipes have highest hit rate on listings (times_applied count already exists).
-- [ ] **Iteration-chat history viewer** — the data is still in `prompt_lab_listing_scene_iterations.chat_messages`; no UI surfaces it now that scene chat is primary.
+- [ ] **Iteration-chat history viewer** — data still in `prompt_lab_listing_scene_iterations.chat_messages`; no UI surfaces it since scene chat is primary.
 
-## Low priority / Phase 2
+## Deferred / Phase 2 post-mastery
 
+- [ ] **Shotstack reverse clips** — push_in/pull_out rhythm in assembled videos. Discussed; not built.
+- [ ] **Email delivery (Resend)** — notify submitting agent when a video is complete.
+- [ ] **Order form persistence** — agent order form saves to DB.
+- [ ] **Eleven Labs voiceover** — AI narration track on assembled videos.
+- [ ] **Brokerage branding** — logo + brand colors per brokerage, overlaid on video.
+- [ ] **Feature shots** — dedicated hero-clip generation for standout features (pool, view, kitchen island).
+- [ ] **Music pipeline** — beat detection, licensed track selection, sync transitions to beat.
 - [ ] **Full automated QC (production)** — frame extraction needs FFmpeg. Options: Vercel Sandbox, external frame API, self-hosted worker.
 - [ ] **Additional providers** — Pika, Seadance. Higgsfield deferred permanently.
-- [ ] **Beat detection for music sync** — align transitions to beats.
 - [ ] **Smart vertical cropping** — subject-aware offset for 9:16.
-- [ ] **Brokerage branding templates** — logo + brand colors per brokerage.
 - [ ] **Auth upgrade** — agent accounts, operator accounts, API keys.
 - [ ] **Visual-embedding option for Lab** — embed the IMAGE not just the analysis text. Higher fidelity, more cost.
 - [ ] **Clean up `match_lab_iterations` RPC** — unused since unified embeddings shipped. Still in DB.
+
+## Done 2026-04-20 (back-on-track phases A / M.1 / DQ / DM / CI)
+
+### Phase A — Lab UX next-action spine
+- [x] `NextActionBanner` component — colored per state, one-click advances next stuck scene (`14bdfed`, `858577c`)
+- [x] Per-scene status chips in `ShotPlanTable` (`needs_rating / failed / iterating / needs_first_render / rendering / done / archived`), rows priority-sorted (`eff932a`)
+- [x] Pure resolvers `src/lib/labSceneStatus.ts` + `src/lib/labNextAction.ts` — 17 unit tests (`ae1bfa6`, `53c7c4b`, `d6c57a0`)
+- [x] Optimistic rate + scene-archive mutations in `LabListingDetail.tsx` (`7818cfd`, `9995657`)
+- [x] `SceneCard` `data-scene-id` attribute for scroll-to behavior
+- [x] Resolver patch: "iterating" triggers when all iterations rated but none hit 4★+
+- [x] Done color changed emerald → slate (grey) to distinguish from teal "rate"
+
+### Phase M.1 — Director-prompt trace audit
+- [x] `scripts/trace-director-prompt.ts` + `scripts/trace-director-prompt.impl.ts` — reconstructs director user message, runs retrieval RPCs live, writes `/tmp/director-trace-<id>.md`
+- [x] Verdict: WORKING WITH GAPS — 108 rated legacy iterations feeding retrieval; Lab→prod promotion never used (0 promoted); prod scene embeddings 7/24 partial
+- [x] Full report at `docs/ML-AUDIT-2026-04-20.md`; raw traces at `docs/traces/`
+
+### Phase DQ — Director concise prompts
+- [x] `DIRECTOR_SYSTEM` rewritten: PROMPT STYLE section (≤120 chars single-image, ≤250 paired), banned phrases, legacy 5★ examples as patterns, "exemplars are CONTENT patterns not LENGTH permission" guardrail
+- [x] `CAMERA_STABILITY_PREFIX` gated to `kling-v3-*` only (DQ.2) (`1e8893f`)
+- [x] Paired scenes auto-route to `kling-v2-1-pair` unless caller picks models (DQ.3) (`1e8893f`)
+- [x] Default model changed `kling-v3-pro` → `kling-v2-6-pro` (DQ.4) (`6fceb2c`)
+- [x] `lib/refine-prompt.ts` — Sonnet 4.6 prompt rewrite incorporating refinement_notes at render time (DQ.5) (`1e8893f`)
+
+### Phase DM — Dev / Legacy merge
+- [x] `lib/sanitize-prompt.ts` — strips `LOCKED-OFF CAMERA…` variants on write + render
+- [x] Scene Editor Haiku 4.5 system prompt: PROMPT STYLE rules (char limits, banned phrases, GOOD/BAD examples, "DO NOT include LOCKED-OFF CAMERA")
+- [x] "Compare models" demoted to `More ▾` dropdown; Submit has `window.confirm()` dollar total; Render button shows SKU + cost inline; Render-all shows multi-SKU total
+- [x] Native Kling (`kling-v2-native`) added — first in picker, routes via `lib/providers/kling.ts`, pre-paid credits, auto-failover to Atlas v2-master on 402 (`8a06b66`)
+- [x] `lib/providers/dispatch.ts` — `pickProvider(modelKey)` + `isNativeKling(modelKey)` (`8a06b66`)
+- [x] Legacy Lab UI retired: `/dashboard/development/prompt-lab/*` redirects to lab; `PromptLab.tsx` + `PromptLabRecipes.tsx` dead code (`d9e6f1f`)
+
+### Phase CI — Cost Integrity (CI.1–CI.4)
+- [x] CI.1: `computeClaudeCost(usage, model)` — rate tables Opus 4.x / Sonnet 4.x / Haiku 4.5; all call sites pass model; scene/iteration chat, rule mining, director, refine-prompt log `cost_events` (`464f25d`)
+- [x] CI.2: `embedText` returns `usage.costCents`; 5 call sites log `cost_events` with `provider='openai', stage='embedding'` (`2079822`)
+- [x] CI.3: `shotstackCostCents(durationSeconds)` = ceil(minutes) × 20¢; replaces flat 10¢ constant; uses API-returned duration (`3c392cf`)
+- [x] CI.4: Atlas failed renders log full SKU cost (`render_outcome='failed'`); native Kling failed renders log $0 (`prepaid_credits_failed_refunded`) (`3c392cf`)
+- [x] Atlas v2.6-pro pricing correction: $0.60/clip (was $0.30); `priceCentsPerSecond: 12, priceCentsPerClip: 60`; 12 historical rows backfilled (`124adfc`)
+- [x] `scripts/cost-reconcile.ts` — dump cost_events by provider/SKU for date range
+- [x] Bug fix: Atlas cost two compounding bugs fixed (SKU lookup + per-clip vs per-second rate) (`124adfc`)
+- [x] Bug fix: Scene Editor writing 400+ char verbose trajectories with stability prefix — fixed on 3 layers
 
 ## Done 2026-04-20 (evening — Phase 2.8 Listings Lab)
 
