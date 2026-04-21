@@ -15,6 +15,49 @@ import {
 import { parseDirectorIntent, type DirectorIntent } from "./prompts/director-intent.js";
 import { DIRECTOR_SYSTEM, buildDirectorUserPrompt } from "./prompts/director.js";
 import { buildAnalysisText, embedTextSafe, fromPgVector, toPgVector } from "./embeddings.js";
+import {
+  analyzePhotoWithGemini,
+  GeminiAnalysisError,
+  type ExtendedPhotoAnalysis,
+  type MotionHeadroom,
+} from "./providers/gemini-analyzer.js";
+
+// DA.3 — map a director camera_movement to the motion_headroom key it
+// depends on. Returns null for movements that don't require headroom
+// (feature_closeup, rack_focus: static-ish shots that are always safe).
+// Exported for reuse by the prod pipeline validator.
+export function mapCameraMovementToHeadroomKey(
+  movement: string | null | undefined,
+): keyof import("./providers/gemini-analyzer.js").MotionHeadroom | null {
+  if (!movement) return null;
+  switch (movement) {
+    case "push_in":
+    case "low_angle_glide":
+      return "push_in";
+    case "drone_push_in":
+      // Drone needs forward clearance AND aerial/elevated framing. We
+      // validate push_in here and let the director's aerial-camera-height
+      // check (via motion_headroom.drone_push_in) layer on top via the
+      // system prompt's hard rules. If you want both checks, extend the
+      // return type to an array — for now push_in=false is the more
+      // common failure on ground shots the director misroutes.
+      return "drone_push_in";
+    case "orbit":
+      return "orbit";
+    case "parallax":
+    case "dolly_left_to_right":
+    case "dolly_right_to_left":
+    case "reveal":
+      return "parallax";
+    case "top_down":
+      return "top_down";
+    case "feature_closeup":
+    case "rack_focus":
+      return null;
+    default:
+      return null;
+  }
+}
 
 export interface PairResolution {
   endImageUrl: string | null;
@@ -81,9 +124,84 @@ export async function analyzeListingPhotos(listingId: string): Promise<void> {
     return;
   }
 
+  // DA.1 — per-photo analysis now runs through Gemini 3 Flash as the
+  // "eyes" of the director. Claude stays as the fallback if Gemini errors.
+  // We preserve the full ExtendedPhotoAnalysis shape (which is a superset
+  // of PhotoAnalysisResult) in analysis_json; downstream readers get the
+  // original fields plus the new camera-state fields additively.
   await Promise.all(
     photos.map(async (p) => {
-      const { analysis } = await analyzeSingleImage(p.image_url);
+      let analysis: ExtendedPhotoAnalysis;
+      let analysisProvider: "google" | "anthropic";
+      let geminiUsage: { inputTokens: number; outputTokens: number; costCents: number } | null =
+        null;
+      let geminiModel: string | null = null;
+
+      try {
+        const res = await analyzePhotoWithGemini(p.image_url);
+        analysis = res.analysis;
+        analysisProvider = "google";
+        geminiUsage = res.usage;
+        geminiModel = res.model;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[analyzeListingPhotos] Gemini failed for photo ${p.id}; falling back to Claude: ${msg}`,
+        );
+        const claudeRes = await analyzeSingleImage(p.image_url);
+        // Claude path doesn't emit motion_headroom / camera-state. Use
+        // permissive defaults so the director doesn't block every
+        // movement on fallback photos — the validator (DA.3) will still
+        // catch genuinely incompatible choices once a proper Gemini run
+        // populates motion_headroom on re-analysis. Cost for the Claude
+        // path is already logged inside analyzeSingleImage's caller pattern
+        // — but Lab previously never logged it; we log it here now for
+        // parity with the Gemini path.
+        const permissiveHeadroom: MotionHeadroom = {
+          push_in: true,
+          pull_out: true,
+          orbit: true,
+          parallax: true,
+          drone_push_in: true,
+          top_down: true,
+        };
+        analysis = {
+          ...claudeRes.analysis,
+          camera_height: "eye_level",
+          camera_tilt: "level",
+          frame_coverage: "medium",
+          motion_headroom: permissiveHeadroom,
+          motion_headroom_rationale: {
+            note: "gemini failed; claude fallback; motion_headroom defaulted to permissive",
+          },
+        } as ExtendedPhotoAnalysis;
+        analysisProvider = "anthropic";
+        // Log the Claude-fallback cost. analyzeSingleImage returns costCents
+        // but not the full usage breakdown — we still record enough for
+        // reconciliation (scope marks the fallback path).
+        try {
+          await supabase.from("cost_events").insert({
+            property_id: null,
+            scene_id: null,
+            stage: "analysis",
+            provider: "anthropic",
+            units_consumed: 0, // analyzeSingleImage doesn't surface tokens; cost_cents is the ground truth
+            unit_type: "tokens",
+            cost_cents: Math.round(claudeRes.costCents),
+            metadata: {
+              scope: "lab_listing_photo_eyes_fallback",
+              model: "claude-sonnet-4-6",
+              listing_id: listingId,
+              photo_id: p.id,
+              reason: "gemini_failure",
+              gemini_error: msg,
+            },
+          });
+        } catch (costErr) {
+          console.error("[analyzeListingPhotos] claude fallback cost_events insert failed:", costErr);
+        }
+      }
+
       const embedded = await embedTextSafe(
         buildAnalysisText({
           roomType: analysis.room_type,
@@ -100,6 +218,32 @@ export async function analyzeListingPhotos(listingId: string): Promise<void> {
           embedding: embedded ? toPgVector(embedded.vector) : null,
         })
         .eq("id", p.id);
+
+      // Cost event for the Gemini path (Claude path logged inline above).
+      if (analysisProvider === "google" && geminiUsage && geminiModel) {
+        try {
+          await supabase.from("cost_events").insert({
+            property_id: null,
+            scene_id: null,
+            stage: "analysis",
+            provider: "google",
+            units_consumed: geminiUsage.inputTokens + geminiUsage.outputTokens,
+            unit_type: "tokens",
+            cost_cents: Math.round(geminiUsage.costCents),
+            metadata: {
+              scope: "lab_listing_photo_eyes",
+              model: geminiModel,
+              listing_id: listingId,
+              photo_id: p.id,
+              input_tokens: geminiUsage.inputTokens,
+              output_tokens: geminiUsage.outputTokens,
+            },
+          });
+        } catch (costErr) {
+          console.error("[analyzeListingPhotos] gemini cost_events insert failed:", costErr);
+        }
+      }
+
       if (embedded) {
         try {
           await supabase.from("cost_events").insert({
@@ -160,6 +304,13 @@ export async function directListingScenes(listingId: string): Promise<void> {
       composition?: string | null;
       suggested_motion?: string | null;
       motion_rationale?: string | null;
+      // DA.2 — camera-state fields from Gemini analyzer (optional for
+      // photos analyzed pre-DA.1 or via Claude fallback).
+      camera_height?: string | null;
+      camera_tilt?: string | null;
+      frame_coverage?: string | null;
+      motion_headroom?: Record<string, boolean> | null;
+      motion_headroom_rationale?: Record<string, string> | null;
     };
     return {
       id: p.id,
@@ -171,6 +322,11 @@ export async function directListingScenes(listingId: string): Promise<void> {
       composition: a.composition ?? null,
       suggested_motion: a.suggested_motion ?? null,
       motion_rationale: a.motion_rationale ?? null,
+      camera_height: a.camera_height ?? null,
+      camera_tilt: a.camera_tilt ?? null,
+      frame_coverage: a.frame_coverage ?? null,
+      motion_headroom: a.motion_headroom ?? null,
+      motion_headroom_rationale: a.motion_headroom_rationale ?? null,
     };
   });
 
@@ -256,6 +412,45 @@ export async function directListingScenes(listingId: string): Promise<void> {
       director_intent: unknown;
     }>;
   };
+
+  // DA.3 — validate each planned scene against the source photo's
+  // motion_headroom. On violation, override camera_movement to the
+  // analyzer's suggested_motion if that's in-headroom, else
+  // feature_closeup (safest fallback — no camera motion through space).
+  // This is the cheap, deterministic fix: no re-prompt round-trip,
+  // constant latency. See DA.3 notes in docs/HANDOFF.md.
+  const photoById = new Map(photos.map((p) => [p.id, p]));
+  let violationCount = 0;
+  for (const scene of parsed.scenes) {
+    const p = photoById.get(scene.photo_id);
+    if (!p) continue;
+    const a = (p.analysis_json ?? {}) as {
+      motion_headroom?: Record<string, boolean>;
+      suggested_motion?: string | null;
+    };
+    const hr = a.motion_headroom;
+    if (!hr) continue; // Claude-fallback photo — permissive defaults, nothing to validate
+    const movement = scene.camera_movement;
+    const key = mapCameraMovementToHeadroomKey(movement);
+    if (key && hr[key] === false) {
+      violationCount++;
+      const originalMovement = movement;
+      const suggested = a.suggested_motion ?? null;
+      const suggestedKey = suggested ? mapCameraMovementToHeadroomKey(suggested) : null;
+      const suggestedInHeadroom =
+        suggested && (!suggestedKey || hr[suggestedKey] !== false);
+      const replacement = suggestedInHeadroom && suggested ? suggested : "feature_closeup";
+      console.warn(
+        `[directListingScenes] DA.3 override: scene ${scene.scene_number} picked ${originalMovement} but photo.motion_headroom.${key}=false; overriding to ${replacement}`,
+      );
+      scene.camera_movement = replacement;
+    }
+  }
+  if (violationCount > 0) {
+    console.log(
+      `[directListingScenes] DA.3 validator overrode ${violationCount} scene(s) on listing ${listingId}`,
+    );
+  }
 
   const photoUrlById = new Map(photos.map((p) => [p.id, p.image_url]));
   for (const scene of parsed.scenes) {

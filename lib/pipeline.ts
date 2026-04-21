@@ -47,6 +47,12 @@ import { resolveEndFrameUrl } from "./services/end-frame.js";
 import { selectProviderForScene, buildProviderFromDecision, getEnabledProviders } from "./providers/router.js";
 import { pollUntilComplete } from "./providers/provider.interface.js";
 import { classifyProviderError } from "./providers/errors.js";
+import {
+  analyzePhotoWithGemini,
+  type ExtendedPhotoAnalysis,
+  type MotionHeadroom,
+} from "./providers/gemini-analyzer.js";
+import { mapCameraMovementToHeadroomKey } from "./prompt-lab-listings.js";
 
 const BATCH_SIZE = 8;
 const TARGET_SCENE_COUNT = 12;
@@ -153,94 +159,166 @@ export async function runPipeline(propertyId: string): Promise<void> {
 
 async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
   await updatePropertyStatus(propertyId, "analyzing");
-  await log(propertyId, "analysis", "info", "Starting photo analysis");
+  await log(propertyId, "analysis", "info", "Starting photo analysis (Gemini eyes)");
 
-  const client = new Anthropic();
-  const allResults: Array<{ photo: Photo; analysis: PhotoAnalysisResult }> = [];
+  // DA.1 — prod photo analysis now runs Gemini 3 Flash per-photo (in
+  // parallel) for structured camera-state + motion_headroom. Claude
+  // batching is kept as a fallback for the whole remaining set when
+  // Gemini fails on any individual photo — that way a partial-failure
+  // listing still gets full analysis, just without motion_headroom on
+  // the failing photos (which the DA.3 validator handles as permissive).
+  const allResults: Array<{
+    photo: Photo;
+    analysis: ExtendedPhotoAnalysis;
+    provider: "google" | "anthropic";
+  }> = [];
+  const geminiFailures: Photo[] = [];
 
-  for (let i = 0; i < photos.length; i += BATCH_SIZE) {
-    const batch = photos.slice(i, i + BATCH_SIZE);
-    const imageContents: Anthropic.ImageBlockParam[] = [];
-
-    for (const photo of batch) {
+  await Promise.all(
+    photos.map(async (photo) => {
       try {
-        const response = await fetch(photo.file_url);
-        const contentType = response.headers.get("content-type") ?? "";
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" =
-          contentType.includes("png") ? "image/png"
-          : contentType.includes("webp") ? "image/webp"
-          : contentType.includes("gif") ? "image/gif"
-          : "image/jpeg";
-        imageContents.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mediaType,
-            data: buffer.toString("base64"),
+        const res = await analyzePhotoWithGemini(photo.file_url);
+        allResults.push({ photo, analysis: res.analysis, provider: "google" });
+        // Gemini cost event per photo.
+        await recordCostEvent({
+          propertyId,
+          stage: "analysis",
+          provider: "google",
+          unitsConsumed: res.usage.inputTokens + res.usage.outputTokens,
+          unitType: "tokens",
+          costCents: res.usage.costCents,
+          metadata: {
+            scope: "prod_photo_eyes",
+            model: res.model,
+            photo_id: photo.id,
+            input_tokens: res.usage.inputTokens,
+            output_tokens: res.usage.outputTokens,
           },
         });
       } catch (err) {
-        await log(propertyId, "analysis", "warn", `Failed to load ${photo.file_name}: ${err}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        await log(propertyId, "analysis", "warn",
+          `Gemini failed for ${photo.file_name}: ${msg} — will retry via Claude fallback`);
+        geminiFailures.push(photo);
       }
-    }
+    }),
+  );
 
-    if (imageContents.length === 0) continue;
+  // Claude fallback for Gemini failures — keep the existing batch path
+  // so a provider outage doesn't kill the whole run. Motion_headroom is
+  // defaulted to permissive for fallback photos (DA.3 validator won't
+  // block on them).
+  if (geminiFailures.length > 0) {
+    await log(propertyId, "analysis", "info",
+      `Running Claude fallback for ${geminiFailures.length} photo(s) where Gemini failed`);
+    const client = new Anthropic();
+    for (let i = 0; i < geminiFailures.length; i += BATCH_SIZE) {
+      const batch = geminiFailures.slice(i, i + BATCH_SIZE);
+      const imageContents: Anthropic.ImageBlockParam[] = [];
 
-    try {
-      const ANALYSIS_MODEL = "claude-sonnet-4-6";
-      const response = await client.messages.create({
-        model: ANALYSIS_MODEL,
-        max_tokens: 4096,
-        system: PHOTO_ANALYSIS_SYSTEM,
-        messages: [
-          {
-            role: "user",
-            content: [
-              ...imageContents,
-              { type: "text", text: buildAnalysisUserPrompt(imageContents.length) },
-            ],
+      for (const photo of batch) {
+        try {
+          const response = await fetch(photo.file_url);
+          const contentType = response.headers.get("content-type") ?? "";
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" =
+            contentType.includes("png") ? "image/png"
+            : contentType.includes("webp") ? "image/webp"
+            : contentType.includes("gif") ? "image/gif"
+            : "image/jpeg";
+          imageContents.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType,
+              data: buffer.toString("base64"),
+            },
+          });
+        } catch (err) {
+          await log(propertyId, "analysis", "warn", `Failed to load ${photo.file_name}: ${err}`);
+        }
+      }
+
+      if (imageContents.length === 0) continue;
+
+      try {
+        const ANALYSIS_MODEL = "claude-sonnet-4-6";
+        const response = await client.messages.create({
+          model: ANALYSIS_MODEL,
+          max_tokens: 4096,
+          system: PHOTO_ANALYSIS_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: [
+                ...imageContents,
+                { type: "text", text: buildAnalysisUserPrompt(imageContents.length) },
+              ],
+            },
+          ],
+        });
+
+        const usageCost = computeClaudeCost(response.usage as never, ANALYSIS_MODEL);
+        await recordCostEvent({
+          propertyId,
+          stage: "analysis",
+          provider: "anthropic",
+          unitsConsumed: usageCost.totalTokens,
+          unitType: "tokens",
+          costCents: usageCost.costCents,
+          metadata: {
+            scope: "prod_photo_eyes_fallback",
+            model: "claude-sonnet-4-6",
+            batch_index: i,
+            image_count: imageContents.length,
+            reason: "gemini_failure",
+            ...usageCost.breakdown,
           },
-        ],
-      });
+        });
 
-      // Record actual token usage from Claude's response.
-      const usageCost = computeClaudeCost(response.usage as never, ANALYSIS_MODEL);
-      await recordCostEvent({
-        propertyId,
-        stage: "analysis",
-        provider: "anthropic",
-        unitsConsumed: usageCost.totalTokens,
-        unitType: "tokens",
-        costCents: usageCost.costCents,
-        metadata: {
-          model: "claude-sonnet-4-6",
-          batch_index: i,
-          image_count: imageContents.length,
-          ...usageCost.breakdown,
-        },
-      });
+        const text = response.content[0].type === "text" ? response.content[0].text : "";
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) continue;
 
-      const text = response.content[0].type === "text" ? response.content[0].text : "";
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) continue;
-
-      const results: PhotoAnalysisResult[] = JSON.parse(jsonMatch[0]);
-      for (let j = 0; j < results.length && j < batch.length; j++) {
-        allResults.push({ photo: batch[j], analysis: results[j] });
+        const results: PhotoAnalysisResult[] = JSON.parse(jsonMatch[0]);
+        const permissiveHeadroom: MotionHeadroom = {
+          push_in: true,
+          pull_out: true,
+          orbit: true,
+          parallax: true,
+          drone_push_in: true,
+          top_down: true,
+        };
+        for (let j = 0; j < results.length && j < batch.length; j++) {
+          const claudeAnalysis = results[j];
+          // Promote Claude's PhotoAnalysisResult to ExtendedPhotoAnalysis
+          // with permissive motion_headroom. Director + validator treat
+          // these as "no hard bans" rather than blocking everything.
+          const extended: ExtendedPhotoAnalysis = {
+            ...claudeAnalysis,
+            camera_height: "eye_level",
+            camera_tilt: "level",
+            frame_coverage: "medium",
+            motion_headroom: permissiveHeadroom,
+            motion_headroom_rationale: {
+              note: "gemini failed; claude fallback; motion_headroom defaulted to permissive",
+            },
+          };
+          allResults.push({ photo: batch[j], analysis: extended, provider: "anthropic" });
+        }
+      } catch (err) {
+        await log(propertyId, "analysis", "error", `Claude fallback batch ${i} failed: ${err}`);
       }
-    } catch (err) {
-      await log(propertyId, "analysis", "error", `LLM batch ${i} failed: ${err}`);
     }
   }
 
   // Selection algorithm — only video-viable photos are eligible
   const selected = selectPhotos(allResults);
 
-  for (const { photo, analysis } of allResults) {
+  for (const { photo, analysis, provider } of allResults) {
     const isSelected = selected.some((s) => s.photo.id === photo.id);
-    // If Claude marked the photo non-viable for video, surface that as the
-    // discard reason in the UI so Oliver can see WHY it wasn't picked.
+    // If the analyzer marked the photo non-viable for video, surface that
+    // as the discard reason in the UI so Oliver can see WHY it wasn't picked.
     const notViableReason = analysis.video_viable === false
       ? `Not usable as video starting frame: ${analysis.motion_rationale ?? "no clean motion path"}`
       : null;
@@ -258,6 +336,11 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
       video_viable: analysis.video_viable ?? null,
       suggested_motion: analysis.suggested_motion ?? null,
       motion_rationale: analysis.motion_rationale ?? null,
+      // DA.1 — persist the full ExtendedPhotoAnalysis blob + which model
+      // produced it. The director reads motion_headroom from analysis_json
+      // in runScripting below.
+      analysis_json: analysis as unknown as Record<string, unknown>,
+      analysis_provider: provider,
     });
   }
 
@@ -271,9 +354,9 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
     `Analysis done: ${selected.length} selected from ${allResults.length} (${nonViableCount} photos marked non-viable for video)`);
 }
 
-function selectPhotos(
-  results: Array<{ photo: Photo; analysis: PhotoAnalysisResult }>
-): Array<{ photo: Photo; analysis: PhotoAnalysisResult }> {
+function selectPhotos<A extends PhotoAnalysisResult>(
+  results: Array<{ photo: Photo; analysis: A; provider?: string }>
+): Array<{ photo: Photo; analysis: A; provider?: string }> {
   // Eligible candidates must (a) not be globally discarded AND (b) be
   // viable as a video starting frame. Claude's new video_viable flag
   // catches pretty-but-unusable photos that aesthetic_score can't.
@@ -440,21 +523,46 @@ async function runScripting(propertyId: string): Promise<void> {
   }
 
   const client = new Anthropic();
-  const photoData = photos.map((p: Photo & { composition?: string | null; suggested_motion?: string | null; motion_rationale?: string | null }) => ({
-    id: p.id,
-    file_name: p.file_name ?? "unknown.jpg",
-    room_type: p.room_type ?? "other",
-    aesthetic_score: p.aesthetic_score ?? 5,
-    depth_rating: p.depth_rating ?? "medium",
-    key_features: p.key_features ?? [],
-    // Claude's per-photo composition description and video-viability hints.
-    // The director uses composition to ground each prompt in the real
-    // photo layout and suggested_motion as the default camera movement
-    // unless diversity forces an override.
-    composition: p.composition ?? null,
-    suggested_motion: p.suggested_motion ?? null,
-    motion_rationale: p.motion_rationale ?? null,
-  }));
+  const photoData = photos.map((p: Photo & {
+    composition?: string | null;
+    suggested_motion?: string | null;
+    motion_rationale?: string | null;
+    analysis_json?: Record<string, unknown> | null;
+  }) => {
+    // DA.2 — camera-state fields live in analysis_json. Extract them for
+    // the director so motion_headroom bans are enforceable. When
+    // analysis_json is missing (legacy rows, pre-migration-030 data), the
+    // fields fall back to null and the director operates as before.
+    const aj = (p.analysis_json ?? {}) as {
+      camera_height?: string | null;
+      camera_tilt?: string | null;
+      frame_coverage?: string | null;
+      motion_headroom?: Record<string, boolean> | null;
+      motion_headroom_rationale?: Record<string, string> | null;
+    };
+    return {
+      id: p.id,
+      file_name: p.file_name ?? "unknown.jpg",
+      room_type: p.room_type ?? "other",
+      aesthetic_score: p.aesthetic_score ?? 5,
+      depth_rating: p.depth_rating ?? "medium",
+      key_features: p.key_features ?? [],
+      // Per-photo composition + video-viability hints from the analyzer.
+      // The director uses composition to ground each prompt in the real
+      // photo layout and suggested_motion as the default camera movement
+      // unless diversity forces an override.
+      composition: p.composition ?? null,
+      suggested_motion: p.suggested_motion ?? null,
+      motion_rationale: p.motion_rationale ?? null,
+      // DA.2 — camera-state + motion_headroom surfaced to the director
+      // as hard bans on camera_movement choices.
+      camera_height: aj.camera_height ?? null,
+      camera_tilt: aj.camera_tilt ?? null,
+      frame_coverage: aj.frame_coverage ?? null,
+      motion_headroom: aj.motion_headroom ?? null,
+      motion_headroom_rationale: aj.motion_headroom_rationale ?? null,
+    };
+  });
 
   // Pull recent rated examples from past runs and inject them into the
   // director's user message as in-context learning signal. Winners (4-5
@@ -549,6 +657,44 @@ async function runScripting(propertyId: string): Promise<void> {
   const output: DirectorOutput = JSON.parse(jsonMatch[0]);
   const validPhotoIds = new Set(photos.map((p) => p.id));
   const validScenes = output.scenes.filter((s) => validPhotoIds.has(s.photo_id));
+
+  // DA.3 — validate each scene against the source photo's motion_headroom
+  // and deterministically override camera_movement when the director
+  // picked a banned motion. Cheap, no re-prompt, halves the latency of
+  // the round-trip-to-fix approach. See DIRECTOR_SYSTEM "HARD MOVEMENT
+  // BANS FROM MOTION HEADROOM" for the semantic model.
+  const photoByIdForValidator = new Map(
+    photos.map((p) => [p.id, p as Photo & { analysis_json?: Record<string, unknown> | null; suggested_motion?: string | null }]),
+  );
+  let prodViolationCount = 0;
+  for (const scene of validScenes) {
+    const p = photoByIdForValidator.get(scene.photo_id);
+    if (!p) continue;
+    const aj = (p.analysis_json ?? {}) as {
+      motion_headroom?: Record<string, boolean>;
+      suggested_motion?: string | null;
+    };
+    const hr = aj.motion_headroom;
+    if (!hr) continue;
+    const key = mapCameraMovementToHeadroomKey(scene.camera_movement);
+    if (key && hr[key] === false) {
+      prodViolationCount++;
+      const original = scene.camera_movement;
+      const suggested = (aj.suggested_motion ?? p.suggested_motion ?? null) as string | null;
+      const suggestedKey = suggested ? mapCameraMovementToHeadroomKey(suggested) : null;
+      const suggestedInHeadroom =
+        suggested && (!suggestedKey || hr[suggestedKey] !== false);
+      const replacement = (suggestedInHeadroom && suggested ? suggested : "feature_closeup") as CameraMovement;
+      await log(propertyId, "scripting", "warn",
+        `DA.3 override: scene ${scene.scene_number} picked ${original} but motion_headroom.${key}=false; overriding to ${replacement}`,
+        { scene_number: scene.scene_number, original, replacement, key });
+      scene.camera_movement = replacement;
+    }
+  }
+  if (prodViolationCount > 0) {
+    await log(propertyId, "scripting", "info",
+      `DA.3 validator overrode ${prodViolationCount}/${validScenes.length} scene(s) against motion_headroom`);
+  }
 
   // C.3: Clamp per-clip duration to the preset value in case the LLM didn't
   // follow the instruction reliably. This is the code-level enforcement: the
