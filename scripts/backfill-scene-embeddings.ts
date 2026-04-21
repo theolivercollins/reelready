@@ -1,11 +1,11 @@
-// One-shot backfill — compute embeddings for existing rated production scenes
-// that don't have one yet. Run: npx tsx scripts/backfill-scene-embeddings.ts
+// One-shot backfill — compute embeddings for all production scenes that
+// don't have one yet. Run: npx tsx scripts/backfill-scene-embeddings.ts
 // Pass --force to re-embed scenes that already have an embedding.
 // Needs OPENAI_API_KEY + SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.
 //
-// Scope: only scenes with >=1 row in scene_ratings. Unrated scenes are not
-// retrieval-eligible via match_rated_examples (min_rating >= 4), so embedding
-// them is wasted OpenAI spend.
+// M.2: scope widened from "rated scenes only" to ALL prod scenes without an
+// embedding. Unrated scenes may receive ratings later and need to be
+// retrieval-eligible via match_rated_examples when that happens.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -27,32 +27,25 @@ async function main() {
   const force = process.argv.includes("--force");
   const supabase = getSupabase();
 
-  const { data: rated, error } = await supabase
-    .from("scene_ratings")
-    .select("scene_id");
+  // M.2: fetch ALL prod scenes (not just rated ones) to ensure retrieval
+  // eligibility once ratings are added.
+  const { data: allScenes, error } = await supabase
+    .from("scenes")
+    .select("id, embedding");
   if (error) throw error;
-  const sceneIds = Array.from(
-    new Set((rated ?? []).map((r: { scene_id: string }) => r.scene_id)),
-  );
 
+  const totalScenes = (allScenes ?? []).length;
   let targetIds: string[];
   if (force) {
-    targetIds = sceneIds;
-  } else if (sceneIds.length === 0) {
-    targetIds = [];
+    targetIds = (allScenes ?? []).map((s: { id: string }) => s.id);
   } else {
-    const { data: existing, error: e2 } = await supabase
-      .from("scenes")
-      .select("id, embedding")
-      .in("id", sceneIds);
-    if (e2) throw e2;
-    targetIds = (existing ?? [])
+    targetIds = (allScenes ?? [])
       .filter((s: { id: string; embedding: unknown }) => !s.embedding)
       .map((s: { id: string }) => s.id);
   }
 
   console.log(
-    `Rated scenes: ${sceneIds.length}. Backfilling ${targetIds.length} (force=${force}).`,
+    `Total scenes: ${totalScenes}. Backfilling ${targetIds.length} (force=${force}).`,
   );
 
   let done = 0;
