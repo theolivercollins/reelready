@@ -12,7 +12,7 @@ See also:
 
 ## Right now
 
-**Phase M.2 shipped.** Current next action: **Phase B — model head-to-head** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md), section "Phase B"). This REQUIRES Oliver's rating hands — not a pure-coding phase. Plan: one fresh listing, 6 SKUs per scene, rate the grid, produce `lib/providers/router-table.ts`.
+**Phase M.2 shipped.** Window D Round 1 audit (2026-04-21) confirmed **Phase B cannot be auto-derived from existing signal** — only 32% of 170 rated iterations are SKU-granular (Phase 2.8 Lab), and no (room × movement) bucket has >=3 iterations on a single SKU. See `docs/audits/router-coverage-2026-04-21.md`. Current next action: **Phase B — targeted rating session** on the quota-high buckets (kitchen, living_room, master_bedroom, exterior_front, aerial) using the script's coverage output to scope the grid minimally. `lib/providers/router.ts` stays on intuition-based routing until real signal lands.
 
 ## Plan state
 
@@ -33,6 +33,7 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-21 — `session/router-2026-04-21` — Window D Round 1: `scripts/build-router-table.ts` + `router-table.draft.ts` (empty) + `docs/audits/router-coverage-2026-04-21.md` — verdict: existing signal insufficient for SKU routing, fresh rating session needed (32 buckets, 0 winners, 32% SKU-granular)
 - 2026-04-21 — `5b07ce3` — M.2 backfill script widened to all unembedded scenes (17/24 embedded)
 - 2026-04-21 — `f1bf53a` — M.2b removed dead match_lab_iterations RPC + prompt-qa dead code
 - 2026-04-21 — `1938317` — M.2d exemplar/recipe/loser blocks now surface model_used SKU to director
