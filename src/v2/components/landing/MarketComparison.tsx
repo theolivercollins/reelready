@@ -142,7 +142,7 @@ export function MarketComparison() {
     <section id="compare" style={{ background: "var(--le-bg)", color: "#fff" }}>
       {/* Intro headline */}
       <div
-        className="px-6 sm:px-12 pt-20 sm:pt-28 pb-12 sm:pb-16"
+        className="px-6 sm:px-12 pt-10 sm:pt-14 pb-10 sm:pb-14"
         style={{ borderBottom: `1px solid ${LINE}` }}
       >
         <motion.div
@@ -170,14 +170,13 @@ export function MarketComparison() {
               letterSpacing: "-0.035em",
             }}
           >
-            Why agents who use Listing Elevate<br />
-            dominate their markets.
+            Own your market.
           </h2>
           <p
             className="text-[15px] sm:text-[17px] max-w-2xl"
             style={{ color: DIM, lineHeight: 1.6 }}
           >
-            Five stats from independent industry sources — and what they mean for your listings.
+            Here's the data behind why agents who use Listing Elevate win, retain, and sell more listings.
           </p>
         </motion.div>
       </div>
