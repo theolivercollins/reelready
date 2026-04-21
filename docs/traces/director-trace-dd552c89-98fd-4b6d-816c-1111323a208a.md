@@ -1,5 +1,11 @@
 # Director-Prompt Trace — listing dd552c89-98fd-4b6d-816c-1111323a208a
 
+Last updated: 2026-04-20
+
+See also:
+- [../audits/ML-AUDIT-2026-04-20.md](../audits/ML-AUDIT-2026-04-20.md) — Phase M.1 verdict based on this trace
+- [director-trace-6f508e16-096c-4a70-83cb-17b769838d61.md](./director-trace-6f508e16-096c-4a70-83cb-17b769838d61.md) — paired property trace
+
 Generated: 2026-04-20T17:15:17.113Z
 
 ## Audit checklist
