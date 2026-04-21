@@ -12,9 +12,7 @@ See also:
 
 ## Right now
 
-**Current next action: Phase M.2 — ML consolidation + SKU capture** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md), section "Phase M.2"). The plan was dispatched on 2026-04-20 and rejected; needs to be re-dispatched or explicitly skipped. Scope: SKU capture in `prompt_lab_recipes.model_used`, dead-code removal on the retired legacy Lab surface, prod embedding backfill (17 of 24 scenes still unembedded per the Phase M.1 audit).
-
-After M.2 lands, **Phase B (model head-to-head)** is next and it REQUIRES Oliver's rating hands — not a pure-coding phase. Plan: one fresh listing, 6 SKUs per scene, rate the grid, produce `lib/providers/router-table.ts`.
+**Phase M.2 shipped.** Current next action: **Phase B — model head-to-head** (spec at [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md), section "Phase B"). This REQUIRES Oliver's rating hands — not a pure-coding phase. Plan: one fresh listing, 6 SKUs per scene, rate the grid, produce `lib/providers/router-table.ts`.
 
 ## Plan state
 
@@ -28,13 +26,18 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 | DM — Dev/Legacy merge | shipped | One unified Lab UI, native Kling provider added (Oliver's pre-paid credits), Compare demoted, legacy Lab routes retired |
 | CI — Cost integrity | shipped (CI.1–CI.5) | Model-aware Claude pricing, OpenAI embedding tracking, Shotstack per-minute, failed-render policy, dashboard drill-down |
 | C — Production end-to-end | shipped | Router `ProviderDecision`, base64 → URL, duration-aware director, lazy failover Kling → Atlas |
-| M.2 — ML consolidation | rejected, needs re-dispatch | SKU capture, dead code removal, prod embedding backfill |
+| M.2 — ML consolidation | ✅ shipped | SKU capture, dead code removal, prod embedding backfill |
 | B — Model head-to-head | blocked on M.2 + Oliver's ratings | One fresh listing, 6 SKUs, rate, build `router-table.ts` |
 
 ## Recent shipping log
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-21 — `5b07ce3` — M.2 backfill script widened to all unembedded scenes (17/24 embedded)
+- 2026-04-21 — `f1bf53a` — M.2b removed dead match_lab_iterations RPC + prompt-qa dead code
+- 2026-04-21 — `1938317` — M.2d exemplar/recipe/loser blocks now surface model_used SKU to director
+- 2026-04-21 — `90a00cb` — M.2d SKU capture in recipes + retrieval (migration 028 applied)
+- 2026-04-21 — `7a7dc6e` — DM.6 legacy Lab UI routes recommit (missed in d9e6f1f)
 - 2026-04-21 — `dc27158` — docs consolidation; new canonical `docs/` structure; archive folder; session hygiene written into [`README.md`](./README.md)
 - 2026-04-20 — `9283260` — Phase C production end-to-end (router swap, base64 → URL, duration-aware director)
 - 2026-04-20 — `0b020f3` — CI.5 cost dashboard drill-down
@@ -58,7 +61,7 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 - **Atlas pricing** for `v2.6-pro` was initially miscalibrated at 2× under. Now `$0.60/clip` confirmed. Other SKUs may still need invoice verification — see [`specs/2026-04-20-back-on-track-design.md`](./specs/2026-04-20-back-on-track-design.md) Phase CI notes.
 - **Kling v3 shake issue** on single-image shots. Stability prefix (`CAMERA_STABILITY_PREFIX`) is applied only for `kling-v3-*` models after DQ; Atlas negative prompt is always applied.
 - **Lab → prod promotion has never been used** — 0 overrides ever promoted per Phase M.1 audit. Signal is there but no one is turning recipes into active router directives. M.2 and B close this.
-- **Prod scene embeddings partial** — 7/24 scenes embedded per Phase M.1. Backfill is a M.2 task.
+- **Prod scene embeddings** — all 24/24 scenes embedded after M.2 backfill (2026-04-21). Backfill script widened to all prod scenes (not just rated ones).
 
 ## Oliver's standing preferences
 
