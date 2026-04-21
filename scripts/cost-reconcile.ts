@@ -115,6 +115,7 @@ async function main() {
   md.push("");
   md.push("- **Atlas Cloud:** sum the `provider='atlas'` rows above. Compare against your Atlas wallet history for the same date range.");
   md.push("- **Anthropic:** sum `provider='anthropic'` rows. Compare against your Anthropic console billing.");
+  md.push("- **Google (Gemini):** sum `provider='google'` rows (DA.1, 2026-04-21+). Photo analyzer \"eyes\" — expect ~0.1-0.5¢ per photo at Gemini 3 Flash rates ($0.50/M input, $3.00/M output). Compare against Google AI Studio / Cloud billing.");
   md.push("- **OpenAI:** sum `provider='openai'` rows. Compare against OpenAI dashboard.");
   md.push("- **Runway:** `provider='runway'` rows. Compare against Runway invoice.");
   md.push("- **Kling native (non-Atlas):** `provider='kling'` rows. These burn pre-paid credits; check Kling dashboard for credit deltas.");
