@@ -42,11 +42,6 @@ import {
   buildPromptModification,
   type QCResult,
 } from "./prompts/qc-evaluator.js";
-import {
-  PROMPT_QA_SYSTEM,
-  buildPromptQAUserPrompt,
-  type PromptQAResult,
-} from "./prompts/prompt-qa.js";
 import { resolveProductionPrompt } from "./prompts/resolve.js";
 import { resolveEndFrameUrl } from "./services/end-frame.js";
 import { selectProviderForScene, buildProviderFromDecision, getEnabledProviders } from "./providers/router.js";
@@ -77,8 +72,7 @@ async function snapshotPromptRevisions(): Promise<void> {
     await Promise.all([
       recordPromptRevisionIfChanged("photo-analysis", PHOTO_ANALYSIS_SYSTEM),
       recordPromptRevisionIfChanged("director", effectiveDirector.body),
-      recordPromptRevisionIfChanged("preflight-qa", PROMPT_QA_SYSTEM),
-      recordPromptRevisionIfChanged("style-guide", STYLE_GUIDE_SYSTEM),
+recordPromptRevisionIfChanged("style-guide", STYLE_GUIDE_SYSTEM),
       recordPromptRevisionIfChanged("qc-evaluator", QC_SYSTEM),
     ]);
   } catch {
@@ -634,127 +628,6 @@ async function runScripting(propertyId: string): Promise<void> {
   });
   await log(propertyId, "scripting", "info",
     `Shot plan: ${validScenes.length} scenes, mood: ${output.mood}, duration=${duration}s, clip=${targetClipDuration}s`);
-}
-
-// ─── STAGE 3.5: PRE-FLIGHT PROMPT QA ───────────────────────────
-
-async function runPreflightQA(propertyId: string): Promise<void> {
-  await log(propertyId, "qc", "info", "Starting pre-flight prompt QA");
-
-  const scenes = await getScenesForProperty(propertyId);
-  if (scenes.length === 0) {
-    await log(propertyId, "qc", "warn", "No scenes found for pre-flight QA");
-    return;
-  }
-
-  const client = new Anthropic();
-  const supabase = getSupabase();
-  let revisedCount = 0;
-
-  for (const scene of scenes) {
-    try {
-      const { data: photo } = await supabase
-        .from("photos")
-        .select("file_url, room_type")
-        .eq("id", scene.photo_id)
-        .single();
-
-      if (!photo?.file_url) {
-        await log(propertyId, "qc", "warn",
-          `Scene ${scene.scene_number}: source photo missing, skipping QA`, undefined, scene.id);
-        continue;
-      }
-
-      const photoResponse = await fetch(photo.file_url);
-      const contentType = photoResponse.headers.get("content-type") ?? "";
-      const buffer = Buffer.from(await photoResponse.arrayBuffer());
-      const mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" =
-        contentType.includes("png") ? "image/png"
-        : contentType.includes("webp") ? "image/webp"
-        : contentType.includes("gif") ? "image/gif"
-        : "image/jpeg";
-
-      const userText = buildPromptQAUserPrompt({
-        sceneNumber: scene.scene_number,
-        cameraMovement: scene.camera_movement,
-        currentPrompt: scene.prompt,
-        roomType: (photo.room_type as string) ?? "other",
-      });
-
-      const QC_MODEL = "claude-sonnet-4-6";
-      const response = await client.messages.create({
-        model: QC_MODEL,
-        max_tokens: 2048,
-        system: PROMPT_QA_SYSTEM,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mediaType,
-                  data: buffer.toString("base64"),
-                },
-              },
-              { type: "text", text: userText },
-            ],
-          },
-        ],
-      });
-
-      const usageCost = computeClaudeCost(response.usage as never, QC_MODEL);
-      await recordCostEvent({
-        propertyId,
-        sceneId: scene.id,
-        stage: "qc",
-        provider: "anthropic",
-        unitsConsumed: usageCost.totalTokens,
-        unitType: "tokens",
-        costCents: usageCost.costCents,
-        metadata: {
-          model: QC_MODEL,
-          sub_stage: "preflight_qa",
-          scene_number: scene.scene_number,
-          ...usageCost.breakdown,
-        },
-      });
-
-      const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        await log(propertyId, "qc", "warn",
-          `Scene ${scene.scene_number}: could not parse pre-flight QA JSON`, undefined, scene.id);
-        continue;
-      }
-
-      const qa: PromptQAResult = JSON.parse(jsonMatch[0]);
-      const score = typeof qa.stability_score === "number" ? qa.stability_score : 10;
-      const level: "info" | "warn" = score < 6 ? "warn" : "info";
-
-      await log(propertyId, "qc", level,
-        `Scene ${scene.scene_number}: pre-flight stability ${score}/10 (${qa.risks?.length ?? 0} risks)`,
-        { stability_score: score, risks: qa.risks, reasoning: qa.reasoning },
-        scene.id);
-
-      if (score < 8 && qa.revised_prompt && qa.revised_prompt.trim().length > 0) {
-        await updateScene(scene.id, { prompt: qa.revised_prompt });
-        revisedCount++;
-        await log(propertyId, "qc", "info",
-          `Scene ${scene.scene_number}: prompt revised by pre-flight QA`,
-          { original_prompt: scene.prompt, revised_prompt: qa.revised_prompt },
-          scene.id);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await log(propertyId, "qc", "warn",
-        `Scene ${scene.scene_number}: pre-flight QA error (continuing): ${msg}`, undefined, scene.id);
-    }
-  }
-
-  await log(propertyId, "qc", "info",
-    `Pre-flight QA done: ${revisedCount}/${scenes.length} prompts revised`);
 }
 
 // ─── STAGE 4: GENERATE — SUBMIT ONLY ─────────────────────────
