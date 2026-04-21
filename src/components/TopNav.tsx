@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { LELogoMark } from "@/v2/components/primitives/LELogoMark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
+import { useTheme } from "@/lib/theme";
 
 const dashboardNav = [
   { to: "/dashboard", label: "Overview", icon: LayoutGrid, end: true },
@@ -90,6 +91,7 @@ export function TopNav() {
   const { user, profile, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
   // v2 shell mounts its own navigation; suppress the legacy TopNav on /v2/*.
   if (location.pathname.startsWith("/v2")) return null;
@@ -109,7 +111,10 @@ export function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/55 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/40">
+    <header
+      className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/55 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/40"
+      style={{ fontFamily: "var(--le-font-sans)" }}
+    >
       <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-6 md:h-[72px] md:px-10">
         {/* Brand — identical size/layout on every page */}
         <div className="flex items-center gap-3">
@@ -118,7 +123,7 @@ export function TopNav() {
             className="inline-flex items-center"
             aria-label="Listing Elevate"
           >
-            <LELogoMark size={30} variant="light" />
+            <LELogoMark size={30} variant={theme === "dark" ? "light" : "dark"} />
           </Link>
           {inDashboard && (
             <>

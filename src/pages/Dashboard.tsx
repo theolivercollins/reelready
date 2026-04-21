@@ -8,9 +8,8 @@ import "@/v2/styles/v2.css";
 const Dashboard = () => {
   return (
     <div
-      className="le-root dark"
-      data-theme="dark"
-      style={{ minHeight: "100vh", background: "var(--le-bg)", color: "var(--le-text)" }}
+      className="le-root"
+      style={{ minHeight: "100vh", background: "var(--le-bg)", color: "var(--le-text)", fontFamily: "var(--le-font-sans)" }}
     >
       <main className="mx-auto w-full max-w-[1440px] px-8 py-12 md:px-12 md:py-16">
         <Outlet />

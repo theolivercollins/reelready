@@ -242,7 +242,7 @@ const Upload = () => {
   // ─── success ───
   if (submitted) {
     return (
-      <div className="flex min-h-screen flex-col" style={{ background: "#050710", color: "#fff", fontFamily: "var(--le-font-sans)" }}>
+      <div className="flex min-h-screen flex-col" style={{ background: "var(--le-bg)", color: "var(--le-text)", fontFamily: "var(--le-font-sans)" }}>
         <div className="flex flex-1 items-center justify-center px-6 py-24">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -296,8 +296,8 @@ const Upload = () => {
 
   // ─── main ───
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: "#050710", color: "#fff", fontFamily: "var(--le-font-sans)", paddingTop: 80 }}>
-      <SiteNav showSectionLinks={false} />
+    <div className="flex min-h-screen flex-col" style={{ background: "var(--le-bg)", color: "var(--le-text)", fontFamily: "var(--le-font-sans)", paddingTop: 80 }}>
+      <SiteNav showSectionLinks={false} solid />
       {/* Step header */}
       <div style={{ borderBottom: "1px solid rgba(220,230,255,0.09)" }}>
         <div className="mx-auto flex max-w-[1080px] items-center justify-between gap-6 px-8 py-8 md:px-12">

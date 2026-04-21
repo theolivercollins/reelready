@@ -1,8 +1,10 @@
+import type { CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LELogoMark } from "@/v2/components/primitives/LELogoMark";
 import { LEIcon } from "@/v2/components/primitives/LEIcon";
 import { useAuth } from "@/lib/auth";
 import { useLoginDialog } from "@/v2/components/auth/LoginDialogContext";
+import { useTheme } from "@/lib/theme";
 
 export interface SiteNavProps {
   /**
@@ -10,6 +12,13 @@ export interface SiteNavProps {
    * Pages without those sections pass `false` to hide them.
    */
   showSectionLinks?: boolean;
+  /**
+   * When true, render with an opaque theme-aware surface (for app pages
+   * like /account and /upload that sit on top of the page background and
+   * shouldn't bleed through). Default false keeps the gradient scrim +
+   * backdrop blur used on the landing hero.
+   */
+  solid?: boolean;
 }
 
 const navLinkStyle = {
@@ -20,17 +29,21 @@ const navLinkStyle = {
 /**
  * SiteNav — shared top navigation primitive.
  *
- * Fixed to the viewport top (zIndex 20), dark gradient scrim +
- * backdrop blur so it stays legible over any hero image. Left: logo
- * mark linking home. Center: optional section anchors. Right: sign-in
- * affordances (or account/dashboard/sign-out when authenticated) plus
- * a visual theme-toggle sun button (not wired).
+ * Fixed to the viewport top (zIndex 20). In the default (gradient) mode
+ * it uses a dark scrim + backdrop blur so it stays legible over any hero
+ * image. Left: logo mark linking home. Center: optional section anchors.
+ * Right: sign-in affordances (or account/dashboard/sign-out when
+ * authenticated) plus a theme-toggle sun/moon button wired to the global
+ * ThemeProvider.
  *
- * Extracted from the original inline HeroNav in landing/Hero.tsx.
+ * When `solid` is true, renders against an opaque `var(--le-bg)` surface
+ * with a 1px bottom border and theme-reactive text colors — used on app
+ * pages where the gradient scrim would otherwise bleed through.
  */
-export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
+export function SiteNav({ showSectionLinks = true, solid = false }: SiteNavProps) {
   const { user, profile, signOut } = useAuth();
   const { openLogin } = useLoginDialog();
+  const { theme, toggle } = useTheme();
   const navigate = useNavigate();
 
   const isAdmin = profile?.role === "admin";
@@ -40,9 +53,32 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
     navigate("/");
   }
 
-  return (
-    <nav
-      style={{
+  // Color palette — gradient mode uses hardcoded white-on-dark; solid mode
+  // pulls from CSS vars so the nav follows the global theme.
+  const textPrimary = solid ? "var(--le-text)" : "#fff";
+  const textMuted = solid ? "var(--le-text-muted)" : "rgba(255,255,255,0.82)";
+  const textSoft = solid ? "var(--le-text-muted)" : "rgba(255,255,255,0.92)";
+  const textDim = solid ? "var(--le-text-faint)" : "rgba(255,255,255,0.65)";
+  const textBody = solid ? "var(--le-text-muted)" : "rgba(255,255,255,0.85)";
+  const iconBorder = solid ? "1px solid var(--le-border-strong)" : "1px solid rgba(255,255,255,0.22)";
+  const iconColor = solid ? "var(--le-text)" : "#fff";
+
+  const navStyle: CSSProperties = solid
+    ? {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "26px 48px",
+        color: "var(--le-text)",
+        zIndex: 20,
+        background: "var(--le-bg)",
+        borderBottom: "1px solid var(--le-border)",
+      }
+    : {
         position: "fixed",
         top: 0,
         left: 0,
@@ -53,13 +89,21 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
         padding: "26px 48px",
         color: "#fff",
         zIndex: 20,
-        // Subtle scrim so the nav stays legible once scrolled past the hero
         background:
           "linear-gradient(180deg, rgba(5,7,16,0.82) 0%, rgba(5,7,16,0.55) 65%, rgba(5,7,16,0) 100%)",
         backdropFilter: "blur(14px) saturate(1.2)",
         WebkitBackdropFilter: "blur(14px) saturate(1.2)",
-      }}
-    >
+      };
+
+  // In solid mode, pick a logo variant that reads on the current bg.
+  // In gradient mode we're always on a dark scrim, so "light" (white) logo.
+  const logoVariant = solid ? (theme === "dark" ? "light" : "dark") : "light";
+
+  const toggleIconName = theme === "dark" ? "sun" : "moon";
+  const toggleAriaLabel = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+
+  return (
+    <nav style={navStyle}>
       <Link
         to="/"
         style={{
@@ -68,7 +112,7 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
           textDecoration: "none",
         }}
       >
-        <LELogoMark size={38} variant="light" />
+        <LELogoMark size={38} variant={logoVariant} />
       </Link>
 
       {showSectionLinks ? (
@@ -80,7 +124,7 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
             fontWeight: 500,
             letterSpacing: "0.18em",
             textTransform: "uppercase",
-            color: "rgba(255,255,255,0.82)",
+            color: textMuted,
             fontFamily: "var(--le-font-sans)",
           }}
         >
@@ -104,21 +148,22 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <button
           type="button"
-          aria-label="Toggle theme"
+          aria-label={toggleAriaLabel}
+          onClick={toggle}
           style={{
             width: 34,
             height: 34,
-            border: "1px solid rgba(255,255,255,0.22)",
+            border: iconBorder,
             borderRadius: 6,
             background: "transparent",
-            color: "#fff",
+            color: iconColor,
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
           }}
         >
-          <LEIcon name="sun" size={14} color="#fff" />
+          <LEIcon name={toggleIconName} size={14} color={iconColor} />
         </button>
 
         {user ? (
@@ -130,7 +175,7 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
                 fontWeight: 500,
                 letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                color: "rgba(255,255,255,0.92)",
+                color: textSoft,
                 textDecoration: "none",
                 fontFamily: "var(--le-font-sans)",
               }}
@@ -145,7 +190,7 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
                   fontWeight: 500,
                   letterSpacing: "0.18em",
                   textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.92)",
+                  color: textSoft,
                   textDecoration: "none",
                   fontFamily: "var(--le-font-sans)",
                 }}
@@ -165,7 +210,7 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
                 fontWeight: 500,
                 letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                color: "rgba(255,255,255,0.65)",
+                color: textDim,
                 fontFamily: "var(--le-font-sans)",
               }}
             >
@@ -183,7 +228,7 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
                 padding: 0,
                 cursor: "pointer",
                 fontSize: 13,
-                color: "rgba(255,255,255,0.85)",
+                color: textBody,
                 textDecoration: "none",
                 fontFamily: "var(--le-font-sans)",
               }}
@@ -217,3 +262,4 @@ export function SiteNav({ showSectionLinks = true }: SiteNavProps) {
     </nav>
   );
 }
+

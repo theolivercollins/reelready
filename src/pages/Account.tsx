@@ -13,10 +13,9 @@ export default function Account() {
   return (
     <div
       className="le-root"
-      data-theme="dark"
-      style={{ minHeight: "100vh", background: "var(--le-bg)", color: "var(--le-text)", paddingTop: 80 }}
+      style={{ minHeight: "100vh", background: "var(--le-bg)", color: "var(--le-text)", paddingTop: 80, fontFamily: "var(--le-font-sans)" }}
     >
-      <SiteNav showSectionLinks={false} />
+      <SiteNav showSectionLinks={false} solid />
       <div style={{ borderBottom: "1px solid var(--le-border)" }}>
         <div className="mx-auto flex max-w-[1280px] items-end justify-between gap-6 px-8 pb-6 pt-12 md:px-12">
           <div>

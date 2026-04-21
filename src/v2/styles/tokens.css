@@ -44,7 +44,7 @@
   --le-shadow-lg: 0 12px 40px rgba(20, 18, 15, 0.08), 0 2px 8px rgba(20, 18, 15, 0.04);
 }
 
-[data-theme="dark"] {
+.dark, [data-theme="dark"] {
   /* Dark — near-black midnight navy */
   --le-bg: #050710;
   --le-bg-elev: #0b0f1c;

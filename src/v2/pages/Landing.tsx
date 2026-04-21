@@ -33,7 +33,7 @@ export default function Landing() {
     <div
       data-testid="v2-landing-root"
       data-v2-root
-      className="le-root"
+      className="le-root dark"
       data-theme="dark"
       style={{
         minHeight: "100vh",
