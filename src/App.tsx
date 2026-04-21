@@ -51,8 +51,10 @@ const App = () => (
             <TopNav />
             <Routes>
               {/* Public routes */}
-              <Route path="/" element={<Index />} />
-              <Route path="/v2" element={<V2Landing />} />
+              <Route path="/" element={<V2Landing />} />
+              {/* Legacy preview routes — redirect to the new root */}
+              <Route path="/v2" element={<Navigate to="/" replace />} />
+              <Route path="/legacy" element={<Index />} />
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/status/:id" element={<Status />} />

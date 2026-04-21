@@ -204,7 +204,7 @@ function HeroNav() {
       }}
     >
       <Link
-        to="/v2"
+        to="/"
         style={{
           display: "inline-flex",
           alignItems: "center",
