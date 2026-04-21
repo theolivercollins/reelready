@@ -121,9 +121,14 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
 
 export interface RetrievedExemplar {
   id: string;
-  source: "lab" | "prod";
+  source: "lab" | "prod" | "listing";
   room_type: string;
   camera_movement: string;
+  // M.2d: SKU-level model label. RPC returns this per-branch (listing
+  // iters carry it natively; legacy lab + prod rows map provider → SKU,
+  // e.g. "kling" → "kling-v2-native"). Falls back to `provider` in
+  // rendering when null.
+  model_used: string | null;
   prompt: string;
   rating: number;
   tags: string[] | null;
@@ -139,6 +144,10 @@ export interface RetrievedRecipe {
   room_type: string;
   camera_movement: string;
   provider: string | null;
+  // M.2d: SKU-level model stamped on recipe at promotion time (back-filled
+  // via migration 028 for historical recipes). Canonicalizes "kling" →
+  // "kling-v2-native" etc.
+  model_used: string | null;
   prompt_template: string;
   composition_signature: Record<string, unknown> | null;
   times_applied: number;
@@ -158,13 +167,14 @@ export async function retrieveSimilarIterations(
   });
   if (error || !data) return [];
   return (data as Array<{
-    source: "lab" | "prod";
+    source: "lab" | "prod" | "listing";
     example_id: string;
     rating: number;
     analysis_json: Record<string, unknown> | null;
     director_output_json: Record<string, unknown> | null;
     prompt: string | null;
     camera_movement: string | null;
+    model_used: string | null;
     clip_url: string | null;
     tags: string[] | null;
     comment: string | null;
@@ -185,6 +195,7 @@ export async function retrieveSimilarIterations(
       room_type: analysis.room_type ?? "other",
       camera_movement:
         r.camera_movement ?? dir.scene?.camera_movement ?? dir.camera_movement ?? "unknown",
+      model_used: r.model_used ?? null,
       prompt: r.prompt ?? dir.scene?.prompt ?? dir.prompt ?? "",
       rating: r.rating,
       tags: r.tags ?? null,
@@ -214,13 +225,14 @@ export async function retrieveSimilarLosers(
   });
   if (error || !data) return [];
   return (data as Array<{
-    source: "lab" | "prod";
+    source: "lab" | "prod" | "listing";
     example_id: string;
     rating: number;
     analysis_json: Record<string, unknown>;
     director_output_json: Record<string, unknown>;
     prompt: string | null;
     camera_movement: string | null;
+    model_used: string | null;
     clip_url: string | null;
     tags: string[] | null;
     comment: string | null;
@@ -241,6 +253,7 @@ export async function retrieveSimilarLosers(
       room_type: analysis.room_type ?? "other",
       camera_movement:
         r.camera_movement ?? dir.scene?.camera_movement ?? dir.camera_movement ?? "unknown",
+      model_used: r.model_used ?? null,
       prompt: r.prompt ?? dir.scene?.prompt ?? dir.prompt ?? "",
       rating: r.rating,
       tags: r.tags ?? null,
