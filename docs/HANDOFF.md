@@ -12,7 +12,7 @@ See also:
 
 ## Right now
 
-**Phase M.2 shipped. DA.1 Gemini-eyes merged to main (2026-04-21).** Director now receives `motion_headroom` booleans from Gemini 3 Flash per photo and hard-bans geometrically impossible camera moves. Window D Round 1 audit (2026-04-21) confirmed **Phase B cannot be auto-derived from existing signal** — only 32% of 170 rated iterations are SKU-granular (Phase 2.8 Lab only), and no (room × movement) bucket has ≥3 iterations on a single SKU. See `docs/audits/router-coverage-2026-04-21.md`. Current next action: **Phase B — targeted rating session** on the quota-high buckets (kitchen, living_room, master_bedroom, exterior_front, aerial) using the script's coverage output to scope the grid minimally. `lib/providers/router.ts` stays on intuition-based routing until real signal lands.
+**Phase M.2 shipped. DA.1 Gemini-eyes merged to main (2026-04-21).** Director now receives `motion_headroom` booleans from Gemini 3 Flash per photo and hard-bans geometrically impossible camera moves. **Window B Round 2 regression-diff** (merged 2026-04-21): 2 rendered anchors vs Legacy 5★ — verdict **NECESSARY BUT NOT SUFFICIENT** pending Oliver rating the two DA.1 clips. On `kittiwake-1406-213` master_bedroom, DA.1 demonstrably shifted motion from Legacy's failing `push_in` → DA.1's `parallax` via Gemini's motion_headroom; on `kittiwake-1406-940` aerial, DA.1 non-degraded. See [`audits/REGRESSION-DIFF-2026-04-21.md`](./audits/REGRESSION-DIFF-2026-04-21.md). Window D Round 1 audit (2026-04-21) confirmed **Phase B cannot be auto-derived from existing signal** — only 32% of 170 rated iterations are SKU-granular (Phase 2.8 Lab only). Next action: **Phase B — targeted rating session** on the 5 quota-high buckets — Window D Round 2 is currently pre-rendering the grid (see `docs/briefs/2026-04-21-window-D-round-2-targeted-grid.md`). `lib/providers/router.ts` stays on intuition-based routing until real signal lands.
 
 ## Plan state
 
@@ -33,6 +33,9 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-21 — `d8ee57e` — Round 2 regression-diff HANDOFF/PROJECT-STATE/memory updates (Window B Round 2, 3/3)
+- 2026-04-21 — `e023ff9` — DA.1 regression-diff verdict doc — NECESSARY BUT NOT SUFFICIENT pending Oliver rating (Window B Round 2, 2/3)
+- 2026-04-21 — `bfc7eed` — Round 2 regression-diff render harness (Window B Round 2, 1/3)
 - 2026-04-21 — `1653606` — Window C Rating Ledger UI: `/dashboard/rating-ledger` + `/api/admin/rating-ledger` (unified legacy Lab + Listings Lab + prod scene_ratings, with retrieval-status chip)
 - 2026-04-21 — `6c7cc6d` — DA.1 smoke tests + cost-reconcile note + STACK update (Window B, 5/5)
 - 2026-04-21 — `47010d4` — DA.1 Gemini-first prod + Lab analysis + DA.3 motion_headroom validator (Window B, 4/5)
