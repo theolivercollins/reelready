@@ -35,7 +35,7 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 
 (Newest on top. Append one line per push to `main`.)
 
-- 2026-04-21 — `<pending>` — docs consolidation; new canonical `docs/` structure; archive folder; session hygiene written into [`README.md`](./README.md)
+- 2026-04-21 — `dc27158` — docs consolidation; new canonical `docs/` structure; archive folder; session hygiene written into [`README.md`](./README.md)
 - 2026-04-20 — `9283260` — Phase C production end-to-end (router swap, base64 → URL, duration-aware director)
 - 2026-04-20 — `0b020f3` — CI.5 cost dashboard drill-down
 - 2026-04-20 — `82fec7c` — docs update (PROJECT-STATE / TODO / STACK)
