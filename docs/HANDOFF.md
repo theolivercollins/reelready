@@ -12,7 +12,7 @@ See also:
 
 ## Right now
 
-**Phase M.2 shipped.** Window D Round 1 audit (2026-04-21) confirmed **Phase B cannot be auto-derived from existing signal** — only 32% of 170 rated iterations are SKU-granular (Phase 2.8 Lab), and no (room × movement) bucket has >=3 iterations on a single SKU. See `docs/audits/router-coverage-2026-04-21.md`. Current next action: **Phase B — targeted rating session** on the quota-high buckets (kitchen, living_room, master_bedroom, exterior_front, aerial) using the script's coverage output to scope the grid minimally. `lib/providers/router.ts` stays on intuition-based routing until real signal lands.
+**Phase M.2 shipped. DA.1 Gemini-eyes merged to main (2026-04-21).** Director now receives `motion_headroom` booleans from Gemini 3 Flash per photo and hard-bans geometrically impossible camera moves. Window D Round 1 audit (2026-04-21) confirmed **Phase B cannot be auto-derived from existing signal** — only 32% of 170 rated iterations are SKU-granular (Phase 2.8 Lab only), and no (room × movement) bucket has ≥3 iterations on a single SKU. See `docs/audits/router-coverage-2026-04-21.md`. Current next action: **Phase B — targeted rating session** on the quota-high buckets (kitchen, living_room, master_bedroom, exterior_front, aerial) using the script's coverage output to scope the grid minimally. `lib/providers/router.ts` stays on intuition-based routing until real signal lands.
 
 ## Plan state
 
@@ -27,13 +27,18 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 | CI — Cost integrity | shipped (CI.1–CI.5) | Model-aware Claude pricing, OpenAI embedding tracking, Shotstack per-minute, failed-render policy, dashboard drill-down |
 | C — Production end-to-end | shipped | Router `ProviderDecision`, base64 → URL, duration-aware director, lazy failover Kling → Atlas |
 | M.2 — ML consolidation | ✅ shipped | SKU capture, dead code removal, prod embedding backfill |
-| B — Model head-to-head | blocked on M.2 + Oliver's ratings | One fresh listing, 6 SKUs, rate, build `router-table.ts` |
+| B — Model head-to-head | audit complete (2026-04-21); blocked on targeted rating session | Per Window D audit: existing 170 ratings insufficient (32 buckets, 0 winners, 32% SKU-granular). Narrowed plan: targeted grid on 5 quota-high buckets — seed + render + rate, then re-run `scripts/build-router-table.ts` to emit a real table |
 
 ## Recent shipping log
 
 (Newest on top. Append one line per push to `main`.)
 
-- 2026-04-21 — `session/router-2026-04-21` — Window D Round 1: `scripts/build-router-table.ts` + `router-table.draft.ts` (empty) + `docs/audits/router-coverage-2026-04-21.md` — verdict: existing signal insufficient for SKU routing, fresh rating session needed (32 buckets, 0 winners, 32% SKU-granular)
+- 2026-04-21 — `6c7cc6d` — DA.1 smoke tests + cost-reconcile note + STACK update (Window B, 5/5)
+- 2026-04-21 — `47010d4` — DA.1 Gemini-first prod + Lab analysis + DA.3 motion_headroom validator (Window B, 4/5)
+- 2026-04-21 — `921c3dd` — DA.2 director motion_headroom hard bans + camera-state block (Window B, 3/5)
+- 2026-04-21 — `ae25541` — DA.1 Gemini 3 Flash analyzer with motion_headroom + @google/genai dep (Window B, 2/5)
+- 2026-04-21 — `9fae141` — DA.1 migration 030 photos.analysis_json + analysis_provider (Window B, 1/5)
+- 2026-04-21 — Window D Round 1: router-table audit — existing signal insufficient for SKU routing (32 buckets, 0 winners, 32% SKU-granular); draft file empty, not wired; coverage report at `docs/audits/router-coverage-2026-04-21.md`
 - 2026-04-21 — `5b07ce3` — M.2 backfill script widened to all unembedded scenes (17/24 embedded)
 - 2026-04-21 — `f1bf53a` — M.2b removed dead match_lab_iterations RPC + prompt-qa dead code
 - 2026-04-21 — `1938317` — M.2d exemplar/recipe/loser blocks now surface model_used SKU to director

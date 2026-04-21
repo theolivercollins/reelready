@@ -7,9 +7,29 @@ See also:
 - [../plans/back-on-track-plan.md](../plans/back-on-track-plan.md) — active roadmap
 - [../specs/2026-04-20-back-on-track-design.md](../specs/2026-04-20-back-on-track-design.md) — full roadmap spec
 
-Last updated: **2026-04-20 (back-on-track execution)** — Phases A (Lab UX spine), M.1 (director-prompt trace audit), DQ (director concise prompts), DM (dev/legacy merge), and CI.1–CI.4 (cost integrity) all shipped. Phase 2.8 listings Lab previously shipped: Atlas Cloud + 6 Kling SKUs, multi-photo listings, scene-level master-detail UI, streaming scene chat with Haiku 4.5 + rewrite tool, end-frame pairing, scene + iteration archive, rating reasons taxonomy, generate-all-models + side-by-side compare, recipe retrieval restored in listings director.
+Last updated: **2026-04-21 (DA.1 merged to main)** — Phases A (Lab UX spine), M.1 (director-prompt trace audit), DQ (director concise prompts), DM (dev/legacy merge), CI.1–CI.5 (cost integrity), C (prod end-to-end), and M.2 (ML consolidation) all shipped. **DA.1 Gemini-eyes** merged to main 2026-04-21 — director now receives `motion_headroom` booleans per photo and hard-bans geometrically impossible camera moves. Phase 2.8 listings Lab previously shipped: Atlas Cloud + 6 Kling SKUs, multi-photo listings, scene-level master-detail UI, streaming scene chat with Haiku 4.5 + rewrite tool, end-frame pairing, scene + iteration archive, rating reasons taxonomy, generate-all-models + side-by-side compare, recipe retrieval restored in listings director.
 
 Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
+
+---
+
+## 2026-04-21 — DA.1 Gemini-eyes (merged to main)
+
+Merged 2026-04-21 via consolidation of `session/da1-land-2026-04-21` (6 commits).
+
+**Goal:** fix director hallucinations (top_down on already-aerial shots, orbit on dense interiors, etc.) by introducing a Gemini 3 Flash per-photo analyzer that emits `motion_headroom` booleans, and wiring the director to respect them as HARD BANS.
+
+| Item | Detail |
+|---|---|
+| Analyzer | `lib/providers/gemini-analyzer.ts` — `analyzePhotoWithGemini(imageUrl)` → `ExtendedPhotoAnalysis`. Gemini 3 Flash primary, gemini-2.5-flash fallback on model-not-found. Emits: `motion_headroom` (push_in / pull_out / orbit / parallax / drone_push_in / top_down), `motion_headroom_rationale`, `camera_height`, `camera_tilt`, `frame_coverage`, plus existing PhotoAnalysisResult fields 1:1. Inline base64 image input. ~0.25¢/photo at Gemini 3 Flash pricing. |
+| Migration 030 | `photos.analysis_json jsonb` + `photos.analysis_provider text`. Typed columns (`room_type`, `aesthetic_score`, etc.) still populated for ergonomic queries. Applied to dev Supabase `vrhmaeywqsohlztoouxu` 2026-04-21. |
+| Prod pipeline | `lib/pipeline.ts::runAnalysis` runs Gemini per-photo in parallel. Claude Sonnet 4.6 batched as fallback (cost_event `scope='prod_photo_eyes_fallback'`). `runScripting` surfaces camera-state to director. |
+| Lab pipeline | `lib/prompt-lab-listings.ts::analyzeListingPhotos` mirror of prod. Exports `mapCameraMovementToHeadroomKey()` for the DA.3 validator. |
+| Director (DA.2) | `lib/prompts/director.ts` — `DIRECTOR_SYSTEM` adds "HARD MOVEMENT BANS FROM MOTION HEADROOM" section mapping each `camera_movement` verb to the `motion_headroom` key it requires; don't-do examples; `feature_closeup` fallback. `buildDirectorUserPrompt` renders `camera_height` / `camera_tilt` / `frame_coverage` / `motion_headroom` / `motion_headroom_rationale` per photo row. |
+| Validator (DA.3) | After the director returns JSON, a deterministic validator in both `runScripting` (prod) and `directListingScenes` (Lab) checks each scene's `camera_movement` against the source photo's `motion_headroom`. Violations are overridden to `suggested_motion` if in-headroom, else `feature_closeup`. No re-prompt round-trip. Violation count logged. |
+| Cost tracking | New `provider='google'` in `recordCostEvent` enum. Per-photo cost_event written on both Gemini path (`scope='prod_photo_eyes'` / `'lab_listing_photo_eyes'`) and Claude-fallback path (`scope='..._fallback'` + `gemini_error` metadata). Reconciliation line added to `scripts/cost-reconcile.ts`. |
+| Tests | `scripts/test-gemini-analyzer.ts` (one-photo probe; verified on aerial + bathroom — bathroom correctly `orbit=F drone_push_in=F`). `scripts/test-gemini-director-e2e.ts` (3 photos → Gemini → `buildDirectorUserPrompt`; all 5 new fields present in assembled prompt; transcript to `/tmp/director-prompt-e2e-*.md`). No renders executed. |
+| Known gaps (not blocking landing) | (1) `mapCameraMovementToHeadroomKey('drone_push_in')` returns only `drone_push_in`, not both `push_in` and `drone_push_in` — edge case where `push_in=false, drone_push_in=true` photo would slip past validator. (2) SDK warns when both `GEMINI_API_KEY` and `GOOGLE_API_KEY` are set; harmless. (3) Gemini marks non-overhead aerials `top_down=true` (can rise further to overhead) — semantically correct per system prompt wording; may want stricter tuning. |
 
 ---
 

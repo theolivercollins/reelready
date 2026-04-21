@@ -368,7 +368,7 @@ export async function recordCostEvent(event: {
   propertyId: string;
   sceneId?: string | null;
   stage: "analysis" | "scripting" | "generation" | "qc" | "assembly";
-  provider: "anthropic" | "runway" | "kling" | "luma" | "higgsfield" | "shotstack" | "openai" | "atlas";
+  provider: "anthropic" | "google" | "runway" | "kling" | "luma" | "higgsfield" | "shotstack" | "openai" | "atlas";
   unitsConsumed?: number;
   unitType?: "tokens" | "credits" | "kling_units" | "renders" | null;
   costCents: number;
@@ -425,6 +425,13 @@ export async function updatePhotoAnalysis(
     video_viable?: boolean | null;
     suggested_motion?: string | null;
     motion_rationale?: string | null;
+    // DA.1 — migration 030 added analysis_json + analysis_provider on the
+    // photos table so the director can read motion_headroom + camera
+    // state without forcing another migration every time the analyzer
+    // schema grows. Typed columns above stay populated for ergonomic
+    // queries.
+    analysis_json?: Record<string, unknown> | null;
+    analysis_provider?: "google" | "anthropic" | null;
   }
 ): Promise<void> {
   const { error } = await getSupabase().from("photos").update(analysis).eq("id", id);

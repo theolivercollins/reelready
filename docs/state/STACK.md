@@ -1,6 +1,6 @@
 # Listing Elevate — Stack Reference
 
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 
 See also:
 - [../HANDOFF.md](../HANDOFF.md) — current state + shipping log
@@ -19,11 +19,12 @@ See also:
 
 | Service | Model / Method | Usage |
 |---|---|---|
-| Anthropic | Claude Sonnet 4.6 | Photo analysis, director prompting, refinement, rule mining |
+| Google | Gemini 3 Flash (id `gemini-3-flash-preview`, fallback `gemini-2.5-flash`) | **Eyes** of the director (DA.1, 2026-04-21). Per-photo structured analysis emitting camera_height/tilt/frame_coverage + `motion_headroom` booleans. Wired in `lib/providers/gemini-analyzer.ts`; called from `lib/pipeline.ts::runAnalysis` (prod) and `lib/prompt-lab-listings.ts::analyzeListingPhotos` (Lab). Claude photo analyzer is the fallback. |
+| Anthropic | Claude Sonnet 4.6 | **Brain** of the director — shot planning + prompt writing. Respects Gemini's motion_headroom as hard camera-movement bans (DA.2). Also handles fallback photo analysis when Gemini fails, refinement, rule mining. |
 | Anthropic | Claude Haiku 4.5 (streaming SSE) | Listings Lab scene chat w/ `save_future_instruction` + `update_director_prompt` tools |
 | OpenAI | text-embedding-3-small (1536 dim) | pgvector similarity retrieval (legacy Lab + prod + listings unified pool) |
 
-NPM: `@anthropic-ai/sdk ^0.39.0`. OpenAI called via raw fetch in `lib/embeddings.ts`.
+NPM: `@anthropic-ai/sdk ^0.39.0`, `@google/genai ^1.50`. OpenAI called via raw fetch in `lib/embeddings.ts`.
 
 ## Video Generation Providers
 
@@ -70,7 +71,7 @@ Router logic (prod + legacy Lab): movement-first, room-type tiebreaker. See `lib
 
 - **PostgreSQL** via Supabase
 - **pgvector** extension — HNSW indexes, cosine distance (`<=>` operator)
-- **27 migrations** in `supabase/migrations/` (001–027). Latest: 023 (lab listings tables), 024 (iteration chat + scene refinement notes), 025 (scene.use_end_frame), 026 (scene chat + iteration archive + rating reasons), 027 (scene.archived). Migration 028 pending (M.2d — `model_used` on `prompt_lab_recipes`).
+- **30 migrations** in `supabase/migrations/` (001–030). Latest: 028 (M.2d — `model_used` on `prompt_lab_recipes` + backfill), 029 (dropped `match_lab_iterations` RPC — M.2b cleanup), 030 (DA.1 — `photos.analysis_json` + `photos.analysis_provider` for Gemini extended analysis).
 
 ### Listings Lab tables (Phase 2.8)
 
@@ -103,7 +104,8 @@ Legacy: `match_lab_iterations` (unused since unified embeddings shipped).
 
 | Variable | Provider |
 |---|---|
-| `ANTHROPIC_API_KEY` | Anthropic (Claude) |
+| `ANTHROPIC_API_KEY` | Anthropic (Claude — director brain + photo-analysis fallback) |
+| `GEMINI_API_KEY` | Google (Gemini 3 Flash — photo-analysis eyes, DA.1). Fallback to Claude if unset or failing. |
 | `OPENAI_API_KEY` | OpenAI (embeddings) |
 | `RUNWAY_API_KEY` | Runway Gen-4 |
 | `KLING_ACCESS_KEY` | Kling (JWT auth) |

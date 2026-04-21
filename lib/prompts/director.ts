@@ -267,13 +267,67 @@ Final scene count lands between 10 and 16. Total duration 30-60 seconds. Skip ro
 PER-PHOTO SUGGESTED MOTION (STRONG DEFAULT)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Each photo in the input list includes a "suggested_motion" field. This is
-the camera movement Claude's photo analyst picked for that specific photo
-based on the actual angle and composition. Respect it by default. Only
-override if a diversity constraint forces it (two consecutive scenes
-would otherwise have the same movement).
+the camera movement the photo analyst (Gemini 3 Flash) picked for that
+specific photo based on the actual angle and composition. Respect it by
+default. Only override if a diversity constraint forces it (two
+consecutive scenes would otherwise have the same movement).
 
 If a photo has suggested_motion=null, that photo was marked non-viable for
 video and should not be in your input list at all.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HARD MOVEMENT BANS FROM MOTION HEADROOM (DA.2 — READ CAREFULLY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each photo's analysis carries a motion_headroom block — six booleans
+indicating which camera movements are geometrically possible from that
+source frame. These are hard rules, not preferences. They exist because
+the downstream video generator (Kling, Atlas) cannot invent off-frame
+geometry convincingly — picking a movement with no headroom produces
+hallucinated_geometry and hallucinated_objects in the output clip.
+
+When planning a scene, you MUST NOT pick a camera_movement that the
+photo's motion_headroom marks as false. The mapping from camera_movement
+to motion_headroom key:
+- camera_movement "push_in" → motion_headroom.push_in must be true
+- camera_movement "drone_push_in" → motion_headroom.push_in must be true
+  AND motion_headroom.drone_push_in must be true (drone needs both
+  forward clearance and aerial/elevated framing)
+- camera_movement "orbit" → motion_headroom.orbit must be true
+- camera_movement "parallax" → motion_headroom.parallax must be true
+- camera_movement "dolly_left_to_right" / "dolly_right_to_left" →
+  motion_headroom.parallax must be true (dolly needs the same lateral
+  depth structure as parallax)
+- camera_movement "top_down" → motion_headroom.top_down must be true
+- camera_movement "reveal" → motion_headroom.parallax OR
+  motion_headroom.push_in must be true (reveal combines lateral passage
+  past a foreground element with a forward component)
+- camera_movement "low_angle_glide" → motion_headroom.push_in must be true
+- camera_movement "feature_closeup" → no headroom required (static-ish
+  shallow DOF is always safe; this is the fallback when nothing else fits)
+- camera_movement "rack_focus" → no headroom required (static camera)
+
+Examples of invalid plans (DO NOT DO):
+- photo.motion_headroom.top_down = false → DO NOT pick camera_movement
+  "top_down" (the shot is already overhead; rising further is meaningless)
+- photo.motion_headroom.push_in = false → DO NOT pick "push_in" or
+  "drone_push_in" (no forward clearance; the camera would crash or hit
+  invented geometry)
+- photo.motion_headroom.orbit = false → DO NOT pick "orbit" (the "other
+  side" of the subject is not inferable; the model would hallucinate it)
+- photo.motion_headroom.parallax = false → DO NOT pick "parallax",
+  "dolly_left_to_right", "dolly_right_to_left", or "reveal"
+
+If a photo has ALL the above motion_headroom values for a requested
+movement as false (extremely unlikely but possible), pick
+camera_movement="feature_closeup" — shallow DOF on a hero feature
+requires no camera movement through space and is always safe. If
+suggested_motion is provided and is in-headroom, always prefer it over
+a creative override.
+
+These bans take precedence over the motion-fit defaults in the
+"Preferred assignments" table below. If the defaults would pick
+dolly_left_to_right for a kitchen but motion_headroom.parallax=false on
+that photo, pick push_in (if in-headroom) or feature_closeup instead.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA MOVEMENT DIVERSITY
@@ -462,6 +516,16 @@ export function buildDirectorUserPrompt(
     composition?: string | null;
     suggested_motion?: string | null;
     motion_rationale?: string | null;
+    // DA.2 — camera-state awareness. When present these surface to the
+    // director so it can respect motion_headroom as hard bans. Optional
+    // for back-compat: legacy callers or Claude-fallback photos may not
+    // have them, in which case the block is omitted and the director
+    // plans as before.
+    camera_height?: string | null;
+    camera_tilt?: string | null;
+    frame_coverage?: string | null;
+    motion_headroom?: Record<string, boolean> | null;
+    motion_headroom_rationale?: Record<string, string> | null;
   }>,
   duration?: DurationTarget,
 ): string {
@@ -474,11 +538,33 @@ export function buildDirectorUserPrompt(
       const features = p.key_features.length > 0
         ? `\n    key_features: ${p.key_features.map(f => `"${f}"`).join(", ")}`
         : "";
+      // DA.2 — camera-state block. Lines are omitted when the field is
+      // not provided so Claude-fallback photos (permissive defaults) and
+      // legacy callers still get a compact layout.
+      const cameraStateLines: string[] = [];
+      if (p.camera_height) cameraStateLines.push(`    camera_height: ${p.camera_height}`);
+      if (p.camera_tilt) cameraStateLines.push(`    camera_tilt: ${p.camera_tilt}`);
+      if (p.frame_coverage) cameraStateLines.push(`    frame_coverage: ${p.frame_coverage}`);
+      if (p.motion_headroom) {
+        const hrPairs = Object.entries(p.motion_headroom)
+          .map(([k, v]) => `${k}=${v ? "T" : "F"}`)
+          .join(", ");
+        cameraStateLines.push(`    motion_headroom: {${hrPairs}}`);
+        if (p.motion_headroom_rationale) {
+          const rationaleStr = Object.entries(p.motion_headroom_rationale)
+            .map(([k, v]) => `      ${k}: ${v}`)
+            .join("\n");
+          if (rationaleStr) {
+            cameraStateLines.push(`    motion_headroom_rationale:\n${rationaleStr}`);
+          }
+        }
+      }
+      const cameraState = cameraStateLines.length > 0 ? `\n${cameraStateLines.join("\n")}` : "";
       return `  ID: ${p.id}
     file: ${p.file_name}
     room: ${p.room_type}
     aesthetic: ${p.aesthetic_score}
-    depth: ${p.depth_rating}${features}${composition}${motionHint}`;
+    depth: ${p.depth_rating}${features}${composition}${cameraState}${motionHint}`;
     })
     .join("\n\n");
 
