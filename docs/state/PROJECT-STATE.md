@@ -748,7 +748,7 @@ SQL files in `supabase/migrations/` for record; MCP `apply_migration` is the liv
 2. **Phase M.2 — ML consolidation + SKU signal capture**
    - M.2a–c: backfill prod scene embeddings (7/24 → 24/24), stop writing deprecated capture fields (`tags`, `refinement_instruction`), add UI nudge when Lab overrides become promotable.
    - M.2d: migration 028 adds `model_used` to `prompt_lab_recipes`; retrieval extended to surface winning SKU to the director.
-3. **Phase B — model head-to-head** — one fresh listing, Generate-all across all SKUs, rate every iteration. Now feasible with trustworthy per-render cost tracking.
+3. **Phase B — model head-to-head** — scope narrowed by Window D Round 1 audit (2026-04-21, `docs/audits/router-coverage-2026-04-21.md`). Existing 170 rated iterations yield **zero** (room × movement × SKU) buckets passing the winner rule (>=3 iter, >=80% 4★+). Root cause: only 32% of ratings are SKU-granular (Phase 2.8 Lab); legacy Lab + prod scene_ratings carry provider only. Revised plan: a minimal targeted grid on the quota-high buckets (kitchen, living_room, master_bedroom, exterior_front, aerial) rather than a full fresh listing. `scripts/build-router-table.ts` is a regression-guard for re-running the aggregation as ratings land. Draft `lib/providers/router-table.draft.ts` is committed but empty — `lib/providers/router.ts` stays on intuition-based routing until real signal arrives.
 4. **Phase C — production end-to-end**
    - Router swap: Atlas + native Kling + Runway in prod pipeline
    - **Production base64→URL fix** — 4 places in `lib/pipeline.ts` still use base64. Lab fixed; prod not yet.
