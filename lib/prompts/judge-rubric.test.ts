@@ -132,4 +132,30 @@ describe("validateJudgeOutput — cross-axis hard rules", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/camera_exited_room/);
   });
+
+  it("motion_faithfulness ≤ 2 WITH motion-defect flag passes", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 2,
+      geometry_coherence: 4,
+      room_consistency: 4,
+      hallucination_flags: ["wrong_motion_direction"],
+      confidence: 3,
+      reasoning: "rotated opposite to prompt",
+      overall: 3,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("room_consistency ≤ 2 WITH camera_exited_room flag passes", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 4,
+      geometry_coherence: 4,
+      room_consistency: 1,
+      hallucination_flags: ["camera_exited_room"],
+      confidence: 3,
+      reasoning: "walked through door to hallway",
+      overall: 3,
+    });
+    expect(r.ok).toBe(true);
+  });
 });

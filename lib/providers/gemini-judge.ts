@@ -1,21 +1,17 @@
 /**
- * P2 — Gemini auto-judge provider wrapper (SKELETON).
+ * P2 — Gemini auto-judge provider wrapper.
  *
- * Status: pre-cooked 2026-04-22 on branch session/p2-s1-implementation-draft.
- * NOT WIRED. The actual Gemini API binding is deliberately stubbed — P2
- * Session 1 (2026-04-23) fills it in after verifying:
- *   - Gemini 3 Flash accepts inline video frame arrays via @google/genai SDK
- *     (pattern mirror of lib/providers/gemini-analyzer.ts)
- *   - GEMINI_API_KEY billing covers the video-judging endpoint (Oliver's Q2
- *     resolution: defer to first-call verification)
- *   - 6-frame sample latency (Q2: 6 frames to start; widen if <70% agreement)
+ * Kill-switch: JUDGE_ENABLED env (default "false"). When disabled,
+ * judgeLabIteration throws JudgeDisabledError before any API call.
  *
- * This skeleton exists so P2 Session 1's gemini-judge.test.ts + endpoint
- * wiring can be landed before the binding is confirmed working. Kill-switch:
- * JUDGE_ENABLED env (default "false"). When disabled, judgeLabIteration
- * throws JudgeDisabledError before any API call.
+ * Binding: calls @google/genai generateContent with:
+ *   - clip as fileData (video/mp4) — Gemini's video understanding handles sampling
+ *   - source photo as inlineData (if supplied)
+ *   - JUDGE_SYSTEM_PROMPT + few-shot calibration examples in user message
+ *   - responseMimeType="application/json" + temperature=0.1 for structured output
  */
 
+import { GoogleGenAI } from "@google/genai";
 import type { JudgeRubricResult } from "../prompts/judge-rubric.js";
 import { RUBRIC_VERSION, JUDGE_SYSTEM_PROMPT, validateJudgeOutput } from "../prompts/judge-rubric.js";
 import { recordCostEvent } from "../db.js";
@@ -65,25 +61,123 @@ export async function judgeLabIteration(input: JudgeInput): Promise<JudgeOutput>
   const judge_model = process.env.JUDGE_MODEL ?? JUDGE_MODEL_DEFAULT;
 
   try {
-    // TODO(p2-s1): replace with actual Gemini call following the pattern in
-    // lib/providers/gemini-analyzer.ts.
-    //   1. Extract 6 frames from clip via ffmpeg or delegate to video-capable
-    //      Gemini endpoint (if Gemini 3 Flash accepts video URL directly,
-    //      skip frame extraction)
-    //   2. Compose prompt: JUDGE_SYSTEM_PROMPT + optional few-shot from
-    //      input.calibrationExamples + photoBytes + frames + directorPrompt.
-    //   3. Call Gemini with structured-output / JSON-schema forcing.
-    //   4. Parse response JSON; pass through validateJudgeOutput.
-    //   5. Return JudgeOutput with latency + cost_cents.
-    //
-    // For the skeleton, throw a clear TODO error so the pathway is obviously
-    // not-yet-wired.
-    void JUDGE_SYSTEM_PROMPT; // keep import alive during skeleton phase
-    void validateJudgeOutput; // same
-    throw new Error(
-      "gemini-judge.ts binding not yet implemented (P2 S1 pending). " +
-        "To wire: follow the TODO(p2-s1) block in lib/providers/gemini-judge.ts.",
-    );
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY required for judge");
+
+    // Build few-shot preamble from calibration examples (same bucket only).
+    const fewShot = (input.calibrationExamples ?? [])
+      .slice(0, 3)
+      .map(
+        (ex, i) =>
+          `Example ${i + 1}:\nJudge rating: ${JSON.stringify(ex.judge_rating_json)}${
+            ex.oliver_correction_json
+              ? `\nOliver's correction: ${JSON.stringify(ex.oliver_correction_json)}`
+              : ""
+          }`,
+      )
+      .join("\n\n");
+
+    // Source photo as inline base64 (per Oliver Q1: pass bytes, not analysis text).
+    const photoInline = input.photoBytes
+      ? [
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: input.photoBytes.toString("base64"),
+            },
+          },
+        ]
+      : [];
+
+    const userText = [
+      fewShot ? `CALIBRATION EXAMPLES:\n${fewShot}\n\n---\n` : "",
+      `Director intended camera_movement: ${input.cameraMovement}`,
+      `Room: ${input.roomType}`,
+      `Director prompt: ${input.directorPrompt}`,
+      `\nJudge the clip against the rubric. Return only the JSON schema.`,
+    ].join("\n");
+
+    const genai = new GoogleGenAI({ apiKey });
+
+    const resp = await genai.models.generateContent({
+      model: judge_model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: userText },
+            ...photoInline,
+            { fileData: { fileUri: input.clipUrl, mimeType: "video/mp4" } },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: JUDGE_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.1,
+      },
+    });
+
+    // Extract text — mirror gemini-analyzer.ts's res.text pattern.
+    const rawText =
+      resp.text ??
+      (resp as unknown as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
+        ?.candidates?.[0]?.content?.parts?.[0]?.text ??
+      "";
+
+    if (!rawText) {
+      throw new Error(
+        `Judge returned no text (finishReason=${
+          (resp as unknown as { candidates?: Array<{ finishReason?: string }> })
+            ?.candidates?.[0]?.finishReason ?? "unknown"
+        })`,
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      // Strip optional markdown fences Gemini occasionally emits.
+      const cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      throw new Error(`Judge returned non-JSON: ${rawText.slice(0, 200)}`);
+    }
+
+    const validation = validateJudgeOutput(parsed);
+    if (!validation.ok) {
+      throw new Error(`Judge output validation failed: ${validation.error}`);
+    }
+
+    const latency_ms = Date.now() - startedAt;
+    const cost_cents = 2; // ~$0.02 estimate; revisit after first invoice
+
+    try {
+      await recordCostEvent({
+        propertyId: "00000000-0000-0000-0000-000000000000",
+        sceneId: null,
+        stage: "analysis",
+        provider: "google",
+        unitsConsumed: 1,
+        unitType: "tokens",
+        costCents: cost_cents,
+        metadata: {
+          subtype: "judge",
+          surface: "lab",
+          iteration_id: input.iterationId,
+          judge_model,
+          judge_version: RUBRIC_VERSION,
+          latency_ms,
+        },
+      });
+    } catch { /* non-fatal */ }
+
+    return {
+      ...validation.result,
+      judge_model,
+      judge_version: RUBRIC_VERSION,
+      latency_ms,
+      cost_cents,
+    };
   } catch (err) {
     const latency_ms = Date.now() - startedAt;
     const message = err instanceof Error ? err.message : String(err);
