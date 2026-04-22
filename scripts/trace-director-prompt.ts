@@ -30,32 +30,44 @@ if (fs.existsSync(envPath)) {
 
 import { getSupabase } from "../lib/client.js";
 
-type Mode = { kind: "listing"; id: string } | { kind: "property"; id: string };
+type Mode =
+  | { kind: "listing"; id: string }
+  | { kind: "property"; id: string }
+  | { kind: "v1-session"; id: string };
 
 function parseArgs(): Mode {
   const args = process.argv.slice(2);
   const listingIdx = args.indexOf("--listing");
   const propertyIdx = args.indexOf("--property");
+  const v1SessionIdx = args.indexOf("--v1-session");
   if (listingIdx >= 0 && args[listingIdx + 1]) {
     return { kind: "listing", id: args[listingIdx + 1] };
   }
   if (propertyIdx >= 0 && args[propertyIdx + 1]) {
     return { kind: "property", id: args[propertyIdx + 1] };
   }
-  console.error("Usage: npx tsx scripts/trace-director-prompt.ts (--listing <id> | --property <id>)");
+  if (v1SessionIdx >= 0 && args[v1SessionIdx + 1]) {
+    return { kind: "v1-session", id: args[v1SessionIdx + 1] };
+  }
+  console.error(
+    "Usage: npx tsx scripts/trace-director-prompt.ts (--listing <id> | --property <id> | --v1-session <id>)",
+  );
   process.exit(2);
 }
 
 async function main() {
   const mode = parseArgs();
   console.log(`Tracing ${mode.kind} ${mode.id}...`);
-  // Dispatch to listing or property tracer (implemented in later tasks)
+  // Dispatch to listing, property, or v1-session tracer
   if (mode.kind === "listing") {
     const { traceListing } = await import("./trace-director-prompt.impl.js");
     await traceListing(mode.id);
-  } else {
+  } else if (mode.kind === "property") {
     const { traceProperty } = await import("./trace-director-prompt.impl.js");
     await traceProperty(mode.id);
+  } else {
+    const { traceV1Session } = await import("./trace-director-prompt.impl.js");
+    await traceV1Session(mode.id);
   }
 }
 

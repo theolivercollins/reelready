@@ -261,6 +261,293 @@ export async function traceProperty(propertyId: string): Promise<void> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// V1 Session tracer
+// ---------------------------------------------------------------------------
+
+interface RetrievalMetadataExemplar {
+  id: string;
+  prompt: string;
+  rating: number;
+  distance: number;
+  room_type: string;
+  camera_movement: string;
+  model_used?: string | null;
+  tags?: string[] | null;
+  comment?: string | null;
+  refinement?: string | null;
+}
+
+interface RetrievalMetadataRecipe {
+  id: string;
+  archetype: string;
+  prompt_template: string;
+  distance: number;
+}
+
+interface RetrievalMetadata {
+  exemplars?: RetrievalMetadataExemplar[];
+  losers?: RetrievalMetadataExemplar[];
+  recipe?: RetrievalMetadataRecipe | null;
+}
+
+export async function traceV1Session(sessionId: string): Promise<void> {
+  const supabase = getSupabase();
+
+  // 1. Fetch the session row
+  const { data: session, error: sessionErr } = await supabase
+    .from("prompt_lab_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .single();
+  if (sessionErr || !session) {
+    throw new Error(`Session ${sessionId} not found: ${sessionErr?.message}`);
+  }
+
+  // 2. Fetch all iterations ordered newest-first
+  const { data: iterations, error: iterErr } = await supabase
+    .from("prompt_lab_iterations")
+    .select("*")
+    .eq("session_id", sessionId)
+    .order("iteration_number", { ascending: false });
+  if (iterErr) throw new Error(`Could not fetch iterations: ${iterErr.message}`);
+  const itersArr = iterations ?? [];
+
+  // 3. Use the latest iteration as the anchor for analysis + retrieval
+  const latestIter = itersArr[0] ?? null;
+
+  const notes: string[] = [];
+
+  if (!latestIter) {
+    notes.push("WARNING: Session has no iterations.");
+  }
+
+  // 4. Extract analysis from latest iteration
+  const analysis = (latestIter?.analysis_json ?? {}) as {
+    room_type?: string;
+    aesthetic_score?: number;
+    depth_rating?: string;
+    key_features?: string[];
+    composition?: string | null;
+    suggested_motion?: string | null;
+    motion_rationale?: string | null;
+  };
+
+  // 5. Build the base director user prompt from analysis
+  type DirectorUserPhoto = Parameters<typeof buildDirectorUserPrompt>[0][number];
+  const photoData: DirectorUserPhoto[] = [
+    {
+      id: latestIter?.id ?? sessionId,
+      file_name: "lab-image",
+      room_type: analysis.room_type ?? "other",
+      aesthetic_score: typeof analysis.aesthetic_score === "number" ? analysis.aesthetic_score : 5,
+      depth_rating: analysis.depth_rating ?? "medium",
+      key_features: Array.isArray(analysis.key_features) ? analysis.key_features : [],
+      composition: analysis.composition ?? null,
+      suggested_motion: analysis.suggested_motion ?? null,
+      motion_rationale: analysis.motion_rationale ?? null,
+    },
+  ];
+
+  // 6. Determine retrieval: prefer stored retrieval_metadata, fall back to live RPCs
+  let exemplars: RetrievedExemplar[] = [];
+  let losers: RetrievedExemplar[] = [];
+  let recipes: RetrievedRecipe[] = [];
+
+  const storedMeta = latestIter?.retrieval_metadata as RetrievalMetadata | null | undefined;
+
+  if (storedMeta && (storedMeta.exemplars?.length || storedMeta.losers?.length || storedMeta.recipe)) {
+    // Use stored metadata — already computed at render time
+    notes.push("INFO: Retrieval from stored `retrieval_metadata` on latest iteration (no live RPC calls).");
+
+    exemplars = (storedMeta.exemplars ?? []).map((e) => ({
+      id: e.id,
+      source: "lab" as const,
+      room_type: e.room_type,
+      camera_movement: e.camera_movement,
+      model_used: e.model_used ?? null,
+      prompt: e.prompt,
+      rating: e.rating,
+      tags: e.tags ?? null,
+      comment: e.comment ?? null,
+      refinement: e.refinement ?? null,
+      provider: null,
+      distance: e.distance,
+    }));
+
+    losers = (storedMeta.losers ?? []).map((e) => ({
+      id: e.id,
+      source: "lab" as const,
+      room_type: e.room_type,
+      camera_movement: e.camera_movement,
+      model_used: e.model_used ?? null,
+      prompt: e.prompt,
+      rating: e.rating,
+      tags: e.tags ?? null,
+      comment: e.comment ?? null,
+      refinement: e.refinement ?? null,
+      provider: null,
+      distance: e.distance,
+    }));
+
+    if (storedMeta.recipe) {
+      recipes = [
+        {
+          id: storedMeta.recipe.id,
+          archetype: storedMeta.recipe.archetype,
+          room_type: analysis.room_type ?? "other",
+          camera_movement: "push_in",
+          provider: null,
+          model_used: null,
+          prompt_template: storedMeta.recipe.prompt_template,
+          composition_signature: null,
+          times_applied: 0,
+          distance: storedMeta.recipe.distance,
+        },
+      ];
+    }
+  } else {
+    // Fall back to live retrieval via embedding on latest iteration
+    const vec = fromPgVector(latestIter?.embedding as string | null);
+    if (vec) {
+      notes.push("INFO: Retrieval via live RPCs (no stored retrieval_metadata).");
+      try {
+        const [r, w, l] = await Promise.all([
+          retrieveMatchingRecipes(vec, analysis.room_type ?? null, { limit: 3 }),
+          retrieveSimilarIterations(vec, { minRating: 4, limit: 5 }),
+          retrieveSimilarLosers(vec, { maxRating: 2, limit: 3 }),
+        ]);
+        recipes = r;
+        exemplars = w;
+        losers = l;
+      } catch (err) {
+        notes.push(`WARNING: Live retrieval failed: ${err}`);
+      }
+    } else {
+      notes.push("WARNING: Latest iteration has no embedding — retrieval skipped.");
+    }
+  }
+
+  // 7. Assemble the full director user prompt (same composition as Lab's directSinglePhoto)
+  const basePrompt = buildDirectorUserPrompt(photoData);
+  const winnersBlock = renderExemplarBlock(exemplars);
+  const losersBlock = renderLoserBlock(losers);
+  const recipeBlock = renderRecipeBlock(recipes);
+  const directorUserPrompt = basePrompt + winnersBlock + losersBlock + recipeBlock;
+
+  // 8. Get director output from latest iteration
+  const directorOutput = latestIter?.director_output_json as {
+    camera_movement?: string;
+    prompt?: string;
+    duration_seconds?: number;
+    provider_preference?: string | null;
+  } | null;
+
+  // 9. Pool counts
+  const [{ count: labSessions }, { count: prodRatings }, { count: listingIterations }] = await Promise.all([
+    supabase.from("prompt_lab_iterations").select("*", { count: "exact", head: true }),
+    supabase.from("scene_ratings").select("*", { count: "exact", head: true }),
+    supabase.from("prompt_lab_listing_scene_iterations").select("*", { count: "exact", head: true }),
+  ]);
+
+  if (exemplars.length === 0) notes.push("WARNING: No winner exemplars found.");
+  if (losers.length === 0) notes.push("INFO: No loser exemplars found.");
+  if (recipes.length === 0) notes.push("INFO: No recipe matches found.");
+
+  // 10. Build the V1-specific markdown transcript
+  const md = [
+    `# V1 Director-Prompt Trace — session ${sessionId}`,
+    "",
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "## Session Metadata",
+    "",
+    `- **Session ID**: ${sessionId}`,
+    `- **Label**: ${(session as { label?: string | null }).label ?? "(none)"}`,
+    `- **Archetype**: ${(session as { archetype?: string | null }).archetype ?? "(none)"}`,
+    `- **Created at**: ${(session as { created_at: string }).created_at}`,
+    `- **Image URL**: ${(session as { image_url: string }).image_url}`,
+    `- **Total iterations**: ${itersArr.length}`,
+    "",
+    "## Retrieval Summary",
+    "",
+    `- WINNERS retrieved: **${exemplars.length}**`,
+    `- LOSERS retrieved: **${losers.length}**`,
+    `- RECIPE MATCHES: **${recipes.length}**`,
+    `- Pool sizes: lab_iters=${labSessions ?? 0}, prod_scene_ratings=${prodRatings ?? 0}, listing_iters=${listingIterations ?? 0}`,
+    `- DIRECTOR_SYSTEM length: ${DIRECTOR_SYSTEM.length} chars`,
+    `- Director user message total length: **${directorUserPrompt.length} chars**`,
+    "",
+    "## Notes",
+    "",
+    ...notes.map((n) => `- ${n}`),
+    "",
+    "## Analysis (from latest iteration)",
+    "",
+    "```json",
+    JSON.stringify(analysis, null, 2),
+    "```",
+    "",
+    "## WINNERS Block",
+    "",
+    winnersBlock.trim() || "(empty — no winner exemplars found)",
+    "",
+    "## LOSERS Block",
+    "",
+    losersBlock.trim() || "(empty — no loser exemplars found)",
+    "",
+    "## RECIPE MATCH Block",
+    "",
+    recipeBlock.trim() || "(empty — no recipe matches found)",
+    "",
+    "## Full Director User Message",
+    "",
+    "```",
+    directorUserPrompt,
+    "```",
+    "",
+    "## Director Output (iteration 1 stored result)",
+    "",
+    directorOutput
+      ? [
+          `- camera_movement: **${directorOutput.camera_movement ?? "?"}**`,
+          `- prompt: "${directorOutput.prompt ?? ""}"`,
+          `- duration_seconds: ${directorOutput.duration_seconds ?? "?"}`,
+          `- provider_preference: ${directorOutput.provider_preference ?? "(none)"}`,
+        ].join("\n")
+      : "(no director output stored on latest iteration)",
+    "",
+    "## Iteration History",
+    "",
+    ...itersArr.map((iter) => {
+      const d = (iter.director_output_json ?? {}) as { camera_movement?: string; prompt?: string };
+      return [
+        `### Iteration ${iter.iteration_number}`,
+        `- Created: ${iter.created_at}`,
+        `- Rating: ${iter.rating ?? "(unrated)"}`,
+        `- Camera movement: ${d.camera_movement ?? "?"}`,
+        `- Prompt: "${d.prompt ?? ""}"`,
+        `- Cost: ${iter.cost_cents}¢`,
+        `- Clip: ${iter.clip_url ?? "(no clip)"}`,
+        "",
+      ].join("\n");
+    }),
+  ].join("\n");
+
+  const outPath = `/tmp/director-trace-v1-${sessionId}.md`;
+  await writeFile(outPath, md, "utf8");
+  console.log(`Wrote ${outPath}`);
+  console.log("");
+  console.log("V1 Session trace summary:");
+  console.log(`  Session: ${sessionId} — ${(session as { label?: string | null }).label ?? "(no label)"}`);
+  console.log(`  Iterations: ${itersArr.length}`);
+  console.log(`  WINNERS: ${exemplars.length}`);
+  console.log(`  LOSERS: ${losers.length}`);
+  console.log(`  RECIPES: ${recipes.length}`);
+  console.log(`  Director user message: ${directorUserPrompt.length} chars`);
+  for (const n of notes) console.log(`  ${n}`);
+}
+
 async function writeReport(r: TraceReport): Promise<void> {
   const md = [
     `# Director-Prompt Trace — ${r.kind} ${r.id}`,
