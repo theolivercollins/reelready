@@ -1,0 +1,135 @@
+import { describe, expect, it } from "vitest";
+import { RUBRIC_VERSION, validateJudgeOutput } from "./judge-rubric.js";
+
+describe("judge-rubric — RUBRIC_VERSION", () => {
+  it("is a non-empty version string", () => {
+    expect(RUBRIC_VERSION).toBe("v1.0");
+  });
+});
+
+describe("validateJudgeOutput — happy path", () => {
+  const good = {
+    motion_faithfulness: 4,
+    geometry_coherence: 5,
+    room_consistency: 5,
+    hallucination_flags: [],
+    confidence: 4,
+    reasoning: "Camera dollies cleanly; room intact; minor motion damping.",
+    overall: 4,
+  };
+
+  it("accepts a well-formed rubric output", () => {
+    const r = validateJudgeOutput(good);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.result.motion_faithfulness).toBe(4);
+      expect(r.result.hallucination_flags).toEqual([]);
+    }
+  });
+});
+
+describe("validateJudgeOutput — schema failures", () => {
+  it("rejects non-object", () => {
+    expect(validateJudgeOutput(null).ok).toBe(false);
+    expect(validateJudgeOutput("string").ok).toBe(false);
+  });
+
+  it("rejects out-of-range axis", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 7,
+      geometry_coherence: 5,
+      room_consistency: 5,
+      hallucination_flags: [],
+      confidence: 3,
+      reasoning: "x",
+      overall: 5,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/motion_faithfulness/);
+  });
+
+  it("rejects unknown hallucination flag", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 4,
+      geometry_coherence: 4,
+      room_consistency: 4,
+      hallucination_flags: ["fabricated_flag_name"],
+      confidence: 3,
+      reasoning: "x",
+      overall: 4,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/hallucination_flag/);
+  });
+
+  it("rejects empty reasoning", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 4,
+      geometry_coherence: 4,
+      room_consistency: 4,
+      hallucination_flags: [],
+      confidence: 3,
+      reasoning: "",
+      overall: 4,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/reasoning/);
+  });
+});
+
+describe("validateJudgeOutput — cross-axis hard rules", () => {
+  it("geometry_coherence ≤ 2 without matching flag fails", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 4,
+      geometry_coherence: 2,
+      room_consistency: 4,
+      hallucination_flags: [],
+      confidence: 3,
+      reasoning: "broken walls",
+      overall: 3,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/hallucinated_geometry|hallucinated_architecture/);
+  });
+
+  it("geometry_coherence ≤ 2 WITH hallucinated_geometry flag passes", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 4,
+      geometry_coherence: 2,
+      room_consistency: 4,
+      hallucination_flags: ["hallucinated_geometry"],
+      confidence: 3,
+      reasoning: "walls warp",
+      overall: 3,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("motion_faithfulness ≤ 2 without motion-defect flag fails", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 2,
+      geometry_coherence: 4,
+      room_consistency: 4,
+      hallucination_flags: [],
+      confidence: 3,
+      reasoning: "wrong way",
+      overall: 3,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/motion-defect/);
+  });
+
+  it("room_consistency ≤ 2 without camera_exited_room flag fails", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 4,
+      geometry_coherence: 4,
+      room_consistency: 1,
+      hallucination_flags: [],
+      confidence: 3,
+      reasoning: "teleport",
+      overall: 3,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/camera_exited_room/);
+  });
+});
