@@ -15,12 +15,20 @@ import {
   type DirectorSceneOutput,
 } from "./prompts/director.js";
 import { computeClaudeCost } from "./utils/claude-cost.js";
-import { selectProvider } from "./providers/router.js";
+import { selectProvider, resolveDecision } from "./providers/router.js";
 import { pollUntilComplete, type IVideoProvider } from "./providers/provider.interface.js";
 import { KlingProvider } from "./providers/kling.js";
 import { RunwayProvider } from "./providers/runway.js";
+import { AtlasProvider, type V1AtlasSku } from "./providers/atlas.js";
 import { embedTextSafe, buildAnalysisText, toPgVector } from "./embeddings.js";
+import { recordCostEvent } from "./db.js";
 import type { RoomType, CameraMovement } from "./types.js";
+
+// Stable zero-UUID used as a placeholder property_id for Lab renders that
+// are not tied to a real property. Allows cost_events rows to be inserted
+// without a real property row (property_id accepts any UUID, and Lab costs
+// do NOT roll up into a real property total).
+export const LAB_SYNTHETIC_PROPERTY_ID = "00000000-0000-0000-0000-000000000000";
 
 // ---- Types ----
 
@@ -517,24 +525,40 @@ export async function submitLabRender(params: {
   roomType: RoomType;
   providerOverride?: "kling" | "runway" | null;
   endImageUrl?: string | null;
-}): Promise<{ jobId: string; provider: string }> {
+  sku?: V1AtlasSku | null;
+}): Promise<{ jobId: string; provider: string; sku: V1AtlasSku }> {
   let provider: IVideoProvider;
-  if (params.providerOverride === "kling" || params.providerOverride === "runway") {
-    provider = getProviderByName(params.providerOverride);
-  } else {
-    provider = selectProvider(params.roomType, params.scene.camera_movement, null, []);
-  }
+  let resolvedSku: V1AtlasSku;
 
-  // Capacity guard: if Kling is saturated, auto-fallback on "auto" selection
-  // or throw a clear error if the user explicitly asked for Kling.
-  if (provider.name === "kling") {
-    const inFlight = await countKlingInFlight();
-    if (inFlight >= KLING_CONCURRENCY_LIMIT) {
-      if (params.providerOverride === "kling") {
-        throw new ProviderCapacityError("kling", inFlight, KLING_CONCURRENCY_LIMIT);
+  if (params.providerOverride === "kling" || params.providerOverride === "runway") {
+    // Escape hatch: explicit kling/runway override bypasses Atlas routing.
+    provider = getProviderByName(params.providerOverride);
+
+    // Capacity guard: if Kling is saturated, auto-fallback.
+    if (provider.name === "kling") {
+      const inFlight = await countKlingInFlight();
+      if (inFlight >= KLING_CONCURRENCY_LIMIT) {
+        if (params.providerOverride === "kling") {
+          throw new ProviderCapacityError("kling", inFlight, KLING_CONCURRENCY_LIMIT);
+        }
+        provider = new RunwayProvider();
       }
-      provider = new RunwayProvider();
     }
+    // sku is not meaningful for non-Atlas providers; use default for type safety.
+    resolvedSku = "kling-v2-6-pro";
+  } else if (params.endImageUrl) {
+    // Paired scene: always use kling-v2-1-pair via Atlas.
+    resolvedSku = "kling-v2-1-pair" as unknown as V1AtlasSku;
+    provider = new AtlasProvider("kling-v2-1-pair");
+  } else {
+    // Non-paired scene: resolve SKU via router and instantiate Atlas explicitly.
+    const decision = resolveDecision({
+      roomType: params.roomType,
+      movement: params.scene.camera_movement,
+      skuOverride: params.sku ?? null,
+    });
+    resolvedSku = decision.modelKey as V1AtlasSku;
+    provider = new AtlasProvider(resolvedSku);
   }
 
   // Keep the Buffer path as a fallback for providers that don't accept URLs,
@@ -550,16 +574,22 @@ export async function submitLabRender(params: {
     aspectRatio: "16:9",
     endImageUrl: params.endImageUrl ?? undefined,
   });
-  return { jobId: job.jobId, provider: provider.name };
+  return { jobId: job.jobId, provider: provider.name, sku: resolvedSku };
 }
 
 export async function finalizeLabRender(params: {
   iterationId: string;
   sessionId: string;
-  provider: "kling" | "runway";
+  provider: "kling" | "runway" | "atlas";
   providerTaskId: string;
 }): Promise<{ done: boolean; clipUrl?: string; costCents?: number; error?: string }> {
-  const providerImpl = getProviderByName(params.provider);
+  // Atlas finalization uses AtlasProvider; legacy kling/runway use the
+  // named-provider helper. AtlasProvider.checkStatus handles all Atlas SKUs.
+  const providerImpl: IVideoProvider =
+    params.provider === "atlas"
+      ? new AtlasProvider()
+      : getProviderByName(params.provider as "kling" | "runway");
+
   const result = await providerImpl.checkStatus(params.providerTaskId);
   if (result.status === "processing") return { done: false };
   if (result.status === "failed" || !result.videoUrl) {
@@ -582,10 +612,49 @@ export async function finalizeLabRender(params: {
     }
   } catch { /* fall back to provider URL */ }
 
+  const computedCostCents = Math.round(result.costCents ?? 0);
+
+  // Emit a cost_events row for every completed Lab render. Uses a synthetic
+  // property_id (zero-UUID) for Lab sessions not tied to a real property.
+  // Wrapped in try/catch so a cost-event failure never breaks clip finalization.
+  try {
+    const { getSupabase: getSupabaseForCost } = await import("./client.js");
+    const supabaseCost = getSupabaseForCost();
+    // Look up the iteration to get session.property_id and model_used.
+    const { data: iteration } = await supabaseCost
+      .from("prompt_lab_iterations")
+      .select("model_used, session_id")
+      .eq("id", params.iterationId)
+      .maybeSingle();
+    const { data: session } = await supabaseCost
+      .from("prompt_lab_sessions")
+      .select("property_id")
+      .eq("id", params.sessionId)
+      .maybeSingle();
+
+    await recordCostEvent({
+      propertyId: (session?.property_id as string | null | undefined) ?? LAB_SYNTHETIC_PROPERTY_ID,
+      sceneId: null,
+      stage: "generation",
+      provider: "atlas",
+      unitsConsumed: 1,
+      unitType: "renders",
+      costCents: computedCostCents,
+      metadata: {
+        sku: (iteration?.model_used as string | null) ?? "unknown",
+        surface: "lab",
+        iteration_id: params.iterationId,
+        session_id: params.sessionId,
+      },
+    });
+  } catch (costErr) {
+    console.error("[finalizeLabRender] cost_events insert failed (non-fatal):", costErr);
+  }
+
   return {
     done: true,
     clipUrl: persistedUrl,
-    costCents: Math.round(result.costCents ?? 0),
+    costCents: computedCostCents,
   };
 }
 

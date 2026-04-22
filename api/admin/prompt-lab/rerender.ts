@@ -11,6 +11,7 @@ import {
   ANALYSIS_PROMPT_HASH,
   DIRECTOR_PROMPT_HASH,
 } from "../../../lib/prompt-lab.js";
+import { V1_ATLAS_SKUS, type V1AtlasSku } from "../../../lib/providers/atlas.js";
 
 // POST /api/admin/prompt-lab/rerender
 //   body: { source_iteration_id, provider }
@@ -26,12 +27,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
-  const { source_iteration_id, provider } = (req.body ?? {}) as {
+  const { source_iteration_id, provider, sku: skuParam } = (req.body ?? {}) as {
     source_iteration_id?: string;
     provider?: "kling" | "runway";
+    sku?: string | null;
   };
   if (!source_iteration_id || !provider) {
     return res.status(400).json({ error: "source_iteration_id and provider required" });
+  }
+
+  // Validate sku if explicitly provided.
+  let explicitSku: V1AtlasSku | null = null;
+  if (skuParam != null) {
+    if (!(V1_ATLAS_SKUS as readonly string[]).includes(skuParam)) {
+      return res.status(400).json({
+        error: `sku="${skuParam}" is not a valid V1 Atlas SKU. Valid: ${V1_ATLAS_SKUS.join(", ")}`,
+      });
+    }
+    explicitSku = skuParam as V1AtlasSku;
   }
 
   const supabase = getSupabase();
@@ -72,11 +85,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const scene = source.director_output_json as any;
     const roomType = (source.analysis_json as any)?.room_type ?? "other";
-    const { jobId, provider: usedProvider } = await submitLabRender({
+    // "rerender with same SKU" is frictionless: explicit body sku wins, else
+    // fall back to the source iteration's model_used, then null (router default).
+    const effectiveSku: V1AtlasSku | null = explicitSku ?? ((source.model_used as V1AtlasSku | null | undefined) ?? null);
+    const { jobId, provider: usedProvider, sku: resolvedSku } = await submitLabRender({
       imageUrl,
       scene,
       roomType,
       providerOverride: provider,
+      sku: effectiveSku,
     });
 
     await supabase
@@ -86,11 +103,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         provider_task_id: jobId,
         render_submitted_at: new Date().toISOString(),
         render_error: null,
+        model_used: resolvedSku,
+        sku_source: "captured_at_render",
       })
       .eq("id", newIteration.id);
 
     return res.status(201).json({
-      iteration: { ...newIteration, provider: usedProvider, provider_task_id: jobId },
+      iteration: { ...newIteration, provider: usedProvider, provider_task_id: jobId, sku: resolvedSku },
       source_iteration_id,
     });
   } catch (err) {
