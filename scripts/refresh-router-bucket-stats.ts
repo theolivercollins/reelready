@@ -54,12 +54,14 @@ async function main() {
 
   const supabase = getSupabase();
 
-  // Pull all rated iterations with a SKU and director-output camera_movement.
-  // Join prompt_lab_sessions to get room_type.
+  // room_type lives on prompt_lab_iterations.analysis_json, not on
+  // prompt_lab_sessions (sessions schema has only id/created_by/image_url/
+  // image_path/label/archetype/batch_label/archived/created_at). Fall back
+  // to sessions.archetype only if analysis_json is absent.
   const { data, error } = await supabase
     .from("prompt_lab_iterations")
     .select(
-      "id, rating, model_used, director_output_json, session_id, prompt_lab_sessions!inner(room_type, archetype)",
+      "id, rating, model_used, director_output_json, analysis_json, session_id, prompt_lab_sessions!inner(archetype)",
     )
     .not("rating", "is", null)
     .not("model_used", "is", null);
@@ -82,11 +84,12 @@ async function main() {
     rating: number | null;
     model_used: string | null;
     director_output_json: { camera_movement?: string } | null;
-    prompt_lab_sessions: { room_type?: string | null; archetype?: string | null };
+    analysis_json: { room_type?: string | null } | null;
+    prompt_lab_sessions: { archetype?: string | null };
   }>) {
     if (row.rating == null || row.model_used == null) continue;
     const roomType =
-      row.prompt_lab_sessions?.room_type ?? row.prompt_lab_sessions?.archetype ?? "unknown";
+      row.analysis_json?.room_type ?? row.prompt_lab_sessions?.archetype ?? "unknown";
     const movement = row.director_output_json?.camera_movement ?? "unknown";
     const key = bucketKey({
       room_type: roomType,

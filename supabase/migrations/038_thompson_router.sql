@@ -11,10 +11,13 @@ CREATE TABLE IF NOT EXISTS router_bucket_stats (
   room_type   text      NOT NULL,
   camera_movement text  NOT NULL,
   sku         text      NOT NULL,
-  alpha       integer   NOT NULL DEFAULT 0,
-  beta        integer   NOT NULL DEFAULT 0,
-  judge_alpha integer   NOT NULL DEFAULT 0,
-  judge_beta  integer   NOT NULL DEFAULT 0,
+  -- numeric(10,2) so fractional judge weights (JUDGE_ALPHA_WEIGHT=0.5 per
+  -- Oliver's Q2 decision) persist without truncation. Human ratings still
+  -- contribute integer counts via the same columns; mixing is safe.
+  alpha       numeric(10,2) NOT NULL DEFAULT 0,
+  beta        numeric(10,2) NOT NULL DEFAULT 0,
+  judge_alpha numeric(10,2) NOT NULL DEFAULT 0,
+  judge_beta  numeric(10,2) NOT NULL DEFAULT 0,
   enabled     boolean   NOT NULL DEFAULT true,
   last_updated timestamptz NOT NULL DEFAULT now(),
   UNIQUE (room_type, camera_movement, sku)
