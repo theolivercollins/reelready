@@ -32,6 +32,20 @@ import {
   type LabIteration,
 } from "@/lib/promptLabApi";
 import { promoteRecipe } from "@/lib/recipesApi";
+import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
+
+const V1_SKU_COST_CENTS: Record<V1AtlasSku, number> = {
+  "kling-v2-6-pro": 6,   // $0.06 per 5s clip
+  "kling-v2-master": 22, // $0.22 per 5s clip
+  "kling-v3-std": 7,     // $0.07 per 5s clip
+  "kling-o3-pro": 10,    // $0.10 per 5s clip
+};
+const V1_SKU_LABELS: Record<V1AtlasSku, string> = {
+  "kling-v2-6-pro": "v2.6 Pro (default)",
+  "kling-v2-master": "v2 Master",
+  "kling-v3-std": "v3 Std",
+  "kling-o3-pro": "o3 Pro",
+};
 
 const RATING_TAGS = [
   "clean motion",
@@ -798,11 +812,11 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     navigate("/dashboard/development/prompt-lab");
   }
 
-  async function handleRender(iterationId: string, provider?: "kling" | "runway" | null) {
+  async function handleRender(iterationId: string, provider?: "kling" | "runway" | null, sku?: V1AtlasSku | null) {
     setBusy(`render-${iterationId}`);
     setError(null);
     try {
-      const result = await renderIteration(iterationId, provider ?? null);
+      const result = await renderIteration(iterationId, provider ?? null, sku ?? null);
       if (result.renderError) setError(`Render failed: ${result.renderError}`);
       await reload();
     } catch (e) {
@@ -862,16 +876,16 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     }
   }
 
-  async function handleRerender(sourceIterationId: string, provider: "kling" | "runway") {
+  async function handleRerender(sourceIterationId: string, provider: "kling" | "runway" | "atlas", sku?: V1AtlasSku | null) {
     setBusy(`rerender-${sourceIterationId}`);
     setError(null);
     setSuccess(null);
     try {
-      const result = await rerenderWithProvider(sourceIterationId, provider);
+      const result = await rerenderWithProvider(sourceIterationId, provider, sku ?? null);
       if (result.queued) {
         setSuccess(result.message ?? `Queued for ${provider}`);
       } else {
-        setSuccess(`Re-rendering with ${provider} — new iteration created`);
+        setSuccess(`Re-rendering with ${provider}${sku ? ` (${V1_SKU_LABELS[sku]})` : ""} — new iteration created`);
       }
       await reload();
     } catch (e) {
@@ -917,6 +931,11 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
             <DollarSign className="h-3 w-3" />
             ${(totalCost / 100).toFixed(3)}
           </span>
+          {iterations.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              avg ${(iterations.reduce((s, i) => s + (i.cost_cents ?? 0), 0) / iterations.length / 100).toFixed(2)}/clip
+            </span>
+          )}
           <button onClick={handleDelete} className="inline-flex items-center gap-1 hover:text-destructive">
             <Trash2 className="h-3.5 w-3.5" />
             Delete
@@ -969,10 +988,11 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   iteration={it}
                   isLatest={it.id === latest?.id}
                   busy={busy}
-                  onRender={(provider) => handleRender(it.id, provider)}
+                  onRender={(provider, sku) => handleRender(it.id, provider, sku)}
                   onRefine={(p) => handleRefine(it.id, p)}
                   onRate={(p) => handleRate(it.id, p)}
                   onRerender={(provider) => handleRerender(it.id, provider)}
+                  onRerenderWithSku={(sku) => handleRerender(it.id, "atlas", sku)}
                 />
               ))
           )}
@@ -1167,14 +1187,16 @@ function IterationCard({
   onRefine,
   onRate,
   onRerender,
+  onRerenderWithSku,
 }: {
   iteration: LabIteration;
   isLatest: boolean;
   busy: string | null;
-  onRender: (provider: "kling" | "runway" | null) => void;
+  onRender: (provider: "kling" | "runway" | null, sku: V1AtlasSku) => void;
   onRefine: (payload: { rating: number | null; tags: string[]; comment: string; chatInstruction: string }) => void;
   onRate: (payload: { rating: number | null; tags: string[]; comment: string }) => void;
   onRerender: (provider: "kling" | "runway") => void;
+  onRerenderWithSku?: (sku: V1AtlasSku) => void;
 }) {
   const [rating, setRating] = useState<number | null>(iteration.rating);
   const [tags, setTags] = useState<string[]>(iteration.tags ?? []);
@@ -1182,6 +1204,9 @@ function IterationCard({
   const [chat, setChat] = useState("");
   const [renderForReal, setRenderForReal] = useState(false);
   const [providerChoice, setProviderChoice] = useState<"auto" | "kling" | "runway">("auto");
+  const [sku, setSku] = useState<V1AtlasSku>(
+    (iteration.model_used as V1AtlasSku | null) ?? V1_DEFAULT_SKU,
+  );
 
   const director = iteration.director_output_json;
   const analysis = iteration.analysis_json as Record<string, unknown> | null;
@@ -1348,6 +1373,27 @@ function IterationCard({
         </div>
       )}
 
+      {/* Try another SKU (Atlas only, when clip exists) */}
+      {iteration.clip_url && onRerenderWithSku && (
+        <div className="mt-2 flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Try another SKU:</span>
+          {V1_ATLAS_SKUS
+            .filter((s) => s !== iteration.model_used)
+            .map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onRerenderWithSku(s)}
+                disabled={busy === `rerender-${iteration.id}`}
+                className="border border-border px-2 py-0.5 hover:bg-muted disabled:opacity-50"
+                title={`$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}/5s`}
+              >
+                {V1_SKU_LABELS[s].replace(" (default)", "")}
+              </button>
+            ))}
+        </div>
+      )}
+
       {/* Promote to recipe (on 5★ iterations) */}
       {typeof iteration.rating === "number" && iteration.rating >= 4 && director && (
         <PromoteRecipeControl iteration={iteration} director={director} />
@@ -1364,6 +1410,24 @@ function IterationCard({
             />
             Render for real (~$0.05–$0.15)
           </label>
+          <div className="flex items-center gap-2 text-xs">
+            <label className="text-muted-foreground">SKU:</label>
+            <select
+              value={sku}
+              onChange={(e) => setSku(e.target.value as V1AtlasSku)}
+              className="border border-border bg-background px-2 py-1 text-xs"
+              disabled={!renderForReal || rendering}
+            >
+              {V1_ATLAS_SKUS.map((s) => (
+                <option key={s} value={s}>
+                  {V1_SKU_LABELS[s]} — ${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}
+                </option>
+              ))}
+            </select>
+            <span className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+              ≈ ${(V1_SKU_COST_CENTS[sku] / 100).toFixed(2)}/5s
+            </span>
+          </div>
           <select
             value={providerChoice}
             onChange={(e) => setProviderChoice(e.target.value as "auto" | "kling" | "runway")}
@@ -1378,7 +1442,7 @@ function IterationCard({
             size="sm"
             variant={renderForReal ? "default" : "outline"}
             disabled={!renderForReal || rendering}
-            onClick={() => onRender(providerChoice === "auto" ? null : providerChoice)}
+            onClick={() => onRender(providerChoice === "auto" ? null : providerChoice, sku)}
           >
             {rendering ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Play className="mr-2 h-3 w-3" />}
             {rendering ? "Rendering…" : "Render clip"}

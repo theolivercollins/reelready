@@ -35,6 +35,7 @@ export interface LabIteration {
   director_prompt_hash: string | null;
   clip_url: string | null;
   provider: string | null;
+  model_used: string | null;
   provider_task_id: string | null;
   render_error: string | null;
   render_submitted_at: string | null;
@@ -147,20 +148,22 @@ export function rateIteration(body: {
 
 export function renderIteration(
   iterationId: string,
-  provider?: "kling" | "runway" | null
+  provider?: "kling" | "runway" | null,
+  sku?: string | null
 ): Promise<LabIteration & { renderError?: string }> {
   return fetchJSON("/api/admin/prompt-lab/render", {
     method: "POST",
-    body: JSON.stringify({ iteration_id: iterationId, provider: provider ?? null }),
+    body: JSON.stringify({ iteration_id: iterationId, provider: provider ?? null, sku: sku ?? undefined }),
   });
 }
 
 export function rerenderWithProvider(
   sourceIterationId: string,
-  provider: "kling" | "runway"
+  provider: "kling" | "runway" | "atlas",
+  sku?: string | null
 ): Promise<{ iteration: LabIteration; queued?: boolean; message?: string }> {
   return fetchJSON("/api/admin/prompt-lab/rerender", {
     method: "POST",
-    body: JSON.stringify({ source_iteration_id: sourceIterationId, provider }),
+    body: JSON.stringify({ source_iteration_id: sourceIterationId, provider, sku: sku ?? undefined }),
   });
 }
