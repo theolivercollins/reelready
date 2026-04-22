@@ -3,31 +3,10 @@ import type { IVideoProvider } from "./provider.interface.js";
 import { AtlasProvider } from "./atlas.js";
 import { KlingProvider } from "./kling.js";
 import { RunwayProvider } from "./runway.js";
+import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "./atlas.js";
 
-// ─── V1 ATLAS SKU ALLOW-LIST ─────────────────────────────────────────────────
-//
-// Atlas SKUs valid as first-try defaults for V1 (single-image) Lab renders.
-// Must be kept in sync with `ATLAS_MODELS` in `lib/providers/atlas.ts`.
-//
-// Excluded intentionally:
-//   - `kling-v3-pro`: shake profile optimized for paired renders. Rendering
-//     it on single-image buckets pollutes the rating signal because it
-//     will never actually be routed there in production. Policy decision
-//     2026-04-21 (see docs/sessions/2026-04-21-park-router.md).
-//   - `kling-v2-1-pair`: paired-only SKU (start+end-frame). Routed by
-//     `selectProviderForScene()` when `scene.endPhotoId` is set. Not a
-//     valid first-try default for unpaired scenes.
-
-export const V1_ATLAS_SKUS = [
-  "kling-v2-6-pro",
-  "kling-v2-master",
-  "kling-v3-std",
-  "kling-o3-pro",
-] as const;
-
-export type V1AtlasSku = (typeof V1_ATLAS_SKUS)[number];
-
-export const V1_DEFAULT_SKU: V1AtlasSku = "kling-v2-6-pro";
+export { V1_ATLAS_SKUS, V1_DEFAULT_SKU };
+export type { V1AtlasSku };
 
 // ─── V1 RESOLVE DECISION (LAB / SINGLE-IMAGE) ────────────────────────────────
 
@@ -54,7 +33,7 @@ export function resolveDecision(input: ResolveDecisionInput): ProviderDecision {
   const skuIsValid =
     override != null &&
     (V1_ATLAS_SKUS as readonly string[]).includes(override);
-  const sku: V1AtlasSku = skuIsValid ? (override as V1AtlasSku) : V1_DEFAULT_SKU;
+  const sku: V1AtlasSku = skuIsValid ? override : V1_DEFAULT_SKU;
 
   return {
     provider: "atlas",

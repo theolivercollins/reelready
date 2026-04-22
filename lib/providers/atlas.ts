@@ -89,6 +89,31 @@ export const ATLAS_MODELS: Record<string, AtlasModelDescriptor> = {
   },
 };
 
+// ─── V1 ATLAS SKU ALLOW-LIST ─────────────────────────────────────────────────
+//
+// Atlas SKUs valid as first-try defaults for V1 (single-image) Lab renders.
+// Must be kept in sync with `ATLAS_MODELS` above.
+//
+// Excluded intentionally:
+//   - `kling-v3-pro`: shake profile optimized for paired renders. Rendering
+//     it on single-image buckets pollutes the rating signal because it
+//     will never actually be routed there in production. Policy decision
+//     2026-04-21 (see docs/sessions/2026-04-21-park-router.md).
+//   - `kling-v2-1-pair`: paired-only SKU (start+end-frame). Routed by
+//     `selectProviderForScene()` when `scene.endPhotoId` is set. Not a
+//     valid first-try default for unpaired scenes.
+
+export const V1_ATLAS_SKUS = [
+  "kling-v2-6-pro",
+  "kling-v2-master",
+  "kling-v3-std",
+  "kling-o3-pro",
+] as const;
+
+export type V1AtlasSku = (typeof V1_ATLAS_SKUS)[number];
+
+export const V1_DEFAULT_SKU: V1AtlasSku = "kling-v2-6-pro";
+
 /** Compute the expected cost in cents for a finalized Atlas render.
  *  Uses the model's per-second rate × clip duration (defaults to 5s).
  *  Returns 0 if the model key is unknown.
