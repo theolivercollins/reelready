@@ -4,6 +4,7 @@ import { AtlasProvider } from "./atlas.js";
 import { KlingProvider } from "./kling.js";
 import { RunwayProvider } from "./runway.js";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "./atlas.js";
+import { pickArm, type ThompsonDecision, type BucketArms } from "./thompson-router.js";
 
 export { V1_ATLAS_SKUS, V1_DEFAULT_SKU };
 export type { V1AtlasSku };
@@ -265,6 +266,99 @@ export function selectProvider(
 ): IVideoProvider {
   const decision = resolveMovementDecision(roomType, movement, preference, excluded);
   return buildProviderFromDecision(decision);
+}
+
+// ─── ASYNC THOMPSON ROUTING ──────────────────────────────────────────────────
+//
+// resolveDecisionAsync — wraps resolveDecision with an optional Thompson-
+// sampling layer. Controlled by USE_THOMPSON_ROUTER=true env flag.
+//
+// The synchronous resolveDecision is always called first so that staticSku is
+// unconditionally available for shadow-log writes (A/B comparison).
+
+/**
+ * Load bucket arms from router_bucket_stats for a given (roomType, movement)
+ * bucket. Returns null on any error or if the bucket has no V1 SKU arms.
+ */
+async function loadBucketArms(
+  roomType: string,
+  movement: string | null,
+): Promise<BucketArms | null> {
+  if (!movement) return null;
+  try {
+    const { getSupabase } = await import("../client.js");
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("router_bucket_stats")
+      .select("sku, alpha, beta, enabled, trial_count")
+      .eq("room_type", roomType)
+      .eq("camera_movement", movement);
+    if (error || !data || data.length === 0) return null;
+
+    // Filter to V1 SKUs only — any other SKU in DB (e.g. kling-v2-1-pair) is ignored.
+    const validSkus = V1_ATLAS_SKUS as readonly string[];
+    const arms = (
+      data as Array<{
+        sku: string;
+        alpha: string | number;
+        beta: string | number;
+        enabled: boolean;
+        trial_count: number;
+      }>
+    )
+      .filter((row) => validSkus.includes(row.sku))
+      .map((row) => ({
+        sku: row.sku as V1AtlasSku,
+        alpha: Number(row.alpha),
+        beta: Number(row.beta),
+        enabled: row.enabled,
+        trial_count: row.trial_count,
+      }));
+
+    if (arms.length === 0) return null;
+
+    return {
+      room_type: roomType,
+      camera_movement: movement,
+      arms,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * resolveDecisionAsync — async variant of resolveDecision that optionally
+ * applies Thompson sampling when USE_THOMPSON_ROUTER=true.
+ *
+ * Always returns `staticSku` (from the synchronous path) so callers can
+ * write shadow-log rows for A/B comparison regardless of the flag state.
+ *
+ * Does NOT replace resolveDecision — old callers continue to work unchanged.
+ */
+export async function resolveDecisionAsync(input: ResolveDecisionInput): Promise<{
+  decision: ProviderDecision;
+  thompson?: ThompsonDecision;
+  staticSku: V1AtlasSku;
+}> {
+  const staticDecision = resolveDecision(input);
+  const staticSku = staticDecision.modelKey as V1AtlasSku;
+
+  if (process.env.USE_THOMPSON_ROUTER !== "true") {
+    return { decision: staticDecision, staticSku };
+  }
+
+  const bucketArms = await loadBucketArms(input.roomType, input.movement);
+  if (!bucketArms) {
+    return { decision: staticDecision, staticSku };
+  }
+
+  const thompson = pickArm(bucketArms, V1_DEFAULT_SKU);
+  return {
+    decision: { provider: "atlas", modelKey: thompson.sku, fallback: undefined },
+    thompson,
+    staticSku,
+  };
 }
 
 // ─── ENABLED PROVIDERS ───────────────────────────────────────────────────────

@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   V1_ATLAS_SKUS,
   V1_DEFAULT_SKU,
   resolveDecision,
+  resolveDecisionAsync,
 } from "./router.js";
 
 describe("router — V1 Atlas SKU decision", () => {
@@ -47,5 +48,56 @@ describe("router — V1 Atlas SKU decision", () => {
     });
     expect(decision.provider).toBe("atlas");
     expect(decision.modelKey).toBe(V1_DEFAULT_SKU);
+  });
+});
+
+describe("router — resolveDecisionAsync", () => {
+  const savedFlag = process.env.USE_THOMPSON_ROUTER;
+
+  beforeEach(() => {
+    delete process.env.USE_THOMPSON_ROUTER;
+  });
+
+  afterEach(() => {
+    if (savedFlag !== undefined) {
+      process.env.USE_THOMPSON_ROUTER = savedFlag;
+    } else {
+      delete process.env.USE_THOMPSON_ROUTER;
+    }
+  });
+
+  it("returns static decision + staticSku when flag is unset (no thompson field)", async () => {
+    // USE_THOMPSON_ROUTER is not set — should behave identically to resolveDecision.
+    const result = await resolveDecisionAsync({
+      roomType: "living_room",
+      movement: "push_in",
+      skuOverride: null,
+    });
+    expect(result.decision.provider).toBe("atlas");
+    expect(result.decision.modelKey).toBe(V1_DEFAULT_SKU);
+    expect(result.staticSku).toBe(V1_DEFAULT_SKU);
+    expect(result.thompson).toBeUndefined();
+  });
+
+  it("returns static decision + staticSku when flag is 'false'", async () => {
+    process.env.USE_THOMPSON_ROUTER = "false";
+    const result = await resolveDecisionAsync({
+      roomType: "kitchen",
+      movement: "orbit",
+      skuOverride: "kling-v2-master",
+    });
+    expect(result.decision.modelKey).toBe("kling-v2-master");
+    expect(result.staticSku).toBe("kling-v2-master");
+    expect(result.thompson).toBeUndefined();
+  });
+
+  it("staticSku is always populated regardless of skuOverride", async () => {
+    const result = await resolveDecisionAsync({
+      roomType: "master_bedroom",
+      movement: null,
+      skuOverride: null,
+    });
+    expect(typeof result.staticSku).toBe("string");
+    expect((V1_ATLAS_SKUS as readonly string[]).includes(result.staticSku)).toBe(true);
   });
 });
