@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EmbeddingsDisabledError,
   IMAGE_EMBEDDING_DIM,
@@ -6,6 +6,22 @@ import {
   embedImage,
   isEnabled,
 } from "./embeddings-image.js";
+
+// ---------------------------------------------------------------------------
+// Mock @google/genai so tests never hit the real API.
+// ---------------------------------------------------------------------------
+vi.mock("@google/genai", () => {
+  const fakeVector = Array.from({ length: 768 }, (_, i) => i * 0.001);
+  class GoogleGenAI {
+    models = {
+      embedContent: vi.fn().mockResolvedValue({
+        embeddings: [{ values: fakeVector }],
+      }),
+    };
+    constructor(_opts: unknown) {}
+  }
+  return { GoogleGenAI };
+});
 
 const ORIGINAL_ENV = process.env.ENABLE_IMAGE_EMBEDDINGS;
 
@@ -60,14 +76,23 @@ describe("embedImage — kill-switch path", () => {
   });
 });
 
-describe("embedImage — enabled-but-unwired path", () => {
+describe("embedImage — success path (Gemini binding)", () => {
   beforeEach(() => {
     process.env.ENABLE_IMAGE_EMBEDDINGS = "true";
+    process.env.GEMINI_API_KEY = "test-key";
   });
 
-  it("throws the TODO-block error until P3 S1 binding lands", async () => {
-    await expect(
-      embedImage({ imageUrl: "https://x/y.jpg", surface: "lab" }),
-    ).rejects.toThrow(/binding not yet implemented/);
+  it("returns vector of length 768, correct model and dim", async () => {
+    // The mock intercepts the fetch so we need to mock global fetch too.
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new ArrayBuffer(8),
+    }) as any;
+
+    const result = await embedImage({ imageUrl: "https://example.com/photo.jpg", surface: "lab" });
+
+    expect(result.vector).toHaveLength(IMAGE_EMBEDDING_DIM);
+    expect(result.model).toBe(IMAGE_EMBEDDING_MODEL);
+    expect(result.dim).toBe(IMAGE_EMBEDDING_DIM);
   });
 });

@@ -1,12 +1,5 @@
 /**
- * P3 — image-embedding provider wrapper (SKELETON).
- *
- * Status: pre-cooked 2026-04-22 on branch session/p3-s1-implementation-draft.
- * NOT WIRED. Actual Gemini call is stubbed — P3 Session 1 (2026-04-25) fills
- * it in after verifying billing covers the endpoint and latency is usable.
- *
- * Design: `docs/audits/p3-image-embedding-provider-decision.md` on branch
- * session/p3-embedding-preflight (Oliver Q1–Q5 resolved 2026-04-22).
+ * P3 — image-embedding provider wrapper.
  *
  * Provider: Gemini `gemini-embedding-2` via @google/genai SDK (same dep as
  * lib/providers/gemini-analyzer.ts). outputDimensionality=768.
@@ -15,6 +8,7 @@
  * embedImage throws EmbeddingsDisabledError before any API call.
  */
 
+import { GoogleGenAI } from "@google/genai";
 import { recordCostEvent } from "./db.js";
 
 export const IMAGE_EMBEDDING_MODEL = "gemini-embedding-2" as const;
@@ -64,22 +58,68 @@ export async function embedImage(input: EmbedImageInput): Promise<ImageEmbedding
   const startedAt = Date.now();
 
   try {
-    // TODO(p3-s1): replace with actual @google/genai call.
-    // Reference pattern: lib/providers/gemini-analyzer.ts
-    //   const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-    //   const resp = await genai.models.embedContent({
-    //     model: IMAGE_EMBEDDING_MODEL,
-    //     content: { parts: [{ inline_data: { mime_type: 'image/jpeg', data: bytesB64 }}] },
-    //     config: { outputDimensionality: IMAGE_EMBEDDING_DIM },
-    //   });
-    //   return { vector: resp.embedding.values, model: IMAGE_EMBEDDING_MODEL, dim: IMAGE_EMBEDDING_DIM };
-    //
-    // If imageBytes not provided, fetch from imageUrl first. For backfill,
-    // prefer downloading-once and passing bytes in (caller batches).
-    throw new Error(
-      "embedImage() binding not yet implemented (P3 S1 pending). " +
-        "To wire: follow the TODO(p3-s1) block in lib/embeddings-image.ts.",
-    );
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY required for image embeddings");
+
+    // Fetch image bytes if not supplied.
+    let bytes = input.imageBytes;
+    if (!bytes) {
+      const res = await fetch(input.imageUrl);
+      if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+      bytes = Buffer.from(await res.arrayBuffer());
+    }
+    const mimeType = input.imageUrl.toLowerCase().endsWith(".png")
+      ? "image/png"
+      : input.imageUrl.toLowerCase().endsWith(".webp")
+        ? "image/webp"
+        : "image/jpeg";
+
+    const genai = new GoogleGenAI({ apiKey });
+
+    const resp = await genai.models.embedContent({
+      model: IMAGE_EMBEDDING_MODEL,
+      contents: [
+        {
+          parts: [{ inlineData: { mimeType, data: bytes.toString("base64") } }],
+        },
+      ],
+      config: { outputDimensionality: IMAGE_EMBEDDING_DIM },
+    });
+
+    // Handle both response shapes: embeddings[].values and embedding.values
+    const vector =
+      (resp as any)?.embeddings?.[0]?.values ??
+      (resp as any)?.embedding?.values ??
+      null;
+    if (!vector || vector.length !== IMAGE_EMBEDDING_DIM) {
+      throw new Error(
+        `Unexpected embedding shape: got ${vector?.length ?? 0}, expected ${IMAGE_EMBEDDING_DIM}`,
+      );
+    }
+
+    const latency_ms = Date.now() - startedAt;
+    try {
+      await recordCostEvent({
+        propertyId: "00000000-0000-0000-0000-000000000000",
+        sceneId: null,
+        stage: "analysis",
+        provider: "google",
+        unitsConsumed: 1,
+        unitType: "tokens",
+        costCents: 0,
+        metadata: {
+          subtype: "image_embedding",
+          surface: input.surface,
+          photo_id: input.photoId ?? null,
+          session_id: input.sessionId ?? null,
+          model: IMAGE_EMBEDDING_MODEL,
+          dim: IMAGE_EMBEDDING_DIM,
+          latency_ms,
+        },
+      });
+    } catch { /* non-fatal */ }
+
+    return { vector, model: IMAGE_EMBEDDING_MODEL, dim: IMAGE_EMBEDDING_DIM };
   } catch (err) {
     const latency_ms = Date.now() - startedAt;
     const message = err instanceof Error ? err.message : String(err);
