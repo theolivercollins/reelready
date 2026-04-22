@@ -88,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // "rerender with same SKU" is frictionless: explicit body sku wins, else
     // fall back to the source iteration's model_used, then null (router default).
     const effectiveSku: V1AtlasSku | null = explicitSku ?? ((source.model_used as V1AtlasSku | null | undefined) ?? null);
-    const { jobId, provider: usedProvider, sku: resolvedSku } = await submitLabRender({
+    const { jobId, provider: usedProvider, sku: resolvedSku, thompson, staticSku } = await submitLabRender({
       imageUrl,
       scene,
       roomType,
@@ -107,6 +107,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sku_source: "captured_at_render",
       })
       .eq("id", newIteration.id);
+
+    try {
+      await supabase.from("router_shadow_log").insert({
+        iteration_id: newIteration.id,
+        thompson_decision_json: thompson
+          ? {
+              sku: thompson.sku,
+              reason: thompson.reason,
+              sampled_theta: thompson.sampled_theta ?? null,
+              arm_state: thompson.arm_state,
+            }
+          : { sku: resolvedSku, reason: "flag_off" },
+        static_decision_json: { sku: staticSku },
+        divergence_reason:
+          thompson && thompson.sku !== staticSku
+            ? `thompson.${thompson.reason}(theta=${thompson.sampled_theta ?? "n/a"})`
+            : null,
+      });
+    } catch (err) {
+      console.error("[router_shadow_log] insert failed:", err);
+    }
 
     return res.status(201).json({
       iteration: { ...newIteration, provider: usedProvider, provider_task_id: jobId, sku: resolvedSku },

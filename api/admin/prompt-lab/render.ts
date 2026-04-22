@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq("id", iteration_id);
 
   try {
-    const { jobId, provider, sku: resolvedSku } = await submitLabRender({
+    const { jobId, provider, sku: resolvedSku, thompson, staticSku } = await submitLabRender({
       imageUrl,
       scene: iteration.director_output_json,
       roomType: iteration.analysis_json?.room_type ?? "other",
@@ -115,6 +115,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select()
       .single();
     if (uErr) return res.status(500).json({ error: uErr.message });
+
+    try {
+      await supabase.from("router_shadow_log").insert({
+        iteration_id,
+        thompson_decision_json: thompson
+          ? {
+              sku: thompson.sku,
+              reason: thompson.reason,
+              sampled_theta: thompson.sampled_theta ?? null,
+              arm_state: thompson.arm_state,
+            }
+          : { sku: resolvedSku, reason: "flag_off" },
+        static_decision_json: { sku: staticSku },
+        divergence_reason:
+          thompson && thompson.sku !== staticSku
+            ? `thompson.${thompson.reason}(theta=${thompson.sampled_theta ?? "n/a"})`
+            : null,
+      });
+    } catch (err) {
+      console.error("[router_shadow_log] insert failed:", err);
+    }
 
     return res.status(200).json({ ...updated, sku: resolvedSku });
   } catch (err) {

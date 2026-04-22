@@ -15,7 +15,8 @@ import {
   type DirectorSceneOutput,
 } from "./prompts/director.js";
 import { computeClaudeCost } from "./utils/claude-cost.js";
-import { selectProvider, resolveDecision } from "./providers/router.js";
+import { selectProvider, resolveDecision, resolveDecisionAsync } from "./providers/router.js";
+import type { ThompsonDecision } from "./providers/thompson-router.js";
 import { pollUntilComplete, type IVideoProvider } from "./providers/provider.interface.js";
 import { KlingProvider } from "./providers/kling.js";
 import { RunwayProvider } from "./providers/runway.js";
@@ -526,9 +527,17 @@ export async function submitLabRender(params: {
   providerOverride?: "kling" | "runway" | null;
   endImageUrl?: string | null;
   sku?: V1AtlasSku | null;
-}): Promise<{ jobId: string; provider: string; sku: V1AtlasSku }> {
+}): Promise<{
+  jobId: string;
+  provider: string;
+  sku: V1AtlasSku;
+  thompson?: ThompsonDecision;
+  staticSku: V1AtlasSku;
+}> {
   let provider: IVideoProvider;
   let resolvedSku: V1AtlasSku;
+  let thompson: ThompsonDecision | undefined;
+  let staticSku: V1AtlasSku;
 
   if (params.providerOverride === "kling" || params.providerOverride === "runway") {
     // Escape hatch: explicit kling/runway override bypasses Atlas routing.
@@ -546,18 +555,25 @@ export async function submitLabRender(params: {
     }
     // sku is not meaningful for non-Atlas providers; use default for type safety.
     resolvedSku = "kling-v2-6-pro";
+    // thompson stays undefined for escape-hatch path
+    staticSku = resolvedSku;
   } else if (params.endImageUrl) {
     // Paired scene: always use kling-v2-1-pair via Atlas.
+    // Thompson does not run on paired scenes per P5 design.
     resolvedSku = "kling-v2-1-pair" as unknown as V1AtlasSku;
     provider = new AtlasProvider("kling-v2-1-pair");
+    // thompson stays undefined; staticSku equals the paired SKU itself.
+    staticSku = resolvedSku;
   } else {
-    // Non-paired scene: resolve SKU via router and instantiate Atlas explicitly.
-    const decision = resolveDecision({
+    // Non-paired scene: resolve SKU via async router (Thompson-aware).
+    const resolved = await resolveDecisionAsync({
       roomType: params.roomType,
       movement: params.scene.camera_movement,
       skuOverride: params.sku ?? null,
     });
-    resolvedSku = decision.modelKey as V1AtlasSku;
+    resolvedSku = resolved.decision.modelKey as V1AtlasSku;
+    thompson = resolved.thompson;
+    staticSku = resolved.staticSku;
     provider = new AtlasProvider(resolvedSku);
   }
 
@@ -574,7 +590,7 @@ export async function submitLabRender(params: {
     aspectRatio: "16:9",
     endImageUrl: params.endImageUrl ?? undefined,
   });
-  return { jobId: job.jobId, provider: provider.name, sku: resolvedSku };
+  return { jobId: job.jobId, provider: provider.name, sku: resolvedSku, thompson, staticSku };
 }
 
 export async function finalizeLabRender(params: {

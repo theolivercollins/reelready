@@ -72,7 +72,9 @@ describe("submitLabRender — SKU threading", () => {
     expect(result).toHaveProperty("jobId");
     expect(result).toHaveProperty("provider");
     expect(result).toHaveProperty("sku");
+    expect(result).toHaveProperty("staticSku");
     expect(typeof result.sku).toBe("string");
+    expect(typeof result.staticSku).toBe("string");
   });
 
   it("defaults to kling-v2-6-pro when no sku override is provided", async () => {
