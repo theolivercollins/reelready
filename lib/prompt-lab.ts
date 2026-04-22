@@ -667,6 +667,78 @@ export async function finalizeLabRender(params: {
     console.error("[finalizeLabRender] cost_events insert failed (non-fatal):", costErr);
   }
 
+  // Fire-and-forget judge hook — non-blocking; doesn't delay clip delivery.
+  if (process.env.JUDGE_ENABLED === "true") {
+    (async () => {
+      try {
+        const { judgeLabIteration } = await import("./providers/gemini-judge.js");
+        const { getSupabase: getSupabaseForJudge } = await import("./client.js");
+        const supabaseJudge = getSupabaseForJudge();
+
+        // Fetch the fields the judge needs (director output, analysis, session photo).
+        const { data: iterRow } = await supabaseJudge
+          .from("prompt_lab_iterations")
+          .select("director_output_json, analysis_json")
+          .eq("id", params.iterationId)
+          .maybeSingle();
+        const { data: sessionRow } = await supabaseJudge
+          .from("prompt_lab_sessions")
+          .select("image_url, archetype")
+          .eq("id", params.sessionId)
+          .maybeSingle();
+
+        // Fetch photo bytes non-fatally.
+        let photoBytes: Buffer | undefined;
+        try {
+          const photoUrl = (sessionRow as { image_url?: string | null } | null)?.image_url;
+          if (photoUrl) {
+            const r = await fetch(photoUrl);
+            if (r.ok) photoBytes = Buffer.from(await r.arrayBuffer());
+          }
+        } catch { /* non-fatal */ }
+
+        const director = (iterRow?.director_output_json as { camera_movement?: string; prompt?: string } | null);
+
+        const judgeResult = await judgeLabIteration({
+          clipUrl: persistedUrl,
+          photoBytes,
+          directorPrompt: director?.prompt ?? "",
+          cameraMovement: director?.camera_movement ?? "unknown",
+          roomType:
+            (iterRow?.analysis_json as { room_type?: string } | null)?.room_type ??
+            (sessionRow as { archetype?: string | null } | null)?.archetype ??
+            "unknown",
+          iterationId: params.iterationId,
+        });
+
+        await supabaseJudge
+          .from("prompt_lab_iterations")
+          .update({
+            judge_rating_json: judgeResult,
+            judge_rating_overall: judgeResult.overall,
+            judge_rated_at: new Date().toISOString(),
+            judge_model: judgeResult.judge_model,
+            judge_version: judgeResult.judge_version,
+            judge_cost_cents: judgeResult.cost_cents,
+            judge_error: null,
+          })
+          .eq("id", params.iterationId);
+      } catch (err) {
+        console.error("[judge] hook failed (non-fatal):", err);
+        try {
+          const { getSupabase: getSupabaseForErr } = await import("./client.js");
+          await getSupabaseForErr()
+            .from("prompt_lab_iterations")
+            .update({
+              judge_error: err instanceof Error ? err.message : String(err),
+              judge_rated_at: new Date().toISOString(),
+            })
+            .eq("id", params.iterationId);
+        } catch { /* nested — swallow */ }
+      }
+    })();
+  }
+
   return {
     done: true,
     clipUrl: persistedUrl,
