@@ -4,6 +4,65 @@ import { AtlasProvider } from "./atlas.js";
 import { KlingProvider } from "./kling.js";
 import { RunwayProvider } from "./runway.js";
 
+// ─── V1 ATLAS SKU ALLOW-LIST ─────────────────────────────────────────────────
+//
+// Atlas SKUs valid as first-try defaults for V1 (single-image) Lab renders.
+// Must be kept in sync with `ATLAS_MODELS` in `lib/providers/atlas.ts`.
+//
+// Excluded intentionally:
+//   - `kling-v3-pro`: shake profile optimized for paired renders. Rendering
+//     it on single-image buckets pollutes the rating signal because it
+//     will never actually be routed there in production. Policy decision
+//     2026-04-21 (see docs/sessions/2026-04-21-park-router.md).
+//   - `kling-v2-1-pair`: paired-only SKU (start+end-frame). Routed by
+//     `selectProviderForScene()` when `scene.endPhotoId` is set. Not a
+//     valid first-try default for unpaired scenes.
+
+export const V1_ATLAS_SKUS = [
+  "kling-v2-6-pro",
+  "kling-v2-master",
+  "kling-v3-std",
+  "kling-o3-pro",
+] as const;
+
+export type V1AtlasSku = (typeof V1_ATLAS_SKUS)[number];
+
+export const V1_DEFAULT_SKU: V1AtlasSku = "kling-v2-6-pro";
+
+// ─── V1 RESOLVE DECISION (LAB / SINGLE-IMAGE) ────────────────────────────────
+
+export interface ResolveDecisionInput {
+  roomType: string;
+  movement: string | null;
+  skuOverride?: V1AtlasSku | null;
+}
+
+/**
+ * resolveDecision — returns a ProviderDecision for a non-paired Lab scene
+ * with an explicit Atlas SKU.
+ *
+ * - If `skuOverride` is provided and is a member of `V1_ATLAS_SKUS`, it is
+ *   used as the modelKey.
+ * - Otherwise (null, undefined, or an invalid/excluded SKU such as
+ *   kling-v3-pro or kling-v2-1-pair), falls back to `V1_DEFAULT_SKU`.
+ *
+ * This function is the P1 deliverable for SKU-aware routing. It does NOT
+ * handle paired-scene routing — use `selectProviderForScene()` for that.
+ */
+export function resolveDecision(input: ResolveDecisionInput): ProviderDecision {
+  const override = input.skuOverride;
+  const skuIsValid =
+    override != null &&
+    (V1_ATLAS_SKUS as readonly string[]).includes(override);
+  const sku: V1AtlasSku = skuIsValid ? (override as V1AtlasSku) : V1_DEFAULT_SKU;
+
+  return {
+    provider: "atlas",
+    modelKey: sku,
+    fallback: undefined,
+  };
+}
+
 // ─── PROVIDER DECISION SHAPE ─────────────────────────────────────────────────
 //
 // Phase C.1: ProviderDecision is the structured routing result used by
@@ -89,13 +148,15 @@ const ATLAS_GENERIC_FALLBACK: ProviderDecision = {
   fallback: undefined, // terminal
 };
 
-// ─── INTERNAL DECISION FUNCTION ─────────────────────────────────────────────
+// ─── INTERNAL MOVEMENT-BASED DECISION FUNCTION ──────────────────────────────
 
 /**
- * Core routing logic. Returns a ProviderDecision for an unpaired scene.
+ * Core movement-based routing logic for production pipeline scenes.
+ * Returns a ProviderDecision for an unpaired scene.
  * Does NOT handle the paired-scene rule — use selectProviderForScene() for that.
+ * Does NOT set a V1 Atlas SKU — use resolveDecision() for Lab/V1 renders.
  */
-function resolveDecision(
+function resolveMovementDecision(
   _roomType: RoomType,
   movement: CameraMovement | null,
   preference: VideoProvider | null,
@@ -169,7 +230,7 @@ export function selectDecision(
   preference: VideoProvider | null,
   excluded: VideoProvider[] = [],
 ): ProviderDecision {
-  return resolveDecision(roomType, movement, preference, excluded);
+  return resolveMovementDecision(roomType, movement, preference, excluded);
 }
 
 /**
@@ -206,7 +267,7 @@ export function selectProviderForScene(
     };
   }
 
-  return resolveDecision(scene.roomType, scene.movement, scene.preference, excluded);
+  return resolveMovementDecision(scene.roomType, scene.movement, scene.preference, excluded);
 }
 
 /**
@@ -223,7 +284,7 @@ export function selectProvider(
   preference: VideoProvider | null,
   excluded: VideoProvider[] = [],
 ): IVideoProvider {
-  const decision = resolveDecision(roomType, movement, preference, excluded);
+  const decision = resolveMovementDecision(roomType, movement, preference, excluded);
   return buildProviderFromDecision(decision);
 }
 
