@@ -34,11 +34,13 @@ import {
 import { promoteRecipe } from "@/lib/recipesApi";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
 
+// Authoritative per-clip cost (5s render) — must match ATLAS_MODELS.priceCentsPerClip
+// in lib/providers/atlas.ts. Keep in sync on any provider pricing change.
 const V1_SKU_COST_CENTS: Record<V1AtlasSku, number> = {
-  "kling-v2-6-pro": 6,   // $0.06 per 5s clip
-  "kling-v2-master": 22, // $0.22 per 5s clip
-  "kling-v3-std": 7,     // $0.07 per 5s clip
-  "kling-o3-pro": 10,    // $0.10 per 5s clip
+  "kling-v2-6-pro": 60,  // $0.60 per 5s clip
+  "kling-v2-master": 111,// $1.11 per 5s clip
+  "kling-v3-std": 36,    // $0.36 per 5s clip
+  "kling-o3-pro": 48,    // $0.48 per 5s clip
 };
 const V1_SKU_LABELS: Record<V1AtlasSku, string> = {
   "kling-v2-6-pro": "v2.6 Pro (default)",
@@ -1408,7 +1410,7 @@ function IterationCard({
               checked={renderForReal}
               onChange={(e) => setRenderForReal(e.target.checked)}
             />
-            Render for real (~$0.05–$0.15)
+            Render for real (~$0.36–$1.11 per clip depending on SKU)
           </label>
           <div className="flex items-center gap-2 text-xs">
             <label className="text-muted-foreground">SKU:</label>
