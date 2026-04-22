@@ -50,7 +50,7 @@ async function backfillPhotos(write: boolean, limit: number) {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("photos")
-    .select("id, image_url")
+    .select("id, file_url")
     .is("image_embedding", null)
     .limit(limit);
   if (error) throw error;
@@ -60,13 +60,13 @@ async function backfillPhotos(write: boolean, limit: number) {
   }
   console.log(`photos: ${data.length} candidate rows`);
   if (!write) {
-    for (const p of data) console.log(`  would embed photo_id=${p.id} url=${p.image_url}`);
+    for (const p of data) console.log(`  would embed photo_id=${p.id} url=${p.file_url}`);
     return;
   }
   for (const p of data) {
     try {
       const emb = await embedImage({
-        imageUrl: p.image_url,
+        imageUrl: p.file_url,
         photoId: p.id,
         surface: "backfill",
       });
