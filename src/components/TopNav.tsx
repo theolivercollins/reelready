@@ -20,7 +20,6 @@ import {
   FileText,
   Settings as SettingsIcon,
   DollarSign,
-  FlaskConical,
   Beaker,
   BookOpen,
   Code2,
@@ -64,13 +63,8 @@ function DevelopmentNav() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/dashboard/development/lab" className="cursor-pointer">
-            <FlaskConical className="mr-2 h-3.5 w-3.5" /> Lab
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
           <Link to="/dashboard/development/prompt-lab" className="cursor-pointer">
-            <Beaker className="mr-2 h-3.5 w-3.5" /> Prompt Lab (legacy)
+            <Beaker className="mr-2 h-3.5 w-3.5" /> Prompt Lab
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
