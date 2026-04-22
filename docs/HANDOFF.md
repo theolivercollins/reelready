@@ -1,6 +1,6 @@
 # Listing Elevate — Handoff
 
-Last updated: 2026-04-21
+Last updated: 2026-04-22
 
 See also:
 - [README.md](./README.md) — folder guide + session hygiene
@@ -12,7 +12,16 @@ See also:
 
 ## Right now
 
-**Phase M.2 shipped. DA.1 Gemini-eyes merged to main (2026-04-21).** Director now receives `motion_headroom` booleans from Gemini 3 Flash per photo and hard-bans geometrically impossible camera moves. **Window B Round 2 regression-diff** (merged 2026-04-21): 2 rendered anchors vs Legacy 5★ — verdict **NECESSARY BUT NOT SUFFICIENT** pending Oliver rating the two DA.1 clips. On `kittiwake-1406-213` master_bedroom, DA.1 demonstrably shifted motion from Legacy's failing `push_in` → DA.1's `parallax` via Gemini's motion_headroom; on `kittiwake-1406-940` aerial, DA.1 non-degraded. See [`audits/REGRESSION-DIFF-2026-04-21.md`](./audits/REGRESSION-DIFF-2026-04-21.md). Window D Round 1 audit (2026-04-21) confirmed **Phase B cannot be auto-derived from existing signal** — only 32% of 170 rated iterations are SKU-granular (Phase 2.8 Lab only). Next action: **Phase B — targeted rating session** on the 5 quota-high buckets — Window D Round 2 is currently pre-rendering the grid (see `docs/briefs/2026-04-21-window-D-round-2-targeted-grid.md`). `lib/providers/router.ts` stays on intuition-based routing until real signal lands.
+**P1 V1 Foundation landed on main (2026-04-22).** V1 Prompt Lab is now the daily-driver iteration surface. Lab renders route through AtlasCloud with `kling-v2-6-pro` default. Every iteration captures its SKU via migration 031 (`model_used` + `sku_source`). Migration 032 widens `cost_events.provider` to include `atlas`/`google`/`higgsfield` so Lab cost tracking lands cleanly. IterationCard has per-iteration SKU selector + cost chip + "Try another SKU" shortcut. TopNav renamed "Prompt Lab (legacy)" → "Prompt Lab"; Listings Lab (V2 paired-image) hidden from nav but direct URLs preserved. Canonical V1 vs V2 reference at [`state/MODEL-VERSIONS.md`](./state/MODEL-VERSIONS.md). Program spec for the next 2 weeks (P2–P7) at [`specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md`](./specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md) — supersedes the M.1-era back-on-track plan for all V1/ML work.
+
+**Pre-cooked design artifacts on parked branches (ready for integration at phase-scheduled sessions):**
+- `session/p2-rubric-design` — P2 Gemini auto-judge rubric (JUDGE-RUBRIC-V1.md, 7 Qs resolved). Integrates at P2 S1 2026-04-23.
+- `session/p3-embedding-preflight` — P3 image-embedding provider decision (Gemini 768-dim, 5 Qs resolved). Integrates at P3 S1 2026-04-25.
+- `session/p5-thompson-design` — P5 Thompson router design (528-line spec, 6 Qs resolved). Integrates at P5 S1 2026-04-30.
+
+**Migrations 031 + 032 committed but NOT yet applied to the Supabase DB.** Apply before next V1 render (Task 12 smoke-render prerequisite). Once applied, first V1 render should populate `prompt_lab_iterations.model_used` + emit a `cost_events` row with `metadata.sku`.
+
+**Not pushed:** all 2026-04-22 commits are local on `main`. Push pending explicit approval.
 
 ## Plan state
 
@@ -27,12 +36,31 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 | CI — Cost integrity | shipped (CI.1–CI.5) | Model-aware Claude pricing, OpenAI embedding tracking, Shotstack per-minute, failed-render policy, dashboard drill-down |
 | C — Production end-to-end | shipped | Router `ProviderDecision`, base64 → URL, duration-aware director, lazy failover Kling → Atlas |
 | M.2 — ML consolidation | ✅ shipped | SKU capture, dead code removal, prod embedding backfill |
-| B — Model head-to-head | audit complete (2026-04-21); blocked on targeted rating session | Per Window D audit: existing 170 ratings insufficient (32 buckets, 0 winners, 32% SKU-granular). Narrowed plan: targeted grid on 5 quota-high buckets — seed + render + rate, then re-run `scripts/build-router-table.ts` to emit a real table |
+| B — Model head-to-head | superseded by 2026-04-22 V1 program | Phase B static-router approach replaced by P5 Thompson sampling (docs/specs/p5-thompson-router-design.md). Existing Window D Round 1/2 work parked on `session/router-2026-04-21`; v3-strip intent migrated into `V1_ATLAS_SKUS` allow-list. No fresh manual rating grid required — P5 bootstraps from organic V1 ratings |
+| **P1 — V1 Foundation** | ✅ shipped (2026-04-22) | V1 Lab becomes daily driver: Atlas routing (kling-v2-6-pro default), SKU capture (migration 031), cost_events widened (migration 032), SKU selector + cost chip + try-another-SKU UI, TopNav rename, V1 trace mode, deferred UX plan |
+| P2 — Gemini auto-judge | pre-cooked design (branch `session/p2-rubric-design`) | Rubric + 10-shot calibration pool ready. Implementation scheduled 2026-04-23 S1 + 2026-04-24 S2 |
+| P3 — Retrieval upgrade | pre-cooked provider decision (branch `session/p3-embedding-preflight`) | Gemini gemini-embedding-2 768-dim. Implementation scheduled 2026-04-25–27 (3 sessions) |
+| P4 — Scale hardening | per spec | Scheduled 2026-04-28–29 (2 sessions) |
+| P5 — Thompson router | pre-cooked design (branch `session/p5-thompson-design`) | Bandit math + cold-start + rollout gate final. Implementation scheduled 2026-04-30–05-01 |
+| P6 — Active learning + pairwise | per spec | Scheduled 2026-05-02 |
+| P7 — Promote-to-prod flywheel | per spec | Ongoing runbook; activates ~2026-05-05 |
 
 ## Recent shipping log
 
 (Newest on top. Append one line per push to `main`.)
 
+- 2026-04-22 — `ad63c6a` — migration 032: widen cost_events.provider CHECK for atlas/google/higgsfield (unblocks P1 cost-event emission)
+- 2026-04-22 — `55491f0` — spec: V1 Prompt Lab UX plan (deferred, synthesized from Task 14 audit)
+- 2026-04-22 — `3e9bf1d` — audit: kling v2-master vs v2-6-pro verdict — Validate-day-1
+- 2026-04-22 — `15f0ec3` — audit: V1 Prompt Lab UX friction points (6 quick + 5 medium wins)
+- 2026-04-22 — `3a56001` — ui(nav) + docs: rename "Prompt Lab (legacy)" → "Prompt Lab"; add MODEL-VERSIONS.md
+- 2026-04-22 — `286b697` — feat(p1): V1 backend SKU threading + cost_events (submitLabRender sku param, AtlasProvider ctor arg, render/rerender endpoints, finalizeLabRender cost_events) — 80/80 tests
+- 2026-04-22 — `8fcaaf9` — router: relocate V1 SKU constants to atlas.ts (co-located with ATLAS_MODELS)
+- 2026-04-22 — `01d907f` — router(v1): SKU-aware resolveDecision + V1_DEFAULT_SKU = kling-v2-6-pro (+ 6 vitest tests)
+- 2026-04-22 — `f3682e7` — migration(031): capture SKU + provenance on prompt_lab_iterations
+- 2026-04-22 — `4a7f203` — docs(plan): V1 primary tool + ML roadmap spec (P1–P7 program) + P1 implementation plan + 2026-04-22 Window A coordinator handoff
+- 2026-04-22 — `9322e55` — docs(sessions): park notes for ledger + router branches (v3-strip disposition noted; intent migrated into V1_ATLAS_SKUS)
+- 2026-04-22 — `504e4ce` — docs(closeout): Window B session notes + render log from 2026-04-21
 - 2026-04-21 — `d8ee57e` — Round 2 regression-diff HANDOFF/PROJECT-STATE/memory updates (Window B Round 2, 3/3)
 - 2026-04-21 — `e023ff9` — DA.1 regression-diff verdict doc — NECESSARY BUT NOT SUFFICIENT pending Oliver rating (Window B Round 2, 2/3)
 - 2026-04-21 — `bfc7eed` — Round 2 regression-diff render harness (Window B Round 2, 1/3)

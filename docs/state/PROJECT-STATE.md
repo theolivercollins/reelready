@@ -7,9 +7,50 @@ See also:
 - [../plans/back-on-track-plan.md](../plans/back-on-track-plan.md) — active roadmap
 - [../specs/2026-04-20-back-on-track-design.md](../specs/2026-04-20-back-on-track-design.md) — full roadmap spec
 
-Last updated: **2026-04-21 (DA.1 merged to main)** — Phases A (Lab UX spine), M.1 (director-prompt trace audit), DQ (director concise prompts), DM (dev/legacy merge), CI.1–CI.5 (cost integrity), C (prod end-to-end), and M.2 (ML consolidation) all shipped. **DA.1 Gemini-eyes** merged to main 2026-04-21 — director now receives `motion_headroom` booleans per photo and hard-bans geometrically impossible camera moves. Phase 2.8 listings Lab previously shipped: Atlas Cloud + 6 Kling SKUs, multi-photo listings, scene-level master-detail UI, streaming scene chat with Haiku 4.5 + rewrite tool, end-frame pairing, scene + iteration archive, rating reasons taxonomy, generate-all-models + side-by-side compare, recipe retrieval restored in listings director.
+Last updated: **2026-04-22 (P1 V1 Foundation merged to main)** — Phases A, M.1, DQ, DM, CI.1–CI.5, C, M.2 shipped through 2026-04-20; DA.1 Gemini-eyes 2026-04-21; **P1 V1 Foundation** 2026-04-22. V1 Prompt Lab is now the daily-driver iteration surface with Atlas routing, per-iteration SKU capture, SKU selector UI, cost tracking compliance. Multi-day V1 + ML roadmap (P1–P7) at [`../specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md`](../specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md); supersedes back-on-track plan for V1/ML work.
 
 Authoritative state doc. Read first when entering the repo. If anything here conflicts with the code, trust the code and update this doc.
+
+---
+
+## 2026-04-22 — P1 V1 Foundation (merged to main, unpushed)
+
+V1 Prompt Lab becomes Oliver's daily-driver iteration tool. ML loop is SKU-granular from this point forward, unblocking the 6-week P2–P7 roadmap.
+
+### What shipped
+
+| Deliverable | Commit | Location |
+|---|---|---|
+| Migration 031 — SKU capture columns | `f3682e7` | `supabase/migrations/031_prompt_lab_iterations_sku.sql` |
+| Migration 032 — cost_events provider widen | `ad63c6a` | `supabase/migrations/032_cost_events_atlas_google_higgsfield.sql` |
+| Router SKU-aware decision | `01d907f` | `lib/providers/router.ts` (resolveDecision, V1_ATLAS_SKUS, V1_DEFAULT_SKU) |
+| Router constants co-location | `8fcaaf9` | `lib/providers/atlas.ts` (V1 SKU constants moved next to ATLAS_MODELS) |
+| Backend SKU threading + cost events | `286b697` | `lib/prompt-lab.ts`, `api/admin/prompt-lab/{render,rerender}.ts`, `lib/providers/atlas.ts` |
+| TopNav rename + V2 hide | `3a56001` | `src/components/TopNav.tsx` |
+| MODEL-VERSIONS.md canonical doc | `3a56001` | `docs/state/MODEL-VERSIONS.md` |
+| UX friction audit (V1 Lab) | `15f0ec3` | `docs/audits/v1-lab-ux-friction-2026-04-22.md` |
+| v2-master vs v2-6-pro research | `3e9bf1d` | `docs/audits/kling-v2master-vs-v26pro-2026-04-22.md` (verdict: Validate-day-1) |
+| Deferred UX plan | `55491f0` | `docs/specs/2026-04-22-v1-lab-ux-plan.md` |
+| Program spec (P1–P7) + P1 plan | `4a7f203` | `docs/specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md`, `docs/plans/2026-04-22-p1-v1-foundation-plan.md` |
+
+### Pre-cooked design artifacts (unmerged branches)
+
+Three parallel Opus-design windows produced 4-week-ahead design artifacts in worktrees. All branches parked; coordinator integrates at each phase's scheduled session:
+
+- `session/p2-rubric-design` — P2 Gemini auto-judge rubric + 10-shot calibration pool. 7 Qs resolved. Integrates 2026-04-23.
+- `session/p3-embedding-preflight` — P3 image-embedding decision: Gemini gemini-embedding-2 at 768-dim. 5 Qs resolved. Integrates 2026-04-25.
+- `session/p5-thompson-design` — P5 Thompson router math + cold-start + rollout gate. 6 Qs resolved. Integrates 2026-04-30.
+
+### Carry-over + gaps
+
+- Migrations 031 + 032 **not yet applied** to Supabase. Application is the prerequisite for the Task 12 live smoke render. Once applied, first V1 render will populate `prompt_lab_iterations.model_used` + emit a `cost_events` row.
+- The v2-master research returned "Validate-day-1" with corrected pricing ($1.11/render for v2-master, not my original $0.22 estimate). If Oliver wants the A/B, P2 Session 1 absorbs it.
+- cost_events CHECK widening in migration 032 is additive-only; rollback is a flag flip, not a migration revert.
+- TopNav hides Listings Lab nav entry but `/dashboard/development/lab` + `/dashboard/development/lab/listings` URLs remain reachable (V2 direct-URL preservation).
+
+### Next
+
+P2 Session 1 (Gemini auto-judge rubric + capture) — 2026-04-23.
 
 ---
 
