@@ -112,7 +112,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
   const rows = (data ?? []) as PendingRow[];
 
   for (const row of rows) {
-    if (!row.provider || (row.provider !== "kling" && row.provider !== "runway")) {
+    if (!row.provider || !["kling", "runway", "atlas"].includes(row.provider)) {
       results.push({ id: row.id, phase: "finalize", status: "skip: unknown provider" });
       continue;
     }
@@ -132,7 +132,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       const outcome = await finalizeLabRender({
         iterationId: row.id,
         sessionId: row.session_id,
-        provider: row.provider,
+        provider: row.provider as "kling" | "runway" | "atlas",
         providerTaskId: row.provider_task_id,
       });
       if (!outcome.done) {
