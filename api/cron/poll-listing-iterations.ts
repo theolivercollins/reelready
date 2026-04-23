@@ -78,11 +78,32 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       const nativeKling = isNativeKling(iter.model_used);
       const costCents = nativeKling ? 0 : atlasClipCostCents(iter.model_used);
 
+      // Rehost the clip into Supabase Storage so URLs never expire.
+      // Kling native returns signed URLs with ksTime expiry; Atlas CDN URLs
+      // also rotate. Without rehosting, old iterations play as "just a
+      // keyframe" once the provider URL dies.
+      let persistedUrl = status.videoUrl!;
+      try {
+        const buffer = await provider.downloadClip(status.videoUrl!);
+        const path = `lab-listing/${iter.scene_id}/${iter.id}.mp4`;
+        const { error: upErr } = await supabase.storage
+          .from("property-videos")
+          .upload(path, buffer, { contentType: "video/mp4", upsert: true });
+        if (!upErr) {
+          const { data: pub } = supabase.storage.from("property-videos").getPublicUrl(path);
+          persistedUrl = pub.publicUrl;
+        } else {
+          console.error(`[poll-listing-iterations] rehost upload failed for ${iter.id}:`, upErr);
+        }
+      } catch (rehostErr) {
+        console.error(`[poll-listing-iterations] rehost failed for ${iter.id}:`, rehostErr);
+      }
+
       await supabase
         .from("prompt_lab_listing_scene_iterations")
         .update({
           status: "rendered",
-          clip_url: status.videoUrl,
+          clip_url: persistedUrl,
           cost_cents: costCents,
         })
         .eq("id", iter.id);
