@@ -69,7 +69,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     try {
       const scene = row.director_output_json as { prompt: string; camera_movement: string; duration_seconds: number };
       const roomType = (row.analysis_json as { room_type?: string })?.room_type ?? "other";
-      const { jobId, provider } = await submitLabRender({
+      const { jobId, provider, sku: resolvedSku } = await submitLabRender({
         imageUrl,
         scene: scene as any,
         roomType: roomType as any,
@@ -82,9 +82,15 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           provider_task_id: jobId,
           render_submitted_at: new Date().toISOString(),
           render_queued_at: null,
+          // Persist the full SKU ("kling-v2-native" / "runway-gen4-native")
+          // so the dashboard chip shows the variant instead of falling back
+          // to the coarse provider label. Without this the queued-path
+          // leaves model_used=null on completed iterations.
+          model_used: resolvedSku,
+          sku_source: "captured_at_render",
         })
         .eq("id", row.id);
-      results.push({ id: row.id, phase: "queue", status: `submitted to ${provider}` });
+      results.push({ id: row.id, phase: "queue", status: `submitted to ${provider} (${resolvedSku})` });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("at capacity")) {
