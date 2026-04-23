@@ -1215,15 +1215,39 @@ function JudgeChip({
 }) {
   const [showOverride, setShowOverride] = useState(false);
 
-  if (iteration.judge_error) {
+  // Audit C C2: show Override button even when judge errored — these are
+  // exactly the iterations you'd want to calibrate. OverridePanel handles
+  // null judge_rating_json via ??3 defaults. Only show pure "failed" state
+  // when judge_rating_json is also null (see Fix 7 for that precedence).
+  if (iteration.judge_error && iteration.judge_rating_json == null) {
     return (
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <span className="rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
-          Judge failed
-        </span>
-        <span className="truncate max-w-[240px] text-muted-foreground/70" title={iteration.judge_error}>
-          {iteration.judge_error.slice(0, 60)}
-        </span>
+      <div className="mt-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
+            Judge failed
+          </span>
+          <span className="truncate max-w-[200px] text-muted-foreground/70" title={iteration.judge_error}>
+            {iteration.judge_error.slice(0, 60)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowOverride((v) => !v)}
+            className="ml-1 rounded border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider hover:bg-muted"
+          >
+            {showOverride ? "Cancel" : "Override"}
+          </button>
+        </div>
+        {showOverride && (
+          <OverridePanel
+            iteration={iteration}
+            panelNote="(judge failed — start from scratch)"
+            onCancel={() => setShowOverride(false)}
+            onSuccess={() => {
+              setShowOverride(false);
+              onOverrideSuccess();
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -1294,10 +1318,13 @@ function OverridePanel({
   iteration,
   onCancel,
   onSuccess,
+  panelNote,
 }: {
   iteration: LabIteration;
   onCancel: () => void;
   onSuccess: () => void;
+  /** Optional note shown in the panel header (e.g. when judge failed). */
+  panelNote?: string;
 }) {
   const j = iteration.judge_rating_json;
 
@@ -1350,6 +1377,11 @@ function OverridePanel({
     <div className="rounded border border-border bg-muted/30 p-4 space-y-4 text-xs">
       <div className="font-medium text-foreground text-[11px] uppercase tracking-wider">
         Override judge rating
+        {panelNote && (
+          <span className="ml-2 normal-case font-normal text-muted-foreground">
+            {panelNote}
+          </span>
+        )}
       </div>
 
       {/* 5-axis sliders */}
