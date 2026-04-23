@@ -1451,6 +1451,7 @@ function IterationCard({
   const [chat, setChat] = useState("");
   const [renderForReal, setRenderForReal] = useState(false);
   const [providerChoice, setProviderChoice] = useState<"auto" | "kling" | "runway">("auto");
+  const [showAdvancedProvider, setShowAdvancedProvider] = useState(false);
   const [sku, setSku] = useState<V1AtlasSku>(
     (iteration.model_used as V1AtlasSku | null) ?? V1_DEFAULT_SKU,
   );
@@ -1683,16 +1684,29 @@ function IterationCard({
               ≈ ${(V1_SKU_COST_CENTS[sku] / 100).toFixed(2)}/5s
             </span>
           </div>
-          <select
-            value={providerChoice}
-            onChange={(e) => setProviderChoice(e.target.value as "auto" | "kling" | "runway")}
-            className="border border-border bg-background px-2 py-1 text-xs"
-            disabled={!renderForReal || rendering}
-          >
-            <option value="auto">Auto (by motion)</option>
-            <option value="kling">Kling</option>
-            <option value="runway">Runway</option>
-          </select>
+          {showAdvancedProvider ? (
+            <select
+              value={providerChoice}
+              onChange={(e) => setProviderChoice(e.target.value as "auto" | "kling" | "runway")}
+              className="border border-border bg-background px-2 py-1 text-xs"
+              disabled={!renderForReal || rendering}
+              title="Provider override. Default is Atlas (routes via your selected SKU). Kling native burns pre-paid credits instead of Atlas billing. Runway uses Gen-4 instead of Kling."
+            >
+              <option value="auto">Atlas (default)</option>
+              <option value="kling">Kling native</option>
+              <option value="runway">Runway Gen-4</option>
+            </select>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAdvancedProvider(true)}
+              disabled={!renderForReal || rendering}
+              className="text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+              title="Show provider override (Kling native / Runway)"
+            >
+              Advanced ▸
+            </button>
+          )}
           <Button
             size="sm"
             variant={renderForReal ? "default" : "outline"}
