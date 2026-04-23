@@ -13,6 +13,27 @@ import {
 } from "../../../lib/prompt-lab.js";
 import { V1_ATLAS_SKUS, type V1AtlasSku } from "../../../lib/providers/atlas.js";
 
+// Audit A C2: wrap critical UPDATE calls that follow a remote POST (Atlas charge).
+// If the UPDATE fails, the provider has already billed us but we can't retrieve
+// the result. Retry 3× with exponential backoff so transient Supabase errors
+// don't create orphaned-billed renders.
+async function updateWithRetry<T>(
+  fn: () => Promise<{ data: T | null; error: any }>,
+  label: string,
+): Promise<{ ok: boolean; data?: T | null; error?: any }> {
+  const delays = [100, 500, 2000];
+  for (let i = 0; i <= delays.length; i++) {
+    const res = await fn();
+    if (!res.error) return { ok: true, data: res.data };
+    if (i < delays.length) await new Promise((r) => setTimeout(r, delays[i]));
+    else {
+      console.error(`[${label}] update failed after ${delays.length + 1} attempts:`, res.error);
+      return { ok: false, error: res.error };
+    }
+  }
+  return { ok: false };
+}
+
 // POST /api/admin/prompt-lab/rerender
 //   body: { source_iteration_id, provider }
 // Clones analysis + director from source iteration into a new iteration,
@@ -96,17 +117,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sku: effectiveSku,
     });
 
-    await supabase
-      .from("prompt_lab_iterations")
-      .update({
-        provider: usedProvider,
-        provider_task_id: jobId,
-        render_submitted_at: new Date().toISOString(),
-        render_error: null,
-        model_used: resolvedSku,
-        sku_source: "captured_at_render",
-      })
-      .eq("id", newIteration.id);
+    // Audit A C2: Atlas POST has already fired (account charged). Retry the
+    // UPDATE so a transient Supabase error doesn't orphan the jobId.
+    const updateResult = await updateWithRetry(
+      () =>
+        supabase
+          .from("prompt_lab_iterations")
+          .update({
+            provider: usedProvider,
+            provider_task_id: jobId,
+            render_submitted_at: new Date().toISOString(),
+            render_error: null,
+            model_used: resolvedSku,
+            sku_source: "captured_at_render",
+          })
+          .eq("id", newIteration.id)
+          .select()
+          .single(),
+      `rerender persist [iter=${newIteration.id} job=${jobId}]`,
+    );
+    if (!updateResult.ok) {
+      console.error(
+        `[rerender] ORPHAN: iteration_id=${newIteration.id} jobId=${jobId} provider_task_id=${jobId} — check Atlas task within 7d`,
+      );
+      try {
+        await supabase
+          .from("prompt_lab_iterations")
+          .update({
+            render_error: `persist failed; orphan — check Atlas task ${jobId} within 7d`,
+          })
+          .eq("id", newIteration.id);
+      } catch { /* best-effort */ }
+      return res.status(500).json({ error: "Failed to persist provider_task_id after Atlas submit; orphan logged" });
+    }
 
     try {
       await supabase.from("router_shadow_log").insert({
