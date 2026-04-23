@@ -3,7 +3,7 @@ import { RUBRIC_VERSION, validateJudgeOutput } from "./judge-rubric.js";
 
 describe("judge-rubric — RUBRIC_VERSION", () => {
   it("is a non-empty version string", () => {
-    expect(RUBRIC_VERSION).toBe("v1.0");
+    expect(RUBRIC_VERSION).toBe("v1.1");
   });
 });
 
@@ -154,6 +154,32 @@ describe("validateJudgeOutput — cross-axis hard rules", () => {
       hallucination_flags: ["camera_exited_room"],
       confidence: 3,
       reasoning: "walked through door to hallway",
+      overall: 3,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("v1.1 — motion_faithfulness ≤ 2 with motion_too_static flag passes", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 2,
+      geometry_coherence: 4,
+      room_consistency: 4,
+      hallucination_flags: ["motion_too_static"],
+      confidence: 3,
+      reasoning: "clip is nearly motionless; reads as a still",
+      overall: 3,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("v1.1 — motion_faithfulness ≤ 2 with overshoot_target flag passes", () => {
+    const r = validateJudgeOutput({
+      motion_faithfulness: 2,
+      geometry_coherence: 4,
+      room_consistency: 4,
+      hallucination_flags: ["overshoot_target"],
+      confidence: 3,
+      reasoning: "camera drove past the screen enclosure instead of stopping at it",
       overall: 3,
     });
     expect(r.ok).toBe(true);

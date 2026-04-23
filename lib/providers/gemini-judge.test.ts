@@ -129,7 +129,7 @@ describe("gemini-judge — success path", () => {
     // Judge metadata fields
     expect(typeof result.judge_model).toBe("string");
     expect(result.judge_model.length).toBeGreaterThan(0);
-    expect(result.judge_version).toBe("v1.0");
+    expect(result.judge_version).toBe("v1.1");
     expect(typeof result.latency_ms).toBe("number");
     expect(result.latency_ms).toBeGreaterThanOrEqual(0);
     expect(typeof result.cost_cents).toBe("number");
