@@ -1,6 +1,6 @@
 # Listing Elevate — Handoff
 
-Last updated: 2026-04-22
+Last updated: 2026-04-23
 
 See also:
 - [README.md](./README.md) — folder guide + session hygiene
@@ -12,15 +12,20 @@ See also:
 
 ## Right now
 
-**P1 V1 Foundation + P2 Gemini auto-judge + P3 image embeddings + P5 Thompson router — all shipped to prod 2026-04-22.** Single-day delivery of the entire V1 ML foundation. Live at www.listingelevate.com.
+**2026-04-23 session shipped P2 Session 2 + P3 Session 1 retrieval-fusion completion.** Judge chip + Override panel live in IterationCard. Rating Ledger now shows human vs judge side-by-side with agreement color coding. Retrieval RPCs fuse text + image embeddings at 0.4/0.6 default weights. Audit on 5 queries showed **48% top-5 exemplar turnover** and rating-average improvements on 2/5 queries — the fusion is doing real work. Provider dropdown UX simplified (Advanced ▸ collapse).
+
+**Cumulative across 2026-04-22 + 2026-04-23:** P1 Foundation, P2 S1+S2 (judge wired + UI + calibration loop), P3 S1 full (embeddings backfilled + retrieval fused), P5 dry-run wired. Live at www.listingelevate.com.
 
 **What's live:**
 - **V1 Prompt Lab** is the daily-driver iteration surface. Atlas routing, `kling-v2-6-pro` default, per-iteration SKU selector + corrected cost chip (~$0.36–$1.11/clip) + "Try another SKU" shortcut. TopNav renamed; Listings Lab hidden from nav but direct URLs preserved.
 - **Gemini auto-judge is LIVE (`JUDGE_ENABLED=true` on Vercel prod).** Every new Lab render that finalizes triggers a fire-and-forget `judgeLabIteration` call (gemini-2.5-flash, ~21s latency, ~2¢/clip) that watches the clip + source photo and writes a structured 5-axis rubric (motion_faithfulness, geometry_coherence, room_consistency, hallucination_flags, confidence + overall) to `prompt_lab_iterations.judge_rating_json`. Verified end-to-end 2026-04-22 on iteration `1aecff42` — judge correctly caught "too slow push-in, missed curve left" as a motion defect (overall 4, motion_faithfulness 2, flags: `too_slow` + `other_motion_defect`).
 - **Thompson router is ARMED BUT OFF (`USE_THOMPSON_ROUTER` unset).** Math kernel + migration 038 + `resolveDecisionAsync` + `router_shadow_log` inserts on every render all live. With the flag off, every render silently logs `{ sku, reason: "flag_off" }` alongside `{ static_sku }` — dry-run data accumulating for the P5 Session 2 (2026-04-30) A/B audit. Flipping `USE_THOMPSON_ROUTER=true` activates auto-routing (but there's <3 trials per bucket today, so it'd fall back to static for all buckets anyway).
-- **Image embeddings backfilled.** 42/42 photos + 53/53 prompt_lab_sessions = 95 images now have `gemini-embedding-2` 768-dim vectors in prod with HNSW cosine indexes. Ready for P3 Session 2 (2026-04-26) hybrid retrieval + RetrievalPanel UI to consume.
+- **Image embeddings backfilled + fused into retrieval.** 95 images (42 photos + 53 sessions) have `gemini-embedding-2` 768-dim vectors. Migration 035 updated `match_rated_examples` / `match_loser_examples` / `match_lab_recipes` to accept optional `query_image_embedding` + `text_weight`/`image_weight` (0.4/0.6 defaults, env-overridable via `IMAGE_EMBEDDING_TEXT_WEIGHT`/`IMAGE_EMBEDDING_IMAGE_WEIGHT`). Callers in `lib/prompt-lab.ts` + `lib/judge/neighbors.ts` now load the query session's image embedding and pass it. Listing branch stays text-only (no photo_id linkage on listing_scenes — P3 S2 task). Audit `docs/audits/retrieval-fusion-2026-04-23.md` verdict: "Image fusion IS surfacing different exemplars."
+- **Judge chip + Override panel in IterationCard.** Every iteration with `judge_rating_overall` populated shows "🔍 Judge 4/5 · Motion 2 · Geom 5 · Room 5 · ⚠ flags · conf 5 [Override]" as a muted row. Override opens inline panel (sliders + flag checkboxes + reasoning/correction textareas, pre-filled from current judge output) that writes a `judge_calibration_examples` row. Next judge call in that same (room × movement) bucket loads up to 10 recent overrides as few-shot context — closes the calibration loop.
+- **Rating Ledger side-by-side.** `/dashboard/rating-ledger` has a new Judge column with delta-based color coding (grey ≤1, amber 2, red ≥3) + "Show only disagreements" filter. Useful for spotting where the judge needs calibration.
+- **Provider dropdown simplified.** Daily Lab view now shows SKU + cost only; Kling-native / Runway escape hatches hidden behind an "Advanced ▸" toggle.
 
-**Migrations applied via Supabase MCP (all in prod):** 031 (SKU capture), 032 (cost_events provider widen), 033 (judge columns + calibration_examples table), 034 (image_embedding + HNSW), 038 (router_bucket_stats + router_shadow_log).
+**Migrations applied via Supabase MCP (all in prod):** 031 (SKU capture), 032 (cost_events provider widen), 033 (judge columns + calibration_examples table), 034 (image_embedding + HNSW), 035 (retrieval RPCs with image-fusion), 038 (router_bucket_stats + router_shadow_log).
 
 **Pre-cooked design branches (FINAL, integrated into shipped code today; branches preserved for reference):**
 - `session/p2-rubric-design` — judge rubric (7 Qs resolved)
@@ -28,9 +33,9 @@ See also:
 - `session/p5-thompson-design` — Thompson design (6 Qs resolved)
 
 **What's NOT done yet (scheduled):**
-- P2 Session 2 (2026-04-23): judge chip on IterationCard UI + "Override" button
-- P3 Session 2 (2026-04-26): hybrid retrieval (text + image embeddings fused) + reranker + match-% RetrievalPanel UI
-- P4 (2026-04-28 → 29): scale hardening (MMR diversity, hallucination-risk propagation)
+- P3 Session 2 (2026-04-26): hybrid retrieval (dense + BM25 sparse + image, 3-way fused) + RetrievalPanel UI with match-percentage
+- P3 Session 3 (2026-04-27): cross-encoder reranker pass on top of hybrid
+- P4 (2026-04-28 → 29): scale hardening (per-photo Gemini enrichment on legacy, MMR diversity, hallucination-risk propagation)
 - P5 Session 2 (2026-04-30 → 05-01): flip `USE_THOMPSON_ROUTER=true`, A/B audit, prod rollout decision
 - P6 (2026-05-02): active learning + pairwise UX
 - P7 (ongoing ~2026-05-05): promote-to-prod runbook
