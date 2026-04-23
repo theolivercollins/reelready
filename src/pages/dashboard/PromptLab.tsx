@@ -1692,7 +1692,16 @@ function IterationCard({
             <input
               type="checkbox"
               checked={renderForReal}
-              onChange={(e) => setRenderForReal(e.target.checked)}
+              onChange={(e) => {
+              setRenderForReal(e.target.checked);
+              // Audit C C1: defensive reset — if user unchecks "Render for real",
+              // also collapse the Advanced panel and reset provider to auto so
+              // stale overrides don't persist silently on re-tick.
+              if (!e.target.checked) {
+                setProviderChoice("auto");
+                setShowAdvancedProvider(false);
+              }
+            }}
             />
             Render for real (~$0.36–$1.11 per clip depending on SKU)
           </label>
@@ -1715,17 +1724,32 @@ function IterationCard({
             </span>
           </div>
           {showAdvancedProvider ? (
-            <select
-              value={providerChoice}
-              onChange={(e) => setProviderChoice(e.target.value as "auto" | "kling" | "runway")}
-              className="border border-border bg-background px-2 py-1 text-xs"
-              disabled={!renderForReal || rendering}
-              title="Provider override. Default is Atlas (routes via your selected SKU). Kling native burns pre-paid credits instead of Atlas billing. Runway uses Gen-4 instead of Kling."
-            >
-              <option value="auto">Atlas (default)</option>
-              <option value="kling">Kling native</option>
-              <option value="runway">Runway Gen-4</option>
-            </select>
+            <div className="flex items-center gap-1">
+              <select
+                value={providerChoice}
+                onChange={(e) => setProviderChoice(e.target.value as "auto" | "kling" | "runway")}
+                className="border border-border bg-background px-2 py-1 text-xs"
+                disabled={!renderForReal || rendering}
+                title="Provider override. Default is Atlas (routes via your selected SKU). Kling native burns pre-paid credits instead of Atlas billing. Runway uses Gen-4 instead of Kling."
+              >
+                <option value="auto">Atlas (default)</option>
+                <option value="kling">Kling native</option>
+                <option value="runway">Runway Gen-4</option>
+              </select>
+              {/* Audit C C1: close button resets provider to auto + collapses panel */}
+              <button
+                type="button"
+                onClick={() => {
+                  setProviderChoice("auto");
+                  setShowAdvancedProvider(false);
+                }}
+                disabled={!renderForReal || rendering}
+                className="text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                title="Reset to Atlas (default) and collapse"
+              >
+                ◂
+              </button>
+            </div>
           ) : (
             <button
               type="button"
