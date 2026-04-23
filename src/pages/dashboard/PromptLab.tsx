@@ -38,30 +38,46 @@ import { promoteRecipe } from "@/lib/recipesApi";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
 
 // Per-clip cost (5s render). Atlas SKUs match ATLAS_MODELS.priceCentsPerClip
-// in lib/providers/atlas.ts. "kling-v2-native" is a synthetic dropdown entry
-// that routes via the native Kling provider (uses pre-paid credits, ~0¢ cash).
-type SkuChoice = V1AtlasSku | "kling-v2-native";
+// in lib/providers/atlas.ts. "kling-v2-native" and "runway-gen4-native" are
+// synthetic dropdown entries that route via the native Kling/Runway providers
+// (not Atlas). Runway is useful for exterior / drone / top_down shots where
+// it was historically stronger than Kling.
+type SkuChoice = V1AtlasSku | "kling-v2-native" | "runway-gen4-native";
 
 const V1_SKU_COST_CENTS: Record<SkuChoice, number> = {
-  "kling-v2-6-pro": 60,    // $0.60 per 5s clip (Atlas)
-  "kling-v2-master": 111,  // $1.11 per 5s clip (Atlas)
-  "kling-v2-native": 0,    // pre-paid credits; cash cost 0¢
+  "kling-v2-6-pro": 60,     // $0.60 per 5s clip (Atlas)
+  "kling-v2-master": 111,   // $1.11 per 5s clip (Atlas)
+  "kling-v2-native": 0,     // pre-paid credits; cash cost 0¢
+  "runway-gen4-native": 25, // ~25¢ per 5s clip (gen4_turbo, 5 credits/s × 1¢/credit)
 };
 const V1_SKU_LABELS: Record<SkuChoice, string> = {
   "kling-v2-6-pro": "v2.6 Pro (default)",
   "kling-v2-master": "v2 Master",
   "kling-v2-native": "v2 Native (Kling credits)",
+  "runway-gen4-native": "Runway gen4_turbo (exteriors)",
 };
 const SKU_DROPDOWN_OPTIONS: readonly SkuChoice[] = [
   "kling-v2-6-pro",
   "kling-v2-master",
   "kling-v2-native",
+  "runway-gen4-native",
 ] as const;
 
 // True when the selected SKU routes via the native Kling provider (not Atlas).
 // Caller submits { provider: "kling" } instead of { sku }.
 function isNativeKlingSku(sku: SkuChoice): sku is "kling-v2-native" {
   return sku === "kling-v2-native";
+}
+
+// True when the selected SKU routes via the native Runway provider (not Atlas).
+// Caller submits { provider: "runway" } instead of { sku }.
+function isNativeRunwaySku(sku: SkuChoice): sku is "runway-gen4-native" {
+  return sku === "runway-gen4-native";
+}
+
+// True when the SKU bypasses Atlas (native Kling or native Runway).
+function isNativeProviderSku(sku: SkuChoice): boolean {
+  return isNativeKlingSku(sku) || isNativeRunwaySku(sku);
 }
 
 const RATING_TAGS = [
@@ -833,10 +849,10 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     setBusy(`render-${iterationId}`);
     setError(null);
     try {
-      // Native-Kling pseudo-SKU: the IterationCard already set provider="kling"
-      // before calling onRender. Drop the sku param to signal "ignore Atlas SKU"
-      // to the server (render endpoint uses providerOverride="kling" path).
-      const sendSku: V1AtlasSku | null = sku && !isNativeKlingSku(sku) ? (sku as V1AtlasSku) : null;
+      // Native pseudo-SKUs (kling-v2-native, runway-gen4-native): IterationCard
+      // already set provider="kling"/"runway" before calling onRender. Drop the
+      // sku param so the server uses the providerOverride path (not an Atlas SKU).
+      const sendSku: V1AtlasSku | null = sku && !isNativeProviderSku(sku) ? (sku as V1AtlasSku) : null;
       const result = await renderIteration(iterationId, provider ?? null, sendSku);
       if (result.renderError) setError(`Render failed: ${result.renderError}`);
       await reload();
@@ -901,10 +917,15 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     setBusy(`rerender-${sourceIterationId}`);
     setError(null);
     setSuccess(null);
-    // If user picked native-Kling pseudo-SKU, route via provider="kling" and
-    // drop the sku param (Atlas SKUs are ignored on the native path).
-    const effectiveProvider = sku && isNativeKlingSku(sku) ? "kling" : provider;
-    const effectiveSku: V1AtlasSku | null = sku && !isNativeKlingSku(sku) ? (sku as V1AtlasSku) : null;
+    // If user picked a native-provider pseudo-SKU (kling-v2-native or
+    // runway-gen4-native), route via provider="kling"/"runway" and drop the
+    // sku param (Atlas SKUs are ignored on the native path).
+    const effectiveProvider = sku && isNativeKlingSku(sku)
+      ? "kling"
+      : sku && isNativeRunwaySku(sku)
+        ? "runway"
+        : provider;
+    const effectiveSku: V1AtlasSku | null = sku && !isNativeProviderSku(sku) ? (sku as V1AtlasSku) : null;
     try {
       const result = await rerenderWithProvider(sourceIterationId, effectiveProvider, effectiveSku);
       if (result.queued) {
@@ -1018,7 +1039,11 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   onRefine={(p) => handleRefine(it.id, p)}
                   onRate={(p) => handleRate(it.id, p)}
                   onRerender={(provider) => handleRerender(it.id, provider)}
-                  onRerenderWithSku={(sku) => handleRerender(it.id, isNativeKlingSku(sku) ? "kling" : "atlas", sku)}
+                  onRerenderWithSku={(sku) => handleRerender(
+                    it.id,
+                    isNativeKlingSku(sku) ? "kling" : isNativeRunwaySku(sku) ? "runway" : "atlas",
+                    sku,
+                  )}
                   onJudgeOverrideSuccess={reload}
                 />
               ))
@@ -1524,6 +1549,8 @@ function IterationCard({
     // Map legacy native-kling iterations (model_used=null, provider="kling")
     // and legacy "kling-v2-native" sentinel to the dropdown's native entry.
     if (mu === "kling-v2-native" || (!mu && iteration.provider === "kling")) return "kling-v2-native";
+    // Same for native Runway iterations.
+    if (mu === "runway-gen4-native" || (!mu && iteration.provider === "runway")) return "runway-gen4-native";
     if (mu && (SKU_DROPDOWN_OPTIONS as readonly string[]).includes(mu)) return mu as SkuChoice;
     return V1_DEFAULT_SKU;
   });
@@ -1712,7 +1739,9 @@ function IterationCard({
             {iteration.render_error ? "Retry on another SKU:" : "Try another SKU:"}
           </span>
           {SKU_DROPDOWN_OPTIONS
-            .filter((s) => s !== iteration.model_used && !(s === "kling-v2-native" && iteration.provider === "kling"))
+            .filter((s) => s !== iteration.model_used
+              && !(s === "kling-v2-native" && iteration.provider === "kling")
+              && !(s === "runway-gen4-native" && iteration.provider === "runway"))
             .map((s) => (
               <button
                 key={s}
@@ -1720,7 +1749,11 @@ function IterationCard({
                 onClick={() => onRerenderWithSku(s)}
                 disabled={busy === `rerender-${iteration.id}`}
                 className="border border-border px-2 py-0.5 hover:bg-muted disabled:opacity-50"
-                title={s === "kling-v2-native" ? "Native Kling v2.0 — uses pre-paid credits" : `$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}/5s`}
+                title={
+                  s === "kling-v2-native" ? "Native Kling v2.0 — uses pre-paid credits"
+                    : s === "runway-gen4-native" ? "Runway Gen-4 turbo — strong on exteriors / drone"
+                      : `$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}/5s`
+                }
               >
                 {V1_SKU_LABELS[s].replace(" (default)", "")}
               </button>
@@ -1763,7 +1796,7 @@ function IterationCard({
             >
               {SKU_DROPDOWN_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {V1_SKU_LABELS[s]} — {s === "kling-v2-native" ? "credits" : `$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}`}
+                  {V1_SKU_LABELS[s]} — {s === "kling-v2-native" ? "credits" : `≈ $${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}`}
                 </option>
               ))}
             </select>
@@ -1814,11 +1847,13 @@ function IterationCard({
             variant={renderForReal ? "default" : "outline"}
             disabled={!renderForReal || rendering}
             onClick={() => {
-              // If the user picked the native-Kling pseudo-SKU, route via
-              // provider="kling" (Atlas SKU ignored). Else honor any explicit
+              // If the user picked a native-provider pseudo-SKU, route via
+              // that provider (Atlas SKU ignored). Else honor any explicit
               // provider override + Atlas SKU.
               if (isNativeKlingSku(sku)) {
                 onRender("kling", sku);
+              } else if (isNativeRunwaySku(sku)) {
+                onRender("runway", sku);
               } else {
                 onRender(providerChoice === "auto" ? null : providerChoice, sku);
               }
