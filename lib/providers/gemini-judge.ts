@@ -15,6 +15,7 @@ import { GoogleGenAI } from "@google/genai";
 import type { JudgeRubricResult } from "../prompts/judge-rubric.js";
 import { RUBRIC_VERSION, JUDGE_SYSTEM_PROMPT, validateJudgeOutput } from "../prompts/judge-rubric.js";
 import { recordCostEvent } from "../db.js";
+import { getSupabase } from "../client.js";
 
 export interface JudgeInput {
   clipUrl: string;
@@ -208,5 +209,46 @@ export async function judgeLabIteration(input: JudgeInput): Promise<JudgeOutput>
       // Do not let cost-event failure mask the original judge error.
     }
     throw err;
+  }
+}
+
+/**
+ * Load up to `limit` recent Oliver-corrected calibration examples for the
+ * given bucket. Returns them in the shape judgeLabIteration accepts.
+ * Returns [] on DB error or empty bucket — non-fatal.
+ *
+ * Query: judge_calibration_examples WHERE room_type = ? AND
+ * camera_movement = ? AND oliver_correction_json IS NOT NULL
+ * ORDER BY created_at DESC LIMIT ?
+ */
+export async function loadCalibrationFewShot(
+  roomType: string,
+  cameraMovement: string,
+  limit: number = 10,
+): Promise<Array<{ judge_rating_json: JudgeRubricResult; oliver_correction_json: JudgeRubricResult }>> {
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("judge_calibration_examples")
+      .select("judge_rating_json, oliver_correction_json")
+      .eq("room_type", roomType)
+      .eq("camera_movement", cameraMovement)
+      .not("oliver_correction_json", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+
+    return data
+      .filter(
+        (row) => row.judge_rating_json != null && row.oliver_correction_json != null,
+      )
+      .map((row) => ({
+        judge_rating_json: row.judge_rating_json as JudgeRubricResult,
+        oliver_correction_json: row.oliver_correction_json as JudgeRubricResult,
+      }));
+  } catch {
+    // Non-fatal — empty few-shot degrades gracefully.
+    return [];
   }
 }

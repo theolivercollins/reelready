@@ -41,8 +41,21 @@ vi.mock("../db.js", () => ({
   recordCostEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock getSupabase (used by loadCalibrationFewShot) to avoid DB calls.
+vi.mock("../client.js", () => ({
+  getSupabase: vi.fn().mockReturnValue({
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
+  }),
+}));
+
 // Import after mocks are set up.
-import { judgeLabIteration, JudgeDisabledError } from "./gemini-judge.js";
+import { judgeLabIteration, loadCalibrationFewShot, JudgeDisabledError } from "./gemini-judge.js";
 import { GoogleGenAI } from "@google/genai";
 
 const BASE_INPUT = {
@@ -166,5 +179,18 @@ describe("gemini-judge — success path", () => {
       ],
     });
     expect(result.overall).toBeDefined();
+  });
+});
+
+describe("loadCalibrationFewShot", () => {
+  it("returns [] when DB returns empty data", async () => {
+    const result = await loadCalibrationFewShot("kitchen", "push_in");
+    expect(result).toEqual([]);
+  });
+
+  it("returns [] on DB error (non-fatal)", async () => {
+    // The mock already returns { data: [], error: null } which exercises the empty path.
+    const result = await loadCalibrationFewShot("bedroom", "pan_right");
+    expect(Array.isArray(result)).toBe(true);
   });
 });

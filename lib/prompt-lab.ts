@@ -671,7 +671,7 @@ export async function finalizeLabRender(params: {
   if (process.env.JUDGE_ENABLED === "true") {
     (async () => {
       try {
-        const { judgeLabIteration } = await import("./providers/gemini-judge.js");
+        const { judgeLabIteration, loadCalibrationFewShot } = await import("./providers/gemini-judge.js");
         const { getSupabase: getSupabaseForJudge } = await import("./client.js");
         const supabaseJudge = getSupabaseForJudge();
 
@@ -698,17 +698,22 @@ export async function finalizeLabRender(params: {
         } catch { /* non-fatal */ }
 
         const director = (iterRow?.director_output_json as { camera_movement?: string; prompt?: string } | null);
+        const roomType =
+          (iterRow?.analysis_json as { room_type?: string } | null)?.room_type ??
+          (sessionRow as { archetype?: string | null } | null)?.archetype ??
+          "unknown";
+        const cameraMovement = director?.camera_movement ?? "unknown";
+
+        const calibrationExamples = await loadCalibrationFewShot(roomType, cameraMovement, 10);
 
         const judgeResult = await judgeLabIteration({
           clipUrl: persistedUrl,
           photoBytes,
           directorPrompt: director?.prompt ?? "",
-          cameraMovement: director?.camera_movement ?? "unknown",
-          roomType:
-            (iterRow?.analysis_json as { room_type?: string } | null)?.room_type ??
-            (sessionRow as { archetype?: string | null } | null)?.archetype ??
-            "unknown",
+          cameraMovement,
+          roomType,
           iterationId: params.iterationId,
+          calibrationExamples,
         });
 
         await supabaseJudge

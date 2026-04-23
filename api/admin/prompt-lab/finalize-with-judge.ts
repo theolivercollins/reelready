@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSupabase } from "../../../lib/client.js";
 import { requireAdmin } from "../../../lib/auth.js";
-import { judgeLabIteration, JudgeDisabledError } from "../../../lib/providers/gemini-judge.js";
+import { judgeLabIteration, loadCalibrationFewShot, JudgeDisabledError } from "../../../lib/providers/gemini-judge.js";
 
 // POST /api/admin/prompt-lab/finalize-with-judge
 //   body: { iteration_id }
@@ -56,13 +56,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch { /* non-fatal */ }
 
   try {
+    const roomType = (iter.analysis_json as { room_type?: string } | null)?.room_type ?? session.archetype ?? "unknown";
+    const cameraMovement = director?.camera_movement ?? "unknown";
+
+    const calibrationExamples = await loadCalibrationFewShot(roomType, cameraMovement, 10);
+
     const result = await judgeLabIteration({
       clipUrl: iter.clip_url,
       photoBytes,
       directorPrompt: director?.prompt ?? "",
-      cameraMovement: director?.camera_movement ?? "unknown",
-      roomType: (iter.analysis_json as { room_type?: string } | null)?.room_type ?? session.archetype ?? "unknown",
+      cameraMovement,
+      roomType,
       iterationId: iter.id,
+      calibrationExamples,
     });
 
     await supabase
