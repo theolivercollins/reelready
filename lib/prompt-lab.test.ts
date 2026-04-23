@@ -93,11 +93,11 @@ describe("submitLabRender — SKU threading", () => {
       imageUrl: "https://cdn.example.com/photo.jpg",
       scene: baseScene,
       roomType: "living_room",
-      sku: "kling-o3-pro",
+      sku: "kling-v2-master",
     });
-    expect(result.sku).toBe("kling-o3-pro");
+    expect(result.sku).toBe("kling-v2-master");
     // AtlasProvider should have been instantiated with the sku.
-    expect(atlasConstructorCalls).toContain("kling-o3-pro");
+    expect(atlasConstructorCalls).toContain("kling-v2-master");
   });
 
   it("ignores an invalid sku override and falls back to default", async () => {
