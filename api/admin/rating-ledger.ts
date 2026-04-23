@@ -32,6 +32,8 @@ export interface LedgerRow {
   has_embedding: boolean;
   has_model_used: boolean;
   recipe_id: string | null;
+  /** Judge overall rating (1–5) — only populated for legacy_lab rows where JUDGE_ENABLED ran. */
+  judge_rating_overall: number | null;
 }
 
 const ALL_SURFACES: LedgerSurface[] = ["legacy_lab", "listings_lab", "prod"];
@@ -113,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise<LedgerRow[]> {
   const { data: iterations, error: iterErr } = await supabase
     .from("prompt_lab_iterations")
-    .select("id, session_id, rating, user_comment, tags, clip_url, provider, embedding, created_at")
+    .select("id, session_id, rating, user_comment, tags, clip_url, provider, embedding, judge_rating_overall, created_at")
     .not("rating", "is", null);
   if (iterErr) throw iterErr;
 
@@ -155,6 +157,7 @@ async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise
       has_embedding: i.embedding != null,
       has_model_used: false,
       recipe_id: null,
+      judge_rating_overall: (i.judge_rating_overall as number | null) ?? null,
     };
   });
 }
@@ -225,6 +228,7 @@ async function fetchListingsLab(supabase: ReturnType<typeof getSupabase>): Promi
       has_embedding: i.embedding != null,
       has_model_used: modelUsed != null && modelUsed.length > 0,
       recipe_id: null,
+      judge_rating_overall: null,
     };
   });
 }
@@ -309,6 +313,7 @@ async function fetchProd(supabase: ReturnType<typeof getSupabase>): Promise<Ledg
       has_embedding: hasEmbedding,
       has_model_used: false,
       recipe_id: null,
+      judge_rating_overall: null,
     };
   });
 }

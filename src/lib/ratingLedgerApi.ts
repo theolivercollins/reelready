@@ -18,6 +18,8 @@ export interface LedgerRow {
   has_embedding: boolean;
   has_model_used: boolean;
   recipe_id: string | null;
+  /** Judge overall rating (1–5) — only present for legacy_lab rows where JUDGE_ENABLED ran. */
+  judge_rating_overall: number | null;
 }
 
 export interface LedgerResponse {

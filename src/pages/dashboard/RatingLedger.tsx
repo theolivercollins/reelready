@@ -38,6 +38,7 @@ export default function RatingLedger() {
   const [minRating, setMinRating] = useState<MinRatingFilter>("any");
   const [comment, setComment] = useState<CommentFilter>("any");
   const [offset, setOffset] = useState(0);
+  const [showOnlyDisagreements, setShowOnlyDisagreements] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +74,7 @@ export default function RatingLedger() {
   // Reset offset whenever a filter other than the page cursor changes.
   useEffect(() => {
     setOffset(0);
-  }, [surface, sku, minRating, comment]);
+  }, [surface, sku, minRating, comment, showOnlyDisagreements]);
 
   const skuOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -82,6 +83,14 @@ export default function RatingLedger() {
     }
     return Array.from(seen).sort();
   }, [rows]);
+
+  const visibleRows = useMemo(() => {
+    if (!showOnlyDisagreements) return rows;
+    return rows.filter((r) => {
+      if (r.judge_rating_overall == null || r.rating == null) return false;
+      return Math.abs(r.rating - r.judge_rating_overall) >= 2;
+    });
+  }, [rows, showOnlyDisagreements]);
 
   const hasMore = offset + rows.length < total;
 
@@ -152,6 +161,15 @@ export default function RatingLedger() {
             <SelectItem value="without">No comment</SelectItem>
           </SelectContent>
         </Select>
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+          <input
+            type="checkbox"
+            checked={showOnlyDisagreements}
+            onChange={(e) => setShowOnlyDisagreements(e.target.checked)}
+            className="h-3.5 w-3.5"
+          />
+          Disagreements only
+        </label>
         <div className="ml-auto text-xs text-muted-foreground">
           {loading ? "Loading…" : `${total} row${total === 1 ? "" : "s"}`}
         </div>
@@ -163,7 +181,7 @@ export default function RatingLedger() {
 
       {/* Table */}
       <div className="border border-border bg-background">
-        <div className="hidden items-center gap-4 border-b border-border/60 bg-secondary/30 px-4 py-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground md:grid md:grid-cols-[96px_140px_160px_110px_1fr_140px_120px_120px]">
+        <div className="hidden items-center gap-4 border-b border-border/60 bg-secondary/30 px-4 py-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground md:grid md:grid-cols-[96px_140px_160px_110px_1fr_140px_120px_80px_120px]">
           <span>Image</span>
           <span>Clip</span>
           <span>SKU</span>
@@ -171,19 +189,20 @@ export default function RatingLedger() {
           <span>Reasons + comment</span>
           <span>Listing / scene</span>
           <span>Surface</span>
+          <span>Judge</span>
           <span>Retrieval</span>
         </div>
         {loading && rows.length === 0 ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <div className="p-10 text-center text-sm text-muted-foreground">
-            No rated rows match these filters yet.
+            {showOnlyDisagreements ? "No disagreements found in this page." : "No rated rows match these filters yet."}
           </div>
         ) : (
           <div className="divide-y divide-border/60">
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <LedgerRowView key={`${row.surface}-${row.iteration_id}`} row={row} />
             ))}
           </div>
@@ -233,7 +252,7 @@ function SummaryTile({ label, value, hint }: { label: string; value: number; hin
 function LedgerRowView({ row }: { row: LedgerRow }) {
   const chip = SURFACE_CHIP[row.surface];
   return (
-    <div className="grid items-start gap-4 px-4 py-4 md:grid-cols-[96px_140px_160px_110px_1fr_140px_120px_120px]">
+    <div className="grid items-start gap-4 px-4 py-4 md:grid-cols-[96px_140px_160px_110px_1fr_140px_120px_80px_120px]">
       <ImageThumb url={row.source_image_url} />
       <ClipThumb url={row.clip_url} />
       <div className="space-y-1 text-xs">
@@ -287,8 +306,44 @@ function LedgerRowView({ row }: { row: LedgerRow }) {
           {chip.label}
         </span>
       </div>
+      <JudgeCell humanRating={row.rating} judgeRating={row.judge_rating_overall} />
       <RetrievalChip row={row} />
     </div>
+  );
+}
+
+function JudgeCell({ humanRating, judgeRating }: { humanRating: number | null; judgeRating: number | null }) {
+  if (judgeRating == null) {
+    return <span className="text-[11px] text-muted-foreground/40 tabular-nums">—</span>;
+  }
+
+  const delta = humanRating != null ? Math.abs(humanRating - judgeRating) : null;
+
+  let colorClass = "text-muted-foreground";
+  let title = `Judge: ${judgeRating}/5`;
+  if (delta != null) {
+    if (delta <= 1) {
+      colorClass = "text-muted-foreground";
+      title += ` · Δ${delta} (agreement)`;
+    } else if (delta === 2) {
+      colorClass = "text-amber-600 dark:text-amber-400";
+      title += ` · Δ${delta} (caution)`;
+    } else {
+      colorClass = "text-red-600 dark:text-red-400";
+      title += ` · Δ${delta} (strong disagreement)`;
+    }
+  }
+
+  return (
+    <span
+      className={`text-[11px] tabular-nums font-medium ${colorClass}`}
+      title={title}
+    >
+      {judgeRating}/5
+      {delta != null && delta >= 2 && (
+        <span className="ml-1 text-[9px] opacity-70">Δ{delta}</span>
+      )}
+    </span>
   );
 }
 
