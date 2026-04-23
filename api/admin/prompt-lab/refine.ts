@@ -69,8 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (parentVec) {
     [exemplars, losers] = await Promise.all([
-      retrieveSimilarIterations(parentVec, { minRating: 4, limit: 5 }),
-      retrieveSimilarLosers(parentVec, { maxRating: 2, limit: 3 }),
+      retrieveSimilarIterations(parentVec, { minRating: 4, limit: 5, sessionId: prev.session_id }),
+      retrieveSimilarLosers(parentVec, { maxRating: 2, limit: 3, sessionId: prev.session_id }),
     ]);
   }
 

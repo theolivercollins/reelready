@@ -127,6 +127,39 @@ export async function analyzeSingleImage(imageUrl: string): Promise<{
 }
 
 // ---- Retrieval: similar past iterations + matching recipes ----
+//
+// P3 Session 1 — image-embedding fusion weights.
+// Defaults: text 40%, image 60% (image signal preferred on visual tasks).
+// Override via environment variables for weight-tuning experiments without
+// code deploys:
+//   IMAGE_EMBEDDING_TEXT_WEIGHT  (float, 0–1, default 0.4)
+//   IMAGE_EMBEDDING_IMAGE_WEIGHT (float, 0–1, default 0.6)
+const TEXT_WEIGHT = Number(process.env.IMAGE_EMBEDDING_TEXT_WEIGHT ?? 0.4);
+const IMAGE_WEIGHT = Number(process.env.IMAGE_EMBEDDING_IMAGE_WEIGHT ?? 0.6);
+
+// Fetch the Gemini image embedding for a prompt_lab_sessions row.
+// Returns null on any error so retrieval gracefully degrades to text-only.
+async function fetchSessionImageEmbedding(sessionId: string): Promise<number[] | null> {
+  try {
+    const { getSupabase } = await import("./client.js");
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("prompt_lab_sessions")
+      .select("image_embedding")
+      .eq("id", sessionId)
+      .single();
+    if (error || !data?.image_embedding) return null;
+    const raw = data.image_embedding as unknown;
+    if (Array.isArray(raw)) return raw as number[];
+    if (typeof raw === "string" && (raw as string).startsWith("[")) {
+      return JSON.parse(raw as string) as number[];
+    }
+    return null;
+  } catch (err) {
+    console.error("[retrieval] fetchSessionImageEmbedding failed, falling back to text-only:", err);
+    return null;
+  }
+}
 
 export interface RetrievedExemplar {
   id: string;
@@ -165,14 +198,20 @@ export interface RetrievedRecipe {
 
 export async function retrieveSimilarIterations(
   embedding: number[],
-  opts: { minRating?: number; limit?: number } = {}
+  opts: { minRating?: number; limit?: number; sessionId?: string } = {}
 ): Promise<RetrievedExemplar[]> {
   const { getSupabase } = await import("./client.js");
   const supabase = getSupabase();
+  const imageEmbedding = opts.sessionId ? await fetchSessionImageEmbedding(opts.sessionId) : null;
   const { data, error } = await supabase.rpc("match_rated_examples", {
     query_embedding: toPgVector(embedding),
     min_rating: opts.minRating ?? 4,
     match_count: opts.limit ?? 5,
+    ...(imageEmbedding ? {
+      query_image_embedding: toPgVector(imageEmbedding),
+      text_weight: TEXT_WEIGHT,
+      image_weight: IMAGE_WEIGHT,
+    } : {}),
   });
   if (error || !data) return [];
   return (data as Array<{
@@ -223,14 +262,20 @@ export async function retrieveSimilarIterations(
 
 export async function retrieveSimilarLosers(
   embedding: number[],
-  opts: { maxRating?: number; limit?: number } = {}
+  opts: { maxRating?: number; limit?: number; sessionId?: string } = {}
 ): Promise<RetrievedExemplar[]> {
   const { getSupabase } = await import("./client.js");
   const supabase = getSupabase();
+  const imageEmbedding = opts.sessionId ? await fetchSessionImageEmbedding(opts.sessionId) : null;
   const { data, error } = await supabase.rpc("match_loser_examples", {
     query_embedding: toPgVector(embedding),
     max_rating: opts.maxRating ?? 2,
     match_count: opts.limit ?? 3,
+    ...(imageEmbedding ? {
+      query_image_embedding: toPgVector(imageEmbedding),
+      text_weight: TEXT_WEIGHT,
+      image_weight: IMAGE_WEIGHT,
+    } : {}),
   });
   if (error || !data) return [];
   return (data as Array<{
@@ -282,15 +327,21 @@ export async function retrieveSimilarLosers(
 export async function retrieveMatchingRecipes(
   embedding: number[],
   roomType: string | null,
-  opts: { distanceThreshold?: number; limit?: number } = {}
+  opts: { distanceThreshold?: number; limit?: number; sessionId?: string } = {}
 ): Promise<RetrievedRecipe[]> {
   const { getSupabase } = await import("./client.js");
   const supabase = getSupabase();
+  const imageEmbedding = opts.sessionId ? await fetchSessionImageEmbedding(opts.sessionId) : null;
   const { data, error } = await supabase.rpc("match_lab_recipes", {
     query_embedding: toPgVector(embedding),
     room_type_filter: roomType,
     distance_threshold: opts.distanceThreshold ?? 0.35,
     match_count: opts.limit ?? 3,
+    ...(imageEmbedding ? {
+      query_image_embedding: toPgVector(imageEmbedding),
+      text_weight: TEXT_WEIGHT,
+      image_weight: IMAGE_WEIGHT,
+    } : {}),
   });
   if (error || !data) return [];
   return data as RetrievedRecipe[];

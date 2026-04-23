@@ -57,7 +57,7 @@ export async function scoreIteration(iterationId: string): Promise<JudgeResult> 
   // 2. Neighbors.
   const embedding = parseEmbedding(iter.embedding);
   const neighbors = embedding
-    ? await fetchNeighbors(embedding, { winnerCount: 3, loserCount: 3 })
+    ? await fetchNeighbors(embedding, { winnerCount: 3, loserCount: 3, sessionId: iter.session_id })
     : { winners: [], losers: [], total: 0 };
 
   // 3. Claude call.

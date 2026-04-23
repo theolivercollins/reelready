@@ -76,9 +76,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [exemplars, losers, recipes] = embedded
       ? await Promise.all([
-          retrieveSimilarIterations(embedded.vector, { minRating: 4, limit: 5 }),
-          retrieveSimilarLosers(embedded.vector, { maxRating: 2, limit: 3 }),
-          retrieveMatchingRecipes(embedded.vector, analysis.room_type),
+          retrieveSimilarIterations(embedded.vector, { minRating: 4, limit: 5, sessionId: session_id }),
+          retrieveSimilarLosers(embedded.vector, { maxRating: 2, limit: 3, sessionId: session_id }),
+          retrieveMatchingRecipes(embedded.vector, analysis.room_type, { sessionId: session_id }),
         ])
       : [[], [], []] as [
           Awaited<ReturnType<typeof retrieveSimilarIterations>>,
