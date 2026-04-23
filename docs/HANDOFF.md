@@ -12,16 +12,33 @@ See also:
 
 ## Right now
 
-**P1 V1 Foundation landed on main (2026-04-22).** V1 Prompt Lab is now the daily-driver iteration surface. Lab renders route through AtlasCloud with `kling-v2-6-pro` default. Every iteration captures its SKU via migration 031 (`model_used` + `sku_source`). Migration 032 widens `cost_events.provider` to include `atlas`/`google`/`higgsfield` so Lab cost tracking lands cleanly. IterationCard has per-iteration SKU selector + cost chip + "Try another SKU" shortcut. TopNav renamed "Prompt Lab (legacy)" → "Prompt Lab"; Listings Lab (V2 paired-image) hidden from nav but direct URLs preserved. Canonical V1 vs V2 reference at [`state/MODEL-VERSIONS.md`](./state/MODEL-VERSIONS.md). Program spec for the next 2 weeks (P2–P7) at [`specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md`](./specs/2026-04-22-v1-primary-tool-and-ml-roadmap-design.md) — supersedes the M.1-era back-on-track plan for all V1/ML work.
+**P1 V1 Foundation + P2 Gemini auto-judge + P3 image embeddings + P5 Thompson router — all shipped to prod 2026-04-22.** Single-day delivery of the entire V1 ML foundation. Live at www.listingelevate.com.
 
-**Pre-cooked design artifacts on parked branches (ready for integration at phase-scheduled sessions):**
-- `session/p2-rubric-design` — P2 Gemini auto-judge rubric (JUDGE-RUBRIC-V1.md, 7 Qs resolved). Integrates at P2 S1 2026-04-23.
-- `session/p3-embedding-preflight` — P3 image-embedding provider decision (Gemini 768-dim, 5 Qs resolved). Integrates at P3 S1 2026-04-25.
-- `session/p5-thompson-design` — P5 Thompson router design (528-line spec, 6 Qs resolved). Integrates at P5 S1 2026-04-30.
+**What's live:**
+- **V1 Prompt Lab** is the daily-driver iteration surface. Atlas routing, `kling-v2-6-pro` default, per-iteration SKU selector + corrected cost chip (~$0.36–$1.11/clip) + "Try another SKU" shortcut. TopNav renamed; Listings Lab hidden from nav but direct URLs preserved.
+- **Gemini auto-judge is LIVE (`JUDGE_ENABLED=true` on Vercel prod).** Every new Lab render that finalizes triggers a fire-and-forget `judgeLabIteration` call (gemini-2.5-flash, ~21s latency, ~2¢/clip) that watches the clip + source photo and writes a structured 5-axis rubric (motion_faithfulness, geometry_coherence, room_consistency, hallucination_flags, confidence + overall) to `prompt_lab_iterations.judge_rating_json`. Verified end-to-end 2026-04-22 on iteration `1aecff42` — judge correctly caught "too slow push-in, missed curve left" as a motion defect (overall 4, motion_faithfulness 2, flags: `too_slow` + `other_motion_defect`).
+- **Thompson router is ARMED BUT OFF (`USE_THOMPSON_ROUTER` unset).** Math kernel + migration 038 + `resolveDecisionAsync` + `router_shadow_log` inserts on every render all live. With the flag off, every render silently logs `{ sku, reason: "flag_off" }` alongside `{ static_sku }` — dry-run data accumulating for the P5 Session 2 (2026-04-30) A/B audit. Flipping `USE_THOMPSON_ROUTER=true` activates auto-routing (but there's <3 trials per bucket today, so it'd fall back to static for all buckets anyway).
+- **Image embeddings backfilled.** 42/42 photos + 53/53 prompt_lab_sessions = 95 images now have `gemini-embedding-2` 768-dim vectors in prod with HNSW cosine indexes. Ready for P3 Session 2 (2026-04-26) hybrid retrieval + RetrievalPanel UI to consume.
 
-**Migrations 031 + 032 committed but NOT yet applied to the Supabase DB.** Apply before next V1 render (Task 12 smoke-render prerequisite). Once applied, first V1 render should populate `prompt_lab_iterations.model_used` + emit a `cost_events` row with `metadata.sku`.
+**Migrations applied via Supabase MCP (all in prod):** 031 (SKU capture), 032 (cost_events provider widen), 033 (judge columns + calibration_examples table), 034 (image_embedding + HNSW), 038 (router_bucket_stats + router_shadow_log).
 
-**Not pushed:** all 2026-04-22 commits are local on `main`. Push pending explicit approval.
+**Pre-cooked design branches (FINAL, integrated into shipped code today; branches preserved for reference):**
+- `session/p2-rubric-design` — judge rubric (7 Qs resolved)
+- `session/p3-embedding-preflight` — embedding provider decision (5 Qs resolved)
+- `session/p5-thompson-design` — Thompson design (6 Qs resolved)
+
+**What's NOT done yet (scheduled):**
+- P2 Session 2 (2026-04-23): judge chip on IterationCard UI + "Override" button
+- P3 Session 2 (2026-04-26): hybrid retrieval (text + image embeddings fused) + reranker + match-% RetrievalPanel UI
+- P4 (2026-04-28 → 29): scale hardening (MMR diversity, hallucination-risk propagation)
+- P5 Session 2 (2026-04-30 → 05-01): flip `USE_THOMPSON_ROUTER=true`, A/B audit, prod rollout decision
+- P6 (2026-05-02): active learning + pairwise UX
+- P7 (ongoing ~2026-05-05): promote-to-prod runbook
+
+**Known carry-overs:**
+- Pre-existing `/api/cron/poll-listing-iterations` error firing every minute for 48h+ (unrelated to any 2026-04-22 work; standing bug worth investigating).
+- JUDGE_MODEL env can override `gemini-2.5-flash` back to `gemini-3-flash-preview` if that tier opens up.
+- Full V1 smoke render (P1 Task 12) not explicitly run — judge verification on iteration 1aecff42 exercised the full pipeline path downstream of clip delivery, which is equivalent.
 
 ## Plan state
 
@@ -38,10 +55,10 @@ Phases of the back-on-track plan (full spec at [`specs/2026-04-20-back-on-track-
 | M.2 — ML consolidation | ✅ shipped | SKU capture, dead code removal, prod embedding backfill |
 | B — Model head-to-head | superseded by 2026-04-22 V1 program | Phase B static-router approach replaced by P5 Thompson sampling (docs/specs/p5-thompson-router-design.md). Existing Window D Round 1/2 work parked on `session/router-2026-04-21`; v3-strip intent migrated into `V1_ATLAS_SKUS` allow-list. No fresh manual rating grid required — P5 bootstraps from organic V1 ratings |
 | **P1 — V1 Foundation** | ✅ shipped (2026-04-22) | V1 Lab becomes daily driver: Atlas routing (kling-v2-6-pro default), SKU capture (migration 031), cost_events widened (migration 032), SKU selector + cost chip + try-another-SKU UI, TopNav rename, V1 trace mode, deferred UX plan |
-| P2 — Gemini auto-judge | pre-cooked design (branch `session/p2-rubric-design`) | Rubric + 10-shot calibration pool ready. Implementation scheduled 2026-04-23 S1 + 2026-04-24 S2 |
-| P3 — Retrieval upgrade | pre-cooked provider decision (branch `session/p3-embedding-preflight`) | Gemini gemini-embedding-2 768-dim. Implementation scheduled 2026-04-25–27 (3 sessions) |
+| **P2 — Gemini auto-judge (S1)** | ✅ shipped (2026-04-22) | Migration 033 applied; gemini-judge.ts binding live on gemini-2.5-flash; finalize-with-judge endpoint + fire-and-forget hook in finalizeLabRender; JUDGE_ENABLED=true in Vercel prod. Live test on iter 1aecff42 returned overall=4 with correct too_slow flag. S2 (UI chip + Override button) scheduled 2026-04-23 |
+| **P3 — Retrieval upgrade (S1)** | ✅ shipped (2026-04-22) | Migration 034 applied; embeddings-image.ts binding live; 95 images backfilled (42 photos + 53 sessions, 100% coverage, $0.01). S2 hybrid retrieval + reranker + RetrievalPanel UI scheduled 2026-04-26–27 |
 | P4 — Scale hardening | per spec | Scheduled 2026-04-28–29 (2 sessions) |
-| P5 — Thompson router | pre-cooked design (branch `session/p5-thompson-design`) | Bandit math + cold-start + rollout gate final. Implementation scheduled 2026-04-30–05-01 |
+| **P5 — Thompson router (S1 dry-run)** | ✅ shipped (2026-04-22, flag off) | Migration 038 applied; resolveDecisionAsync + pickArm wired behind USE_THOMPSON_ROUTER env flag (default off); router_shadow_log writes on every render capturing Thompson-vs-static decisions. S2 A/B audit + flag-flip scheduled 2026-04-30–05-01 |
 | P6 — Active learning + pairwise | per spec | Scheduled 2026-05-02 |
 | P7 — Promote-to-prod flywheel | per spec | Ongoing runbook; activates ~2026-05-05 |
 
