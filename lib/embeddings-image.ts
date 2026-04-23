@@ -98,6 +98,12 @@ export async function embedImage(input: EmbedImageInput): Promise<ImageEmbedding
     }
 
     const latency_ms = Date.now() - startedAt;
+
+    // Audit B C3: gemini-embedding-2 flat per-call pricing ~$0.00012/image.
+    // Math.ceil so sub-cent amounts round UP to 1¢ for dashboard visibility.
+    // $0.00012 = 0.012¢ → rounds up to 1¢.
+    const cost_cents = Math.ceil(0.00012 * 100); // = 1¢
+
     try {
       await recordCostEvent({
         propertyId: "00000000-0000-0000-0000-000000000000",
@@ -106,7 +112,7 @@ export async function embedImage(input: EmbedImageInput): Promise<ImageEmbedding
         provider: "google",
         unitsConsumed: 1,
         unitType: "tokens",
-        costCents: 0,
+        costCents: cost_cents,
         metadata: {
           subtype: "image_embedding",
           surface: input.surface,
@@ -115,6 +121,9 @@ export async function embedImage(input: EmbedImageInput): Promise<ImageEmbedding
           model: IMAGE_EMBEDDING_MODEL,
           dim: IMAGE_EMBEDDING_DIM,
           latency_ms,
+          // Flat per-image pricing at 2026-04-22 Gemini rates ($0.00012/image).
+          // costCents rounded up to 1¢ for dashboard visibility.
+          pricing_note: "gemini-embedding-2 flat $0.00012/image; ceiled to 1¢",
         },
       });
     } catch { /* non-fatal */ }

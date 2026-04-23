@@ -156,7 +156,31 @@ export async function judgeLabIteration(input: JudgeInput): Promise<JudgeOutput>
     }
 
     const latency_ms = Date.now() - startedAt;
-    const cost_cents = 2; // ~$0.02 estimate; revisit after first invoice
+
+    // Audit B C3: extract actual token usage for reconcileable cost tracking.
+    // usageMetadata is on the response object per @google/genai SDK.
+    const usage = (resp as unknown as {
+      usageMetadata?: {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+        totalTokenCount?: number;
+      };
+    }).usageMetadata;
+    const promptTokens = usage?.promptTokenCount ?? 0;
+    const outputTokens = usage?.candidatesTokenCount ?? 0;
+    const totalTokens = usage?.totalTokenCount ?? (promptTokens + outputTokens);
+
+    // gemini-2.5-flash pricing: $0.075/M input tokens, $0.30/M output tokens.
+    // Math.ceil so sub-cent amounts round UP to 1¢ for dashboard visibility.
+    const estimatedCostCents =
+      totalTokens > 0
+        ? Math.max(1, Math.ceil(
+            promptTokens * (0.075 / 1_000_000) * 100 +
+            outputTokens * (0.30 / 1_000_000) * 100,
+          ))
+        : 3; // fallback when SDK omits usageMetadata (e.g. flash-thinking)
+
+    const cost_cents = estimatedCostCents;
 
     try {
       await recordCostEvent({
@@ -174,6 +198,10 @@ export async function judgeLabIteration(input: JudgeInput): Promise<JudgeOutput>
           judge_model,
           judge_version: RUBRIC_VERSION,
           latency_ms,
+          // Token counts for invoice reconciliation (Audit B C3).
+          prompt_tokens: promptTokens,
+          output_tokens: outputTokens,
+          total_tokens: totalTokens,
         },
       });
     } catch { /* non-fatal */ }
