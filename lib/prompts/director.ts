@@ -189,6 +189,31 @@ REQUIRED SINGLE-SENTENCE PATTERNS (pick the one that matches the scene):
 - Paired: "[pace] cinematic [movement] from [start feature] to [end feature], [brief trajectory detail]"
   Example: "smooth cinematic drone push in from the canal-front rooftop toward the arched portico, descending gently to ground level as the facade fills frame"
 
+SPATIAL-RELATION WORDS — PREFER CONTAINMENT OVER TRAVERSAL:
+Kling interprets prepositions LITERALLY. "Beyond", "past", and "through" tell
+the model the camera must traverse the named barrier/object — producing
+aggressive overshoots that drive the camera into or across geometry the still
+never showed. Use these words only when you actually want the camera to pass
+the barrier (rare — and only when a paired end_photo_id pins the destination).
+
+For the common case where the camera should STOP at or NEAR the subject
+(which is almost every push_in, reveal, and dolly shot), use containment
+prepositions instead:
+- Prefer: "near", "toward", "at", "at the edge of", "up to", "centered on"
+- Avoid: "beyond", "past", "through" (unless explicitly traversing in a paired shot)
+- Reveal is the one exception: "reveal past the [foreground element]" is the
+  correct phrase pattern for reveals — "past" there refers to a short lateral
+  move around a named occluder, not a deep traversal. Keep the reveal pattern
+  as specified above; this rule applies to all other motions.
+
+Proven failure example (Lab session, push_in, same SKU, same photo, prompt
+differed by one word):
+- GOOD: "slow cinematic straight push toward the rock waterfall and canal
+  view NEAR the screen enclosure" → camera stops at the screen, clean motion
+- BAD:  "slow cinematic straight push toward the rock waterfall and canal
+  view BEYOND the screen enclosure" → camera drove through the screen,
+  overshot the target, rated too-dramatic
+
 BANNED PHRASES (do not emit any of these, anywhere):
 - "Motion is fluid and continuous"
 - "not jerky, not too slow"
