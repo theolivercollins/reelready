@@ -28,9 +28,12 @@ import {
   renderIteration,
   rerenderWithProvider,
   rateIteration,
+  overrideJudgeRating,
   type LabSession,
   type LabIteration,
+  type JudgeRubricResult,
 } from "@/lib/promptLabApi";
+import { HALLUCINATION_FLAGS, type HallucinationFlag } from "../../../lib/prompts/judge-rubric.js";
 import { promoteRecipe } from "@/lib/recipesApi";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
 
@@ -995,6 +998,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   onRate={(p) => handleRate(it.id, p)}
                   onRerender={(provider) => handleRerender(it.id, provider)}
                   onRerenderWithSku={(sku) => handleRerender(it.id, "atlas", sku)}
+                  onJudgeOverrideSuccess={reload}
                 />
               ))
           )}
@@ -1179,6 +1183,245 @@ function RetrievalChips({ metadata }: { metadata: LabIteration["retrieval_metada
   );
 }
 
+// ─── Judge chip + override panel ───
+
+function JudgeChip({
+  iteration,
+  onOverrideSuccess,
+}: {
+  iteration: LabIteration;
+  onOverrideSuccess: () => void;
+}) {
+  const [showOverride, setShowOverride] = useState(false);
+
+  if (iteration.judge_error) {
+    return (
+      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
+          Judge failed
+        </span>
+        <span className="truncate max-w-[240px] text-muted-foreground/70" title={iteration.judge_error}>
+          {iteration.judge_error.slice(0, 60)}
+        </span>
+      </div>
+    );
+  }
+
+  if (iteration.judge_rating_overall == null) return null;
+
+  const j = iteration.judge_rating_json;
+  const flags = j?.hallucination_flags ?? [];
+
+  return (
+    <div className="mt-3 space-y-2">
+      {/* Chip row */}
+      <div className="flex flex-wrap items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+        <span className="rounded bg-foreground/8 px-2 py-0.5 font-medium text-foreground">
+          Judge: {iteration.judge_rating_overall}/5
+        </span>
+        {j && (
+          <>
+            <span title="motion faithfulness">Motion {j.motion_faithfulness}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span title="geometry coherence">Geom {j.geometry_coherence}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span title="room consistency">Room {j.room_consistency}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span title="judge confidence">conf {j.confidence}</span>
+          </>
+        )}
+        {flags.length > 0 && (
+          <>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="text-amber-600 dark:text-amber-400">
+              {flags.map((f) => (
+                <span
+                  key={f}
+                  className="mr-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px]"
+                >
+                  {f}
+                </span>
+              ))}
+            </span>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setShowOverride((v) => !v)}
+          className="ml-1 rounded border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider hover:bg-muted"
+        >
+          {showOverride ? "Cancel" : "Override"}
+        </button>
+      </div>
+
+      {/* Override panel */}
+      {showOverride && (
+        <OverridePanel
+          iteration={iteration}
+          onCancel={() => setShowOverride(false)}
+          onSuccess={() => {
+            setShowOverride(false);
+            onOverrideSuccess();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OverridePanel({
+  iteration,
+  onCancel,
+  onSuccess,
+}: {
+  iteration: LabIteration;
+  onCancel: () => void;
+  onSuccess: () => void;
+}) {
+  const j = iteration.judge_rating_json;
+
+  const [motionFaithfulness, setMotionFaithfulness] = useState<number>(j?.motion_faithfulness ?? 3);
+  const [geometryCoherence, setGeometryCoherence] = useState<number>(j?.geometry_coherence ?? 3);
+  const [roomConsistency, setRoomConsistency] = useState<number>(j?.room_consistency ?? 3);
+  const [confidence, setConfidence] = useState<number>(j?.confidence ?? 3);
+  const [overall, setOverall] = useState<number>(j?.overall ?? 3);
+  const [flags, setFlags] = useState<HallucinationFlag[]>(
+    (j?.hallucination_flags ?? []) as HallucinationFlag[],
+  );
+  const [reasoning, setReasoning] = useState(j?.reasoning ?? "");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleFlag(f: HallucinationFlag) {
+    setFlags((prev) =>
+      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f],
+    );
+  }
+
+  async function handleSave() {
+    if (!reasoning.trim()) {
+      setError("Reasoning is required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const corrected: JudgeRubricResult = {
+        motion_faithfulness: motionFaithfulness as JudgeRubricResult["motion_faithfulness"],
+        geometry_coherence: geometryCoherence as JudgeRubricResult["geometry_coherence"],
+        room_consistency: roomConsistency as JudgeRubricResult["room_consistency"],
+        hallucination_flags: flags,
+        confidence: confidence as JudgeRubricResult["confidence"],
+        reasoning: reasoning.trim(),
+        overall: overall as JudgeRubricResult["overall"],
+      };
+      await overrideJudgeRating(iteration.id, corrected, correctionReason.trim() || undefined);
+      onSuccess();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded border border-border bg-muted/30 p-4 space-y-4 text-xs">
+      <div className="font-medium text-foreground text-[11px] uppercase tracking-wider">
+        Override judge rating
+      </div>
+
+      {/* 5-axis sliders */}
+      {(
+        [
+          ["Motion faithfulness", motionFaithfulness, setMotionFaithfulness],
+          ["Geometry coherence", geometryCoherence, setGeometryCoherence],
+          ["Room consistency", roomConsistency, setRoomConsistency],
+          ["Confidence", confidence, setConfidence],
+          ["Overall", overall, setOverall],
+        ] as Array<[string, number, (v: number) => void]>
+      ).map(([label, value, setter]) => (
+        <div key={label} className="flex items-center gap-3">
+          <span className="w-40 shrink-0 text-muted-foreground">{label}</span>
+          <input
+            type="range"
+            min={1}
+            max={5}
+            step={1}
+            value={value}
+            onChange={(e) => setter(Number(e.target.value))}
+            className="flex-1"
+          />
+          <span className="w-5 tabular-nums text-right text-foreground">{value}</span>
+        </div>
+      ))}
+
+      {/* Hallucination flags */}
+      <div>
+        <div className="mb-1.5 text-muted-foreground">Hallucination flags</div>
+        <div className="flex flex-wrap gap-1.5">
+          {HALLUCINATION_FLAGS.map((f) => {
+            const active = flags.includes(f as HallucinationFlag);
+            return (
+              <button
+                key={f}
+                type="button"
+                onClick={() => toggleFlag(f as HallucinationFlag)}
+                className={`rounded border px-2 py-0.5 text-[10px] transition ${
+                  active
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-border text-muted-foreground hover:border-foreground"
+                }`}
+              >
+                {f}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Reasoning (required) */}
+      <div>
+        <div className="mb-1 text-muted-foreground">
+          Reasoning <span className="text-destructive">*</span>
+        </div>
+        <Textarea
+          value={reasoning}
+          onChange={(e) => setReasoning(e.target.value)}
+          placeholder="1–3 sentences citing specific frames or defects"
+          maxLength={500}
+          className="min-h-[60px] text-xs"
+        />
+      </div>
+
+      {/* Correction reason (optional) */}
+      <div>
+        <div className="mb-1 text-muted-foreground">Why you're overriding (optional)</div>
+        <Textarea
+          value={correctionReason}
+          onChange={(e) => setCorrectionReason(e.target.value)}
+          placeholder="e.g. Judge missed that the geometry warped at second 3"
+          className="min-h-[50px] text-xs"
+        />
+      </div>
+
+      {error && (
+        <div className="text-[11px] text-destructive">{error}</div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Check className="mr-2 h-3 w-3" />}
+          Save override
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── One iteration card ───
 
 function IterationCard({
@@ -1190,6 +1433,7 @@ function IterationCard({
   onRate,
   onRerender,
   onRerenderWithSku,
+  onJudgeOverrideSuccess,
 }: {
   iteration: LabIteration;
   isLatest: boolean;
@@ -1199,6 +1443,7 @@ function IterationCard({
   onRate: (payload: { rating: number | null; tags: string[]; comment: string }) => void;
   onRerender: (provider: "kling" | "runway") => void;
   onRerenderWithSku?: (sku: V1AtlasSku) => void;
+  onJudgeOverrideSuccess?: () => void;
 }) {
   const [rating, setRating] = useState<number | null>(iteration.rating);
   const [tags, setTags] = useState<string[]>(iteration.tags ?? []);
@@ -1348,6 +1593,14 @@ function IterationCard({
             Open clip in new tab ↗
           </a>
         </div>
+      )}
+
+      {/* Judge chip — appears when judge has run (or errored) */}
+      {(iteration.judge_rating_overall != null || iteration.judge_error != null) && (
+        <JudgeChip
+          iteration={iteration}
+          onOverrideSuccess={onJudgeOverrideSuccess ?? (() => {})}
+        />
       )}
 
       {/* Try with different provider (any iteration that has a clip or director output) */}

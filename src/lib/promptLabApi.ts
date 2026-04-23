@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import type { JudgeRubricResult } from "../../lib/prompts/judge-rubric.js";
 
 export interface LabSession {
   id: string;
@@ -70,7 +71,15 @@ export interface LabIteration {
       distance: number;
     } | null;
   } | null;
+  // Judge fields (populated after JUDGE_ENABLED=true render finalization)
+  judge_rating_json: JudgeRubricResult | null;
+  judge_rating_overall: number | null;
+  judge_error: string | null;
+  judge_model: string | null;
+  judge_version: string | null;
 }
+
+export type { JudgeRubricResult };
 
 async function fetchJSON<T>(path: string, options?: RequestInit): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -165,5 +174,20 @@ export function rerenderWithProvider(
   return fetchJSON("/api/admin/prompt-lab/rerender", {
     method: "POST",
     body: JSON.stringify({ source_iteration_id: sourceIterationId, provider, sku: sku ?? undefined }),
+  });
+}
+
+export function overrideJudgeRating(
+  iterationId: string,
+  correctedRatingJson: JudgeRubricResult,
+  correctionReason?: string,
+): Promise<{ ok: boolean; calibration_example_id: string }> {
+  return fetchJSON("/api/admin/prompt-lab/override-judge", {
+    method: "POST",
+    body: JSON.stringify({
+      iteration_id: iterationId,
+      corrected_rating_json: correctedRatingJson,
+      correction_reason: correctionReason ?? undefined,
+    }),
   });
 }
