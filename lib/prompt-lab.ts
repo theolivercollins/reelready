@@ -789,11 +789,16 @@ export async function finalizeLabRender(params: {
         console.error("[judge] hook failed (non-fatal):", err);
         try {
           const { getSupabase: getSupabaseForErr } = await import("./client.js");
+          // Audit C C3: ONLY write judge_error + judge_rated_at on failure.
+          // Do NOT touch judge_rating_json / judge_rating_overall / judge_model /
+          // judge_version — a prior successful rating must survive a retry failure.
           await getSupabaseForErr()
             .from("prompt_lab_iterations")
             .update({
               judge_error: err instanceof Error ? err.message : String(err),
               judge_rated_at: new Date().toISOString(),
+              // Intentionally NOT overwriting: judge_rating_json, judge_rating_overall,
+              // judge_model, judge_version — preserve any prior successful rating.
             })
             .eq("id", params.iterationId);
         } catch { /* nested — swallow */ }

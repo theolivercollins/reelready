@@ -90,11 +90,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(503).json({ error: "judge_disabled", message: err.message });
     }
     const message = err instanceof Error ? err.message : String(err);
+    // Audit C C3: ONLY write judge_error + judge_rated_at on failure.
+    // Do NOT touch judge_rating_json / judge_rating_overall / judge_model /
+    // judge_version — a prior successful rating must survive a retry failure.
     await supabase
       .from("prompt_lab_iterations")
       .update({
         judge_error: message,
         judge_rated_at: new Date().toISOString(),
+        // Intentionally NOT overwriting: judge_rating_json, judge_rating_overall,
+        // judge_model, judge_version — preserve any prior successful rating.
       })
       .eq("id", iter.id);
     return res.status(500).json({ error: "judge_failed", message });

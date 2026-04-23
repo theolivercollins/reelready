@@ -1252,18 +1252,32 @@ function JudgeChip({
     );
   }
 
+  // Audit C C3: if judge_rating_json is present, show it regardless of
+  // judge_error — a retry failure on a previously-judged iteration must not
+  // flip the display from "5/5 Motion 5 …" to "Judge failed".
+  // Show rating dimmed when judge_error is also set.
   if (iteration.judge_rating_overall == null) return null;
 
   const j = iteration.judge_rating_json;
   const flags = j?.hallucination_flags ?? [];
+  // Dim the chip row if a retry error was stamped on top of a good rating.
+  const hasStaleError = !!iteration.judge_error;
 
   return (
     <div className="mt-3 space-y-2">
-      {/* Chip row */}
-      <div className="flex flex-wrap items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+      {/* Chip row — dim when a stale retry error is also present */}
+      <div className={`flex flex-wrap items-center gap-2 text-[11px] tabular-nums text-muted-foreground${hasStaleError ? " opacity-60" : ""}`}>
         <span className="rounded bg-foreground/8 px-2 py-0.5 font-medium text-foreground">
           Judge: {iteration.judge_rating_overall}/5
         </span>
+        {hasStaleError && (
+          <span
+            className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
+            title={iteration.judge_error ?? "retry error"}
+          >
+            retry err
+          </span>
+        )}
         {j && (
           <>
             <span title="motion faithfulness">Motion {j.motion_faithfulness}</span>
