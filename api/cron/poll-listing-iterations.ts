@@ -128,6 +128,91 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       } catch (costErr) {
         console.error("[poll-listing-iterations] cost_events insert failed:", costErr);
       }
+
+      // Fire-and-forget Gemini judge hook. Mirrors finalizeLabRender's hook
+      // for the single-image Lab — without this the Listing Lab clips never
+      // get auto-judged. Non-blocking so clip finalization isn't held up.
+      if (process.env.JUDGE_ENABLED === "true") {
+        const persistedForJudge = persistedUrl;
+        const iterIdForJudge = iter.id;
+        const sceneIdForJudge = iter.scene_id;
+        (async () => {
+          try {
+            const { judgeLabIteration, loadCalibrationFewShot } = await import("../../lib/providers/gemini-judge.js");
+            const { data: scene } = await supabase
+              .from("prompt_lab_listing_scenes")
+              .select("room_type, camera_movement, director_prompt, photo_id")
+              .eq("id", sceneIdForJudge)
+              .maybeSingle();
+            const { data: iterRow } = await supabase
+              .from("prompt_lab_listing_scene_iterations")
+              .select("director_prompt")
+              .eq("id", iterIdForJudge)
+              .maybeSingle();
+            const { data: photo } = scene?.photo_id
+              ? await supabase
+                  .from("prompt_lab_listing_photos")
+                  .select("image_url")
+                  .eq("id", scene.photo_id)
+                  .maybeSingle()
+              : { data: null };
+
+            let photoBytes: Buffer | undefined;
+            try {
+              const photoUrl = (photo as { image_url?: string | null } | null)?.image_url;
+              if (photoUrl) {
+                const r = await fetch(photoUrl);
+                if (r.ok) photoBytes = Buffer.from(await r.arrayBuffer());
+              }
+            } catch { /* non-fatal */ }
+
+            const roomType = (scene?.room_type as string | null) ?? "unknown";
+            const cameraMovement = (scene?.camera_movement as string | null) ?? "unknown";
+            const directorPrompt =
+              ((iterRow as { director_prompt?: string | null } | null)?.director_prompt) ??
+              ((scene as { director_prompt?: string | null } | null)?.director_prompt) ??
+              "";
+
+            const calibrationExamples = await loadCalibrationFewShot(roomType, cameraMovement, 10);
+
+            const judgeResult = await judgeLabIteration({
+              clipUrl: persistedForJudge,
+              photoBytes,
+              directorPrompt,
+              cameraMovement,
+              roomType,
+              iterationId: iterIdForJudge,
+              calibrationExamples,
+            });
+
+            await supabase
+              .from("prompt_lab_listing_scene_iterations")
+              .update({
+                judge_rating_json: judgeResult,
+                judge_rating_overall: judgeResult.overall,
+                judge_rated_at: new Date().toISOString(),
+                judge_model: judgeResult.judge_model,
+                judge_version: judgeResult.judge_version,
+                judge_cost_cents: judgeResult.cost_cents,
+                judge_error: null,
+              })
+              .eq("id", iterIdForJudge);
+          } catch (judgeErr) {
+            console.error("[poll-listing-iterations judge] hook failed (non-fatal):", judgeErr);
+            try {
+              // Preserve any prior successful rating; only update error + timestamp.
+              await supabase
+                .from("prompt_lab_listing_scene_iterations")
+                .update({
+                  judge_error: judgeErr instanceof Error ? judgeErr.message : String(judgeErr),
+                  judge_rated_at: new Date().toISOString(),
+                })
+                .eq("id", iterIdForJudge);
+            } catch { /* swallow */ }
+          }
+        })();
+      }
+
       finalized += 1;
     } catch (err) {
       console.error(`[poll-listing-iterations] ${iter.id}:`, err);
