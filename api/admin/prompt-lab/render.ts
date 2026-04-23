@@ -60,26 +60,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const imageUrl = (iteration.prompt_lab_sessions as { image_url: string })?.image_url;
   if (!imageUrl) return res.status(400).json({ error: "session image url missing" });
 
-  // Phase 2.7: resolve the end-frame URL for Atlas start+end keyframe
-  // interpolation. If the director paired another Lab session (via
-  // director_output_json.end_photo_id), look up that session's
-  // image_url. Otherwise resolveEndFrameUrl falls back to a sharp crop
-  // of the start photo.
+  // Only synthesize an end-frame when the director EXPLICITLY paired another
+  // session (via director_output_json.end_photo_id). Single-image Prompt Lab
+  // renders — the V1 default — must NOT get a synthetic center-crop, because
+  // submitLabRender treats any non-null endImageUrl as a paired render and
+  // forces model_used = "kling-v2-1-pair" regardless of the user's SKU
+  // selection. That routes Atlas through its paired-image endpoint and stalls
+  // on single-photo sessions (2026-04-23 bug: 3 iterations stuck 85+ min on
+  // kling-v2-1-pair with no real end photo).
   const director = iteration.director_output_json as { end_photo_id?: string } | null;
-  let endPhotoUrl: string | null = null;
+  let endImageUrl: string | null = null;
   if (director?.end_photo_id) {
     const { data: endSession } = await supabase
       .from("prompt_lab_sessions")
       .select("image_url")
       .eq("id", director.end_photo_id)
       .maybeSingle();
-    endPhotoUrl = endSession?.image_url ?? null;
+    if (endSession?.image_url) {
+      endImageUrl = await resolveEndFrameUrl({
+        startPhotoUrl: imageUrl,
+        endPhotoUrl: endSession.image_url,
+      });
+    }
   }
-
-  const endImageUrl = await resolveEndFrameUrl({
-    startPhotoUrl: imageUrl,
-    endPhotoUrl,
-  });
 
   // Persist onto the iteration so the dashboard can display the
   // resolved URL and audit the end-frame decision.
