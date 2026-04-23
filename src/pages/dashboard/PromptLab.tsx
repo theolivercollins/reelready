@@ -37,20 +37,32 @@ import { HALLUCINATION_FLAGS, type HallucinationFlag } from "../../../lib/prompt
 import { promoteRecipe } from "@/lib/recipesApi";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
 
-// Authoritative per-clip cost (5s render) — must match ATLAS_MODELS.priceCentsPerClip
-// in lib/providers/atlas.ts. Keep in sync on any provider pricing change.
-const V1_SKU_COST_CENTS: Record<V1AtlasSku, number> = {
-  "kling-v2-6-pro": 60,  // $0.60 per 5s clip
-  "kling-v2-master": 111,// $1.11 per 5s clip
-  "kling-v3-std": 36,    // $0.36 per 5s clip
-  "kling-o3-pro": 48,    // $0.48 per 5s clip
+// Per-clip cost (5s render). Atlas SKUs match ATLAS_MODELS.priceCentsPerClip
+// in lib/providers/atlas.ts. "kling-v2-native" is a synthetic dropdown entry
+// that routes via the native Kling provider (uses pre-paid credits, ~0¢ cash).
+type SkuChoice = V1AtlasSku | "kling-v2-native";
+
+const V1_SKU_COST_CENTS: Record<SkuChoice, number> = {
+  "kling-v2-6-pro": 60,    // $0.60 per 5s clip (Atlas)
+  "kling-v2-master": 111,  // $1.11 per 5s clip (Atlas)
+  "kling-v2-native": 0,    // pre-paid credits; cash cost 0¢
 };
-const V1_SKU_LABELS: Record<V1AtlasSku, string> = {
+const V1_SKU_LABELS: Record<SkuChoice, string> = {
   "kling-v2-6-pro": "v2.6 Pro (default)",
   "kling-v2-master": "v2 Master",
-  "kling-v3-std": "v3 Std",
-  "kling-o3-pro": "o3 Pro",
+  "kling-v2-native": "v2 Native (Kling credits)",
 };
+const SKU_DROPDOWN_OPTIONS: readonly SkuChoice[] = [
+  "kling-v2-6-pro",
+  "kling-v2-master",
+  "kling-v2-native",
+] as const;
+
+// True when the selected SKU routes via the native Kling provider (not Atlas).
+// Caller submits { provider: "kling" } instead of { sku }.
+function isNativeKlingSku(sku: SkuChoice): sku is "kling-v2-native" {
+  return sku === "kling-v2-native";
+}
 
 const RATING_TAGS = [
   "clean motion",
@@ -817,11 +829,15 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     navigate("/dashboard/development/prompt-lab");
   }
 
-  async function handleRender(iterationId: string, provider?: "kling" | "runway" | null, sku?: V1AtlasSku | null) {
+  async function handleRender(iterationId: string, provider?: "kling" | "runway" | null, sku?: SkuChoice | null) {
     setBusy(`render-${iterationId}`);
     setError(null);
     try {
-      const result = await renderIteration(iterationId, provider ?? null, sku ?? null);
+      // Native-Kling pseudo-SKU: the IterationCard already set provider="kling"
+      // before calling onRender. Drop the sku param to signal "ignore Atlas SKU"
+      // to the server (render endpoint uses providerOverride="kling" path).
+      const sendSku: V1AtlasSku | null = sku && !isNativeKlingSku(sku) ? (sku as V1AtlasSku) : null;
+      const result = await renderIteration(iterationId, provider ?? null, sendSku);
       if (result.renderError) setError(`Render failed: ${result.renderError}`);
       await reload();
     } catch (e) {
@@ -881,16 +897,21 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     }
   }
 
-  async function handleRerender(sourceIterationId: string, provider: "kling" | "runway" | "atlas", sku?: V1AtlasSku | null) {
+  async function handleRerender(sourceIterationId: string, provider: "kling" | "runway" | "atlas", sku?: SkuChoice | null) {
     setBusy(`rerender-${sourceIterationId}`);
     setError(null);
     setSuccess(null);
+    // If user picked native-Kling pseudo-SKU, route via provider="kling" and
+    // drop the sku param (Atlas SKUs are ignored on the native path).
+    const effectiveProvider = sku && isNativeKlingSku(sku) ? "kling" : provider;
+    const effectiveSku: V1AtlasSku | null = sku && !isNativeKlingSku(sku) ? (sku as V1AtlasSku) : null;
     try {
-      const result = await rerenderWithProvider(sourceIterationId, provider, sku ?? null);
+      const result = await rerenderWithProvider(sourceIterationId, effectiveProvider, effectiveSku);
       if (result.queued) {
-        setSuccess(result.message ?? `Queued for ${provider}`);
+        setSuccess(result.message ?? `Queued for ${effectiveProvider}`);
       } else {
-        setSuccess(`Re-rendering with ${provider}${sku ? ` (${V1_SKU_LABELS[sku]})` : ""} — new iteration created`);
+        const label = sku ? ` (${V1_SKU_LABELS[sku]})` : "";
+        setSuccess(`Re-rendering with ${effectiveProvider}${label} — new iteration created`);
       }
       await reload();
     } catch (e) {
@@ -997,7 +1018,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
                   onRefine={(p) => handleRefine(it.id, p)}
                   onRate={(p) => handleRate(it.id, p)}
                   onRerender={(provider) => handleRerender(it.id, provider)}
-                  onRerenderWithSku={(sku) => handleRerender(it.id, "atlas", sku)}
+                  onRerenderWithSku={(sku) => handleRerender(it.id, isNativeKlingSku(sku) ? "kling" : "atlas", sku)}
                   onJudgeOverrideSuccess={reload}
                 />
               ))
@@ -1438,11 +1459,11 @@ function IterationCard({
   iteration: LabIteration;
   isLatest: boolean;
   busy: string | null;
-  onRender: (provider: "kling" | "runway" | null, sku: V1AtlasSku) => void;
+  onRender: (provider: "kling" | "runway" | null, sku: SkuChoice) => void;
   onRefine: (payload: { rating: number | null; tags: string[]; comment: string; chatInstruction: string }) => void;
   onRate: (payload: { rating: number | null; tags: string[]; comment: string }) => void;
   onRerender: (provider: "kling" | "runway") => void;
-  onRerenderWithSku?: (sku: V1AtlasSku) => void;
+  onRerenderWithSku?: (sku: SkuChoice) => void;
   onJudgeOverrideSuccess?: () => void;
 }) {
   const [rating, setRating] = useState<number | null>(iteration.rating);
@@ -1452,9 +1473,14 @@ function IterationCard({
   const [renderForReal, setRenderForReal] = useState(false);
   const [providerChoice, setProviderChoice] = useState<"auto" | "kling" | "runway">("auto");
   const [showAdvancedProvider, setShowAdvancedProvider] = useState(false);
-  const [sku, setSku] = useState<V1AtlasSku>(
-    (iteration.model_used as V1AtlasSku | null) ?? V1_DEFAULT_SKU,
-  );
+  const [sku, setSku] = useState<SkuChoice>(() => {
+    const mu = iteration.model_used;
+    // Map legacy native-kling iterations (model_used=null, provider="kling")
+    // and legacy "kling-v2-native" sentinel to the dropdown's native entry.
+    if (mu === "kling-v2-native" || (!mu && iteration.provider === "kling")) return "kling-v2-native";
+    if (mu && (SKU_DROPDOWN_OPTIONS as readonly string[]).includes(mu)) return mu as SkuChoice;
+    return V1_DEFAULT_SKU;
+  });
 
   const director = iteration.director_output_json;
   const analysis = iteration.analysis_json as Record<string, unknown> | null;
@@ -1637,8 +1663,8 @@ function IterationCard({
           <span className="text-muted-foreground">
             {iteration.render_error ? "Retry on another SKU:" : "Try another SKU:"}
           </span>
-          {V1_ATLAS_SKUS
-            .filter((s) => s !== iteration.model_used)
+          {SKU_DROPDOWN_OPTIONS
+            .filter((s) => s !== iteration.model_used && !(s === "kling-v2-native" && iteration.provider === "kling"))
             .map((s) => (
               <button
                 key={s}
@@ -1646,7 +1672,7 @@ function IterationCard({
                 onClick={() => onRerenderWithSku(s)}
                 disabled={busy === `rerender-${iteration.id}`}
                 className="border border-border px-2 py-0.5 hover:bg-muted disabled:opacity-50"
-                title={`$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}/5s`}
+                title={s === "kling-v2-native" ? "Native Kling v2.0 — uses pre-paid credits" : `$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}/5s`}
               >
                 {V1_SKU_LABELS[s].replace(" (default)", "")}
               </button>
@@ -1674,18 +1700,18 @@ function IterationCard({
             <label className="text-muted-foreground">SKU:</label>
             <select
               value={sku}
-              onChange={(e) => setSku(e.target.value as V1AtlasSku)}
+              onChange={(e) => setSku(e.target.value as SkuChoice)}
               className="border border-border bg-background px-2 py-1 text-xs"
               disabled={!renderForReal || rendering}
             >
-              {V1_ATLAS_SKUS.map((s) => (
+              {SKU_DROPDOWN_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {V1_SKU_LABELS[s]} — ${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}
+                  {V1_SKU_LABELS[s]} — {s === "kling-v2-native" ? "credits" : `$${(V1_SKU_COST_CENTS[s] / 100).toFixed(2)}`}
                 </option>
               ))}
             </select>
             <span className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-              ≈ ${(V1_SKU_COST_CENTS[sku] / 100).toFixed(2)}/5s
+              {isNativeKlingSku(sku) ? "credits" : `≈ $${(V1_SKU_COST_CENTS[sku] / 100).toFixed(2)}/5s`}
             </span>
           </div>
           {showAdvancedProvider ? (
@@ -1715,7 +1741,16 @@ function IterationCard({
             size="sm"
             variant={renderForReal ? "default" : "outline"}
             disabled={!renderForReal || rendering}
-            onClick={() => onRender(providerChoice === "auto" ? null : providerChoice, sku)}
+            onClick={() => {
+              // If the user picked the native-Kling pseudo-SKU, route via
+              // provider="kling" (Atlas SKU ignored). Else honor any explicit
+              // provider override + Atlas SKU.
+              if (isNativeKlingSku(sku)) {
+                onRender("kling", sku);
+              } else {
+                onRender(providerChoice === "auto" ? null : providerChoice, sku);
+              }
+            }}
           >
             {rendering ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Play className="mr-2 h-3 w-3" />}
             {rendering ? "Rendering…" : "Render clip"}

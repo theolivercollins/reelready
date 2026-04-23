@@ -102,12 +102,13 @@ export const ATLAS_MODELS: Record<string, AtlasModelDescriptor> = {
 //   - `kling-v2-1-pair`: paired-only SKU (start+end-frame). Routed by
 //     `selectProviderForScene()` when `scene.endPhotoId` is set. Not a
 //     valid first-try default for unpaired scenes.
+//   - `kling-v3-std` + `kling-o3-pro`: removed from user-facing SKU dropdown
+//     2026-04-23 per Oliver ("we will not use them"). Still kept in
+//     ATLAS_MODELS for possible future re-add; not routable from the UI.
 
 export const V1_ATLAS_SKUS = [
   "kling-v2-6-pro",
   "kling-v2-master",
-  "kling-v3-std",
-  "kling-o3-pro",
 ] as const;
 
 export type V1AtlasSku = (typeof V1_ATLAS_SKUS)[number];

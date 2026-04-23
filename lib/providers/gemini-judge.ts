@@ -65,8 +65,11 @@ export async function judgeLabIteration(input: JudgeInput): Promise<JudgeOutput>
   const judge_model = process.env.JUDGE_MODEL ?? JUDGE_MODEL_DEFAULT;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY required for judge");
+    // Accept either env name. @google/genai's default resolution prefers
+    // GOOGLE_API_KEY when both are set; be explicit + robust in case only one
+    // is present in prod (Vercel had only GOOGLE_API_KEY before 2026-04-23).
+    const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY or GOOGLE_API_KEY required for judge");
 
     // Build few-shot preamble from calibration examples (same bucket only).
     const fewShot = (input.calibrationExamples ?? [])
