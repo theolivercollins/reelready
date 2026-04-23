@@ -158,8 +158,17 @@ Bad prompt examples (DO NOT DO THIS):
 
 RULES FOR THE PROMPT STRING:
 - ONE sentence. Under 20 words. Lowercase is fine.
-- Must reference a specific NAMED feature from the photo's key_features whenever possible (the waterfall island, the coffered ceiling, the freestanding tub, the front facade — not just "the kitchen" or "the room")
-- Never describe materials, colors, or finishes in detail — one descriptor max ("waterfall granite island", "coffered ceiling"); the photo already shows the rest
+- Must reference a specific feature from the photo's key_features whenever possible — and prefer GROUNDING nouns over listing-copy nouns.
+- Grounding nouns = shape, count, position, spatial relation. These anchor the model to pixels it can see in the frame, which is what it actually needs to aim the camera.
+  - SHAPE: "rectangular island", "round table", "arched doorway", "coffered ceiling grid"
+  - COUNT: "two pendants", "four chairs", "three stacked ovens"
+  - POSITION: "against the left-back wall", "in the center of frame", "at the far end of the room", "flanking the fireplace"
+- AVOID material / color / finish / style adjectives. The image-to-video model already sees them from the source frame — they add noise without helping motion planning. Drop "honey-maple", "dark espresso", "stainless", "coffered" (unless shape-load-bearing), "marble-look", "Shaker".
+- GOOD: "slow cinematic push in toward the rectangular island in the center of frame"
+- GOOD: "smooth cinematic dolly right across the bank of cabinets against the left-back wall"
+- GOOD: "steady cinematic low angle glide toward the fireplace flanked by built-in shelving"
+- BAD:  "slow cinematic push in toward the dark espresso waterfall island with bronze pendants" (espresso + bronze are pixel-visible; drop them)
+- BAD:  "smooth cinematic dolly right across the honey-maple Shaker cabinetry" (honey-maple + Shaker are pixel-visible; replace with shape + position)
 - Never include stability anchors ("stay in the room", "do not pass through doorways", "no scene change")
 - Never include "photorealistic" or "high quality" — implied
 - Never mention people, brand names, or personal items

@@ -38,10 +38,35 @@ EVALUATION CRITERIA
 
 4. room_type: kitchen | living_room | master_bedroom | bedroom | bathroom | exterior_front | exterior_back | pool | aerial | dining | hallway | garage | foyer | office | laundry | closet | basement | deck | powder_room | stairs | media_room | gym | mudroom | other
 
-5. key_features: 3-6 SPECIFIC, NAMED features visible in this photo, ordered by visual prominence. NOT generic nouns ("granite island") but rich descriptive phrases the director can reference by name ("dark espresso waterfall island with three bronze pendant lights overhead", "stainless double wall oven and vented range hood", "picture window framing the pool and canal beyond"). See the per-room vocabularies below for what to look for.
+5. key_features: 3-6 SPECIFIC features visible in this photo, ordered by visual prominence. Write like a TECHNICAL / ARCHITECTURAL GROUNDING comment — not like real-estate listing copy.
 
-6. composition: 1-2 sentence description of the photo's SPATIAL LAYOUT. Where is the camera positioned relative to the room? What's in the foreground, midground, background? Where do the leading lines go? What direction should a camera move to showcase this space?
-   Example: "Camera is at the living room entrance facing the kitchen. Foreground: black leather sofa and coffee table. Midground: granite island with bar stools and pendant lights. Background: stainless appliances and subway tile backsplash. Strong horizontal leading lines from the coffered ceiling and hardwood plank direction, both pointing toward the kitchen."
+   The image-to-video model already SEES the image. It extracts color, material, and finish from pixels. Words that restate what the pixels already show (material names, stain colors, style adjectives) are noise — they add nothing and dilute the words the model actually uses to plan motion.
+
+   What helps the model is GROUNDING: shape, count, and position. These are the words the model can anchor to pixels it recognizes, so the camera knows where in the frame the target is.
+
+   Use vocabulary like this:
+   - SHAPE: "rectangular island", "round table", "L-shaped vanity", "arched doorway", "coffered ceiling grid", "U-shaped counter"
+   - COUNT: "two pendant lights", "four bar stools", "three wall ovens stacked"
+   - POSITION: "against the left-back wall", "in the center of frame", "at the far end of the room", "under the window bank", "flanking the fireplace"
+   - SPATIAL RELATION: "island extending from the left wall", "counter wrapping the right side", "picture window spanning the back wall"
+
+   GOOD (technical, grounding):
+   - "rectangular island in the center of frame with two pendants hanging above"
+   - "bank of cabinets against the left-back wall, upper and lower runs"
+   - "round dining table surrounded by four chairs, under a chandelier"
+   - "bar-height counter extending from the left wall with three stools"
+   - "freestanding tub centered between two windows on the back wall"
+
+   BAD (real-estate listing copy — most of these words are fluff):
+   - "dark espresso waterfall island with three bronze pendant lights overhead"  (drop "dark espresso", "bronze" — the model sees those; keep "three pendants above")
+   - "honey-maple cabinetry with soft-close Shaker doors"  (drop "honey-maple", "Shaker" — keep shape/position)
+   - "stainless double wall oven and vented range hood"  (replace with "two stacked wall ovens on the right; range hood centered above the cooktop")
+   - "luxurious coffered ceiling with rich crown molding"  (replace with "coffered ceiling — 3x3 grid of recessed panels")
+
+   Material / color / finish words are allowed only when they are LOAD-BEARING for disambiguation (two islands in frame, one dark one light — color disambiguates which). One material adjective max per feature when load-bearing; zero when not.
+
+6. composition: 1-2 sentence description of the photo's SPATIAL LAYOUT. Same grounding-over-listing rule as key_features — describe positions, shapes, counts, and leading lines, not materials or colors.
+   Example: "Camera is at the living-room entrance facing the kitchen. Foreground: sofa and low table. Midground: rectangular island with four bar stools and two pendants above. Background: appliance wall and tile backsplash. Strong horizontal leading lines from the ceiling grid and floor planks both run toward the back of the kitchen."
 
 7. suggested_discard: true if photo is unusable overall (too dark/blurry/fisheye/cluttered/duplicate/shows people).
 
@@ -129,7 +154,7 @@ EVALUATION CRITERIA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PER-ROOM FEATURE VOCABULARIES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Once you've identified the room_type, look for and NAME the specific features in this vocabulary. Use them (with descriptive adjectives) in key_features and composition.
+Once you've identified the room_type, look for the specific features in this vocabulary and NAME them USING GROUNDING WORDS (shape, count, position) — not material or style adjectives. The image-to-video model already sees the colors and materials in the pixels; what it needs from your words is spatial anchoring.
 
 KITCHEN:
   - Island (shape, edge profile, countertop material, finish)
@@ -254,14 +279,14 @@ export function buildAnalysisUserPrompt(photoCount: number): string {
     "aesthetic_score": 8.0,
     "depth_rating": "high",
     "key_features": [
-      "dark espresso waterfall island with three bronze pendant lights overhead",
-      "stainless double wall oven and vented range hood",
-      "marble-look fantasy brown granite counters",
-      "cream subway tile backsplash",
-      "french door stainless refrigerator",
-      "pocket slider revealing pool and canal beyond"
+      "rectangular island in the center of frame, three pendants hanging above",
+      "two stacked wall ovens in the right-back cabinet bank",
+      "range hood centered on the back wall above the cooktop",
+      "tile backsplash spanning the back wall between counter and upper cabinets",
+      "refrigerator in the left-back corner, flush with surrounding cabinetry",
+      "pocket slider on the right wall opening to the outdoor area"
     ],
-    "composition": "Camera is at the living room side facing the kitchen. Foreground: blue bar stools at the granite island. Midground: dark cabinetry run and stainless appliances. Background: subway tile backsplash. Strong horizontal leading lines from the counter direct the eye from left to right.",
+    "composition": "Camera is at the living-room side facing into the kitchen. Foreground: four bar stools along the near edge of the island. Midground: island with cooktop-side counter and appliance wall behind. Background: tile backsplash and upper cabinets. Strong horizontal leading lines run left-to-right along the counter.",
     "suggested_discard": false,
     "discard_reason": null,
     "video_viable": true,
