@@ -1629,10 +1629,14 @@ function IterationCard({
         </div>
       )}
 
-      {/* Try another SKU (Atlas only, when clip exists) */}
-      {iteration.clip_url && onRerenderWithSku && (
+      {/* Try another SKU (Atlas) — shown on successful renders AND failed ones
+          so users can retry a stuck/failed iteration on a different SKU without
+          falling back to the legacy Kling-native / Runway escape hatches. */}
+      {(iteration.clip_url || iteration.render_error) && onRerenderWithSku && (
         <div className="mt-2 flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Try another SKU:</span>
+          <span className="text-muted-foreground">
+            {iteration.render_error ? "Retry on another SKU:" : "Try another SKU:"}
+          </span>
           {V1_ATLAS_SKUS
             .filter((s) => s !== iteration.model_used)
             .map((s) => (
