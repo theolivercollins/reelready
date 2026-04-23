@@ -42,7 +42,10 @@ export class JudgeDisabledError extends Error {
   }
 }
 
-const JUDGE_MODEL_DEFAULT = "gemini-3-flash";
+// gemini-2.5-flash is the stable video-understanding model. gemini-3-flash-preview
+// has stricter tier quotas that 429'd on first judge call 2026-04-22; switched to
+// 2.5-flash which worked cleanly (~21s latency, ~2¢/call). Override via JUDGE_MODEL.
+const JUDGE_MODEL_DEFAULT = "gemini-2.5-flash";
 
 /**
  * Judge a single iteration's clip. Returns the full rubric output or throws.
