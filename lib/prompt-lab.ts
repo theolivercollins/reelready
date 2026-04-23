@@ -604,8 +604,12 @@ export async function submitLabRender(params: {
         provider = new RunwayProvider();
       }
     }
-    // sku is not meaningful for non-Atlas providers; use default for type safety.
-    resolvedSku = "kling-v2-6-pro";
+    // Audit A C3: use a synthetic SKU marker for non-Atlas providers so that
+    // iteration.model_used clearly distinguishes native-Kling from Atlas-routed
+    // kling-v2-6-pro. This prevents poisoning the Thompson router's arm stats.
+    // Cast: "kling-v2-native" is not in V1_ATLAS_SKUS runtime list but is safe
+    // as a label-only SKU persisted to the DB (model_used is a text column).
+    resolvedSku = (params.providerOverride === "kling" ? "kling-v2-native" : "runway-gen4-native") as V1AtlasSku;
     // thompson stays undefined for escape-hatch path
     staticSku = resolvedSku;
   } else if (params.endImageUrl) {
@@ -699,11 +703,13 @@ export async function finalizeLabRender(params: {
       .eq("id", params.sessionId)
       .maybeSingle();
 
+    // Audit A C3: use the actual provider from params — not hard-coded "atlas".
+    // Native Kling + Runway renders must not land on the books as Atlas spend.
     await recordCostEvent({
       propertyId: (session?.property_id as string | null | undefined) ?? LAB_SYNTHETIC_PROPERTY_ID,
       sceneId: null,
       stage: "generation",
-      provider: "atlas",
+      provider: params.provider ?? "atlas",
       unitsConsumed: 1,
       unitType: "renders",
       costCents: computedCostCents,
