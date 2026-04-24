@@ -257,6 +257,11 @@ function LedgerRowView({ row }: { row: LedgerRow }) {
       <ClipThumb url={row.clip_url} />
       <div className="space-y-1 text-xs">
         <SkuChip sku={row.sku} provider={row.provider} />
+        {row.order_id && (
+          <div className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground tabular-nums">
+            {row.order_id}
+          </div>
+        )}
         <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">
           {new Date(row.rated_at).toLocaleDateString(undefined, {
             year: "numeric",

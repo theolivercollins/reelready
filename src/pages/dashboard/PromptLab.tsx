@@ -1582,6 +1582,11 @@ function IterationCard({
       <div className={`flex items-center justify-between ${isLatest ? "mt-3" : ""}`}>
         <div className="flex flex-wrap items-center gap-2">
           <span className="label text-muted-foreground">Iteration {iteration.iteration_number}</span>
+          {iteration.order_id && (
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.08em] text-muted-foreground tabular-nums">
+              {iteration.order_id}
+            </span>
+          )}
           {(iteration.model_used || iteration.provider) && (
             <span className="rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider" title={iteration.model_used ? `provider: ${iteration.provider ?? "—"}` : undefined}>
               {iteration.model_used ?? iteration.provider}

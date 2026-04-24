@@ -20,6 +20,8 @@ export interface LedgerRow {
   recipe_id: string | null;
   /** Judge overall rating (1–5) — only present for legacy_lab rows where JUDGE_ENABLED ran. */
   judge_rating_overall: number | null;
+  /** Human-readable order number (e.g. `V1-00001`). Null on prod rows. */
+  order_id: string | null;
 }
 
 export interface LedgerResponse {

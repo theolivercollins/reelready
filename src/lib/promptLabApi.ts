@@ -47,6 +47,8 @@ export interface LabIteration {
   user_comment: string | null;
   refinement_instruction: string | null;
   created_at: string;
+  /** Human-readable order number (e.g. `V1-00001`) — assigned by DB trigger. */
+  order_id: string | null;
   retrieval_metadata: {
     exemplars?: Array<{
       id: string;
