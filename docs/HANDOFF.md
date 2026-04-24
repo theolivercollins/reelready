@@ -1,6 +1,6 @@
 # Listing Elevate — Handoff
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 See also:
 - [README.md](./README.md) — folder guide + session hygiene
@@ -11,6 +11,8 @@ See also:
 - [sessions/](./sessions/) — per-session notes
 
 ## Right now
+
+**2026-04-24: Rating Ledger "atlas" SKU-leak fix merged to main (commit `4d868bd`).** `fetchLegacyLab` in `api/admin/rating-ledger.ts` was surfacing the Atlas provider name in the SKU slot whenever model_used was populated — the SELECT never pulled the column. Fix: new shared `lib/ledger/formatSku.ts` formatter (single source of truth for how ledger rows derive SKU), routed through every surface; local `providerToSku` deleted. Migration 040 applied to prod adds `CHECK (clip_url IS NULL OR model_used IS NOT NULL OR sku_source = 'unknown')` on `prompt_lab_iterations` — any future write path that marks a render complete without a SKU is rejected with `check_violation` at the DB layer. 146 pre-P1 rows grandfathered via `sku_source='unknown'`. Verified with synthetic negative-test insert + legacy-row UPDATE + full test suite (141 + 8 new = 149 green).
 
 **2026-04-23 session shipped P2 Session 2 + P3 Session 1 retrieval-fusion completion.** Judge chip + Override panel live in IterationCard. Rating Ledger now shows human vs judge side-by-side with agreement color coding. Retrieval RPCs fuse text + image embeddings at 0.4/0.6 default weights. Audit on 5 queries showed **48% top-5 exemplar turnover** and rating-average improvements on 2/5 queries — the fusion is doing real work. Provider dropdown UX simplified (Advanced ▸ collapse).
 
@@ -25,7 +27,7 @@ See also:
 - **Rating Ledger side-by-side.** `/dashboard/rating-ledger` has a new Judge column with delta-based color coding (grey ≤1, amber 2, red ≥3) + "Show only disagreements" filter. Useful for spotting where the judge needs calibration.
 - **Provider dropdown simplified.** Daily Lab view now shows SKU + cost only; Kling-native / Runway escape hatches hidden behind an "Advanced ▸" toggle.
 
-**Migrations applied via Supabase MCP (all in prod):** 031 (SKU capture), 032 (cost_events provider widen), 033 (judge columns + calibration_examples table), 034 (image_embedding + HNSW), 035 (retrieval RPCs with image-fusion), 038 (router_bucket_stats + router_shadow_log).
+**Migrations applied via Supabase MCP (all in prod):** 031 (SKU capture), 032 (cost_events provider widen), 033 (judge columns + calibration_examples table), 034 (image_embedding + HNSW), 035 (retrieval RPCs with image-fusion), 038 (router_bucket_stats + router_shadow_log), 040 (SKU-required-at-finalize CHECK).
 
 **Pre-cooked design branches (FINAL, integrated into shipped code today; branches preserved for reference):**
 - `session/p2-rubric-design` — judge rubric (7 Qs resolved)
