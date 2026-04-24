@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Loader2,
@@ -1926,6 +1926,42 @@ function IterationCard({
   const [tags, setTags] = useState<string[]>(iteration.tags ?? []);
   const [comment, setComment] = useState(iteration.user_comment ?? "");
   const [chat, setChat] = useState("");
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // Auto-save feedback on every change (debounced 1.5s) so operator feedback
+  // can't be lost to navigating away without clicking "Save rating". Skips
+  // the initial mount so we don't immediately re-save the iteration's
+  // already-persisted state.
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    // No-op if nothing to save (prevents hitting the API when user hasn't
+    // touched anything meaningful).
+    const sameRating = rating === iteration.rating;
+    const sameTags = JSON.stringify([...tags].sort()) === JSON.stringify([...(iteration.tags ?? [])].sort());
+    const sameComment = comment === (iteration.user_comment ?? "");
+    if (sameRating && sameTags && sameComment) return;
+
+    setAutoSaveState("saving");
+    const handle = setTimeout(async () => {
+      try {
+        await rateIteration({
+          iteration_id: iteration.id,
+          rating: rating,
+          tags: tags.length > 0 ? tags : null,
+          comment: comment.trim() ? comment : null,
+        });
+        setAutoSaveState("saved");
+        setTimeout(() => setAutoSaveState("idle"), 2000);
+      } catch {
+        setAutoSaveState("error");
+      }
+    }, 1500);
+    return () => clearTimeout(handle);
+  }, [rating, tags, comment, iteration.id, iteration.rating, iteration.tags, iteration.user_comment]);
   const [renderForReal, setRenderForReal] = useState(false);
   const [providerChoice, setProviderChoice] = useState<"auto" | "kling" | "runway">("auto");
   const [showAdvancedProvider, setShowAdvancedProvider] = useState(false);
@@ -2277,8 +2313,17 @@ function IterationCard({
       {/* Feedback — rating available on any iteration; refine latest only */}
       {director && (
         <div className="mt-6 space-y-4 border-t border-border pt-5">
-          <div>
+          <div className="flex items-center justify-between">
             <span className="label text-muted-foreground">Rate this iteration</span>
+            <span className="text-[10px] tabular-nums text-muted-foreground" aria-live="polite">
+              {autoSaveState === "saving" ? "saving…"
+                : autoSaveState === "saved" ? "✓ saved"
+                : autoSaveState === "error" ? "⚠ auto-save failed — use Save rating button"
+                : ""}
+            </span>
+          </div>
+          <div>
+            <span className="sr-only">Rate this iteration</span>
             <div className="mt-2 flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button

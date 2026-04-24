@@ -44,15 +44,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "previous iteration missing analysis or director output" });
   }
 
-  // Save feedback onto the previous iteration.
-  // M.2a: dropped deprecated `tags` + `refinement_instruction` writes;
-  // columns stay in DB for historical reads but new writes go to the
-  // Phase 2.8 tables (prompt_lab_listing_scene_iterations).
+  // Save feedback onto the previous iteration. Prior code (2026-03
+   // era) skipped tags + refinement_instruction writes because the plan
+   // was to migrate off prompt_lab_iterations to the Listings Lab
+   // tables — that plan was reversed, V1 Lab IS the primary surface,
+   // and skipping these writes silently dropped user feedback on every
+   // Refine click (observed 2026-04-24 on V1-00361 + sibling rows).
   await supabase
     .from("prompt_lab_iterations")
     .update({
       rating: typeof rating === "number" ? rating : prev.rating,
+      tags: Array.isArray(tags) ? tags : prev.tags,
       user_comment: typeof comment === "string" ? comment : prev.user_comment,
+      refinement_instruction: chat_instruction.trim(),
     })
     .eq("id", iteration_id);
 
