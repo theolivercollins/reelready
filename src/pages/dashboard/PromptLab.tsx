@@ -508,131 +508,166 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
         </div>
       </div>
 
-      {ordered.map(([batch, items]) => {
-        const rated = items.filter((i) => typeof i.best_rating === "number");
-        const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.best_rating ?? 0), 0) / rated.length : null;
-        const isTarget = dropTarget === batch;
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {ordered.map(([batch, items]) => {
+          const rated = items.filter((i) => typeof i.best_rating === "number");
+          const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.best_rating ?? 0), 0) / rated.length : null;
+          const isTarget = dropTarget === batch;
+          const isExpanded = expandedBatches.has(batch);
 
-        const counts = {
-          all: items.length,
-          not_started: items.filter((i) => statusOf(i) === "not_started").length,
-          in_progress: items.filter((i) => statusOf(i) === "in_progress").length,
-          completed: items.filter((i) => statusOf(i) === "completed").length,
-        };
-        const filter = filters[batch] ?? "all";
-        const filtered = filter === "all" ? items : items.filter((i) => statusOf(i) === filter);
-        // Sort: generation approval needed → iteration approval needed → rendering → rest → completed
-        const visible = [...filtered].sort((a, b) => {
-          const priority = (s: LabSession) => {
-            if (!s.completed && !s.pending_render && s.ready_for_approval) return 0;
-            if (!s.completed && !s.pending_render && !s.ready_for_approval && s.iteration_needs_attention) return 1;
-            if (s.pending_render) return 2;
-            if (s.completed) return 4;
-            return 3;
+          const counts = {
+            all: items.length,
+            not_started: items.filter((i) => statusOf(i) === "not_started").length,
+            in_progress: items.filter((i) => statusOf(i) === "in_progress").length,
+            completed: items.filter((i) => statusOf(i) === "completed").length,
           };
-          return priority(a) - priority(b);
-        });
+          const filter = filters[batch] ?? "all";
+          const filtered = filter === "all" ? items : items.filter((i) => statusOf(i) === filter);
+          // Sort: generation approval needed → iteration approval needed → rendering → rest → completed
+          const visible = [...filtered].sort((a, b) => {
+            const priority = (s: LabSession) => {
+              if (!s.completed && !s.pending_render && s.ready_for_approval) return 0;
+              if (!s.completed && !s.pending_render && !s.ready_for_approval && s.iteration_needs_attention) return 1;
+              if (s.pending_render) return 2;
+              if (s.completed) return 4;
+              return 3;
+            };
+            return priority(a) - priority(b);
+          });
 
-        return (
-          <div
-            key={batch}
-            className={`rounded-sm border-2 border-dashed p-3 transition ${isTarget ? "border-foreground bg-accent/30" : "border-transparent"}`}
-            onDragOver={(e) => {
-              if (draggingId) {
-                e.preventDefault();
-                setDropTarget(batch);
-              }
-            }}
-            onDragLeave={() => setDropTarget((prev) => (prev === batch ? null : prev))}
-            onDrop={(e) => {
-              if (draggingId) {
-                e.preventDefault();
-                const newLabel = batch === "Unbatched" ? null : batch;
-                moveSession(draggingId, newLabel);
-                setDraggingId(null);
-                setDropTarget(null);
-              }
-            }}
-          >
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => toggleExpand(batch)}
-                  className="p-1 text-muted-foreground hover:text-foreground transition"
-                  title={expandedBatches.has(batch) ? "Collapse" : "Expand"}
-                >
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${expandedBatches.has(batch) ? "" : "-rotate-90"}`}
-                  />
-                </button>
-                <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
-                {organizeMode && (
-                  <button
-                    onClick={() => selectAllInBatch(batch, items)}
-                    className="ml-2 text-[10px] text-muted-foreground hover:text-foreground underline"
-                  >
-                    {items.every((s) => selectedIds.has(s.id)) ? "Deselect all" : "Select all"}
-                  </button>
-                )}
-              </div>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {!expandedBatches.has(batch) ? `${counts.all} sessions · ` : ""}
-                {counts.completed}/{counts.all} completed
-                {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
-              </span>
-            </div>
+          // Pick up to four preview images (by newest created_at) for the collapsed tile's 2×2 grid.
+          const previewImages = [...items]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 4)
+            .map((s) => s.image_url ?? null);
 
-            {expandedBatches.has(batch) && (
-              <>
-                <div className="mb-3 flex flex-wrap gap-1">
-                  {(
-                    [
-                      ["all", `All (${counts.all})`],
-                      ["not_started", `Need to start (${counts.not_started})`],
-                      ["in_progress", `In progress (${counts.in_progress})`],
-                      ["completed", `Completed (${counts.completed})`],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => setFilters((prev) => ({ ...prev, [batch]: key }))}
-                      className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-wider transition ${
-                        filter === key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {visible.length === 0 ? (
-                  <div className="rounded border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                    No sessions in this filter.
+          return (
+            <div
+              key={batch}
+              className={`${isExpanded ? "col-span-full" : ""} transition ${
+                isTarget ? "outline outline-2 outline-foreground bg-accent/30" : ""
+              }`}
+              onDragOver={(e) => {
+                if (draggingId) {
+                  e.preventDefault();
+                  setDropTarget(batch);
+                }
+              }}
+              onDragLeave={() => setDropTarget((prev) => (prev === batch ? null : prev))}
+              onDrop={(e) => {
+                if (draggingId) {
+                  e.preventDefault();
+                  const newLabel = batch === "Unbatched" ? null : batch;
+                  moveSession(draggingId, newLabel);
+                  setDraggingId(null);
+                  setDropTarget(null);
+                }
+              }}
+            >
+              {isExpanded ? (
+                <div className="rounded-sm border border-border p-3">
+                  <div className="mb-3 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleExpand(batch)}
+                        className="p-1 text-muted-foreground hover:text-foreground transition"
+                        title="Collapse"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                      <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
+                      {organizeMode && (
+                        <button
+                          onClick={() => selectAllInBatch(batch, items)}
+                          className="ml-2 text-[10px] text-muted-foreground hover:text-foreground underline"
+                        >
+                          {items.every((s) => selectedIds.has(s.id)) ? "Deselect all" : "Select all"}
+                        </button>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {counts.completed}/{counts.all} completed
+                      {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
+                    </span>
                   </div>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {visible.map((s) => (
-                      <SessionCard
-                        key={s.id}
-                        session={s}
-                        isDragging={draggingId === s.id}
-                        organizeMode={organizeMode}
-                        selected={selectedIds.has(s.id)}
-                        onToggleSelect={() => toggleSelect(s.id)}
-                        onDragStart={() => setDraggingId(s.id)}
-                        onDragEnd={() => {
-                          setDraggingId(null);
-                          setDropTarget(null);
-                        }}
-                      />
+
+                  <div className="mb-3 flex flex-wrap gap-1">
+                    {(
+                      [
+                        ["all", `All (${counts.all})`],
+                        ["not_started", `Need to start (${counts.not_started})`],
+                        ["in_progress", `In progress (${counts.in_progress})`],
+                        ["completed", `Completed (${counts.completed})`],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => setFilters((prev) => ({ ...prev, [batch]: key }))}
+                        className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-wider transition ${
+                          filter === key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
                     ))}
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })}
+
+                  {visible.length === 0 ? (
+                    <div className="rounded border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                      No sessions in this filter.
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {visible.map((s) => (
+                        <SessionCard
+                          key={s.id}
+                          session={s}
+                          isDragging={draggingId === s.id}
+                          organizeMode={organizeMode}
+                          selected={selectedIds.has(s.id)}
+                          onToggleSelect={() => toggleSelect(s.id)}
+                          onDragStart={() => setDraggingId(s.id)}
+                          onDragEnd={() => {
+                            setDraggingId(null);
+                            setDropTarget(null);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(batch)}
+                  className="group flex aspect-square w-full flex-col border border-border bg-background p-3 text-left transition hover:border-foreground"
+                  title={`Expand "${batch}"`}
+                >
+                  <div className="mb-3 grid min-h-0 flex-1 grid-cols-2 gap-1">
+                    {previewImages.map((src, i) => (
+                      <div key={i} className="overflow-hidden bg-muted/60">
+                        {src ? (
+                          <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        ) : null}
+                      </div>
+                    ))}
+                    {Array.from({ length: Math.max(0, 4 - previewImages.length) }).map((_, i) => (
+                      <div key={`placeholder-${i}`} className="bg-muted/30" />
+                    ))}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold tracking-tight">{batch}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      {counts.all} session{counts.all === 1 ? "" : "s"} · {counts.completed}/{counts.all} done
+                      {avgRating ? ` · ${avgRating.toFixed(1)}★` : ""}
+                    </div>
+                  </div>
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Drop-here-to-create-new-batch zone */}
       <div
