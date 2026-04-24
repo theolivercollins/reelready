@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../../lib/auth.js";
 import { getSupabase } from "../../../lib/client.js";
-import { embedTextSafe, buildAnalysisText, toPgVector } from "../../../lib/embeddings.js";
+import { autoPromoteIfWinning } from "../../../lib/prompt-lab.js";
 
 // POST /api/admin/prompt-lab/rate
 //   body: { iteration_id, rating?, tags?, comment? }
@@ -39,75 +39,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Auto-promote on rating >= 4. 5★ = primary recipe, 4★ = backup recipe.
-  // Both feed retrieval; the director sees the distinction via the archetype
-  // prefix ("backup_" on 4★) and the rating_at_promotion field.
-  let auto_promoted: { id: string; archetype: string; tier: "primary" | "backup" } | null = null;
-  if (typeof rating === "number" && rating >= 4 && updated.analysis_json && updated.director_output_json) {
-    const analysis = updated.analysis_json as { room_type: string; key_features?: string[]; composition?: string | null; suggested_motion?: string | null };
-    const director = updated.director_output_json as { camera_movement: string; prompt: string };
-    const tier = rating === 5 ? "primary" : "backup";
-
-    let vec: number[] | null = null;
-    if (Array.isArray(updated.embedding)) vec = updated.embedding as number[];
-    else if (typeof updated.embedding === "string" && updated.embedding.startsWith("[")) {
-      try { vec = JSON.parse(updated.embedding) as number[]; } catch { /* no-op */ }
-    }
-    if (!vec) {
-      const embedded = await embedTextSafe(
-        buildAnalysisText({
-          roomType: analysis.room_type,
-          keyFeatures: analysis.key_features ?? [],
-          composition: analysis.composition,
-          suggestedMotion: analysis.suggested_motion,
-          cameraMovement: director.camera_movement,
-        })
-      );
-      if (embedded) {
-        vec = embedded.vector;
-        try {
-          await supabase.from("cost_events").insert({
-            property_id: null,
-            scene_id: null,
-            stage: "embedding",
-            provider: "openai",
-            units_consumed: embedded.usage.totalTokens,
-            unit_type: "tokens",
-            cost_cents: Math.round(embedded.usage.costCents),
-            metadata: {
-              scope: "lab_rate_auto_promote_embedding",
-              model: embedded.model,
-              tokens: embedded.usage.totalTokens,
-              iteration_id,
-            },
-          });
-        } catch (costErr) {
-          console.error("[embeddings] cost_events insert failed:", costErr);
-        }
-      }
-    }
-
-    const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-    const slug = Math.random().toString(36).slice(2, 6);
-    const prefix = tier === "backup" ? "backup_" : "";
-    const archetype = `${prefix}${analysis.room_type}_${director.camera_movement}_${stamp}_${slug}`;
-    const { data: recipe } = await supabase
-      .from("prompt_lab_recipes")
-      .insert({
-        archetype,
-        room_type: analysis.room_type,
-        camera_movement: director.camera_movement,
-        provider: updated.provider,
-        prompt_template: director.prompt,
-        source_iteration_id: iteration_id,
-        rating_at_promotion: rating,
-        promoted_by: auth.user.id,
-        embedding: vec ? toPgVector(vec) : null,
+  // Auto-promote on rating >= 4 via the shared helper. Same logic fires from
+  // refine.ts so every rating path grows the recipe pool.
+  const auto_promoted = typeof rating === "number" && rating >= 4
+    ? await autoPromoteIfWinning({
+        iterationRow: {
+          id: updated.id,
+          analysis_json: updated.analysis_json,
+          director_output_json: updated.director_output_json,
+          embedding: updated.embedding,
+          provider: updated.provider,
+        },
+        rating,
+        promotedBy: auth.user.id,
       })
-      .select("id, archetype")
-      .single();
-    if (recipe) auto_promoted = { id: recipe.id, archetype: recipe.archetype, tier };
-  }
+    : null;
 
   return res.status(200).json({ iteration: updated, auto_promoted });
 }

@@ -5,7 +5,9 @@ import {
   refineDirectorPrompt,
   retrieveSimilarIterations,
   retrieveSimilarLosers,
+  retrieveMatchingRecipes,
   getNextIterationNumber,
+  autoPromoteIfWinning,
   DIRECTOR_PROMPT_HASH,
 } from "../../../lib/prompt-lab.js";
 
@@ -60,9 +62,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     .eq("id", iteration_id);
 
-  // Parent embedding carries forward — retrieve similar winners + losers if present.
+  // Mirror rate.ts: if this refine included a 4★/5★ rating, grow the recipe
+  // pool here too. Previously only /rate promoted, so every refine-and-rate
+  // flow missed the promotion.
+  const effectiveRating = typeof rating === "number" ? rating : (prev.rating as number | null);
+  if (typeof effectiveRating === "number" && effectiveRating >= 4) {
+    await autoPromoteIfWinning({
+      iterationRow: {
+        id: prev.id,
+        analysis_json: prev.analysis_json,
+        director_output_json: prev.director_output_json,
+        embedding: prev.embedding,
+        provider: prev.provider,
+      },
+      rating: effectiveRating,
+      promotedBy: auth.user.id,
+    });
+  }
+
+  // Parent embedding carries forward — retrieve similar winners + losers +
+  // matching recipes. Previously this path skipped recipes, so every refine
+  // replanned without the curated promoted-recipe pool (observed 2026-04-24:
+  // iteration 1 had 75% recipe-hit; iteration 2+ dropped to 0-37%). Adding
+  // recipe retrieval here means later iterations in a session finally benefit
+  // from the wisdom the operator promoted on earlier iterations.
   let exemplars: Awaited<ReturnType<typeof retrieveSimilarIterations>> = [];
   let losers: Awaited<ReturnType<typeof retrieveSimilarLosers>> = [];
+  let recipes: Awaited<ReturnType<typeof retrieveMatchingRecipes>> = [];
   let parentVec: number[] | null = null;
   if (Array.isArray(prev.embedding) && prev.embedding.length) {
     parentVec = prev.embedding as number[];
@@ -72,9 +98,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch { /* no-op */ }
   }
   if (parentVec) {
-    [exemplars, losers] = await Promise.all([
+    const parentRoomType = (prev.analysis_json as { room_type?: string } | null)?.room_type ?? null;
+    [exemplars, losers, recipes] = await Promise.all([
       retrieveSimilarIterations(parentVec, { minRating: 4, limit: 5, sessionId: prev.session_id }),
       retrieveSimilarLosers(parentVec, { maxRating: 2, limit: 3, sessionId: prev.session_id }),
+      retrieveMatchingRecipes(parentVec, parentRoomType, { sessionId: prev.session_id }),
     ]);
   }
 
@@ -88,6 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chatInstruction: chat_instruction,
       exemplars,
       losers,
+      recipes,
     });
 
     const iterationNumber = await getNextIterationNumber(prev.session_id);
@@ -116,6 +145,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           parent_iteration_id: prev.id,
           exemplars: exemplars.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
           losers: losers.map((e) => ({ id: e.id, prompt: e.prompt, rating: e.rating, distance: e.distance, room_type: e.room_type, camera_movement: e.camera_movement })),
+          recipe: recipes[0]
+            ? {
+                id: (recipes[0] as { id: string }).id,
+                archetype: (recipes[0] as { archetype: string }).archetype,
+                prompt_template: (recipes[0] as { prompt_template: string }).prompt_template,
+                distance: (recipes[0] as { distance: number }).distance,
+              }
+            : null,
         },
       })
       .select()

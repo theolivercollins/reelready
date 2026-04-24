@@ -479,6 +479,7 @@ export async function refineDirectorPrompt(params: {
   chatInstruction: string;
   exemplars?: RetrievedExemplar[];
   losers?: RetrievedExemplar[];
+  recipes?: RetrievedRecipe[];
 }): Promise<{ scene: DirectorSceneOutput; rationale: string; costCents: number }> {
   const client = new Anthropic();
   const userMessage = `PHOTO ANALYSIS:
@@ -497,6 +498,7 @@ REFINEMENT INSTRUCTION:
 ${params.chatInstruction}
 ${renderExemplarBlock(params.exemplars ?? [])}
 ${renderLoserBlock(params.losers ?? [])}
+${renderRecipeBlock(params.recipes ?? [])}
 
 Remember: the revised output must comply with the full DIRECTOR_SYSTEM rules (below for reference).
 
@@ -753,6 +755,104 @@ export async function finalizeLabRender(params: {
 }
 
 // ---- Session + iteration DB helpers ----
+
+/**
+ * Auto-promote a rated iteration to the recipe pool if it's a 4★ or 5★.
+ * Called by BOTH /api/admin/prompt-lab/rate and /api/admin/prompt-lab/refine
+ * so the recipe pool grows regardless of which button the operator uses.
+ *
+ * - 5★ → primary recipe (normal archetype prefix)
+ * - 4★ → backup recipe ("backup_" archetype prefix, still retrievable)
+ * - <4 → no-op
+ *
+ * Returns null when nothing was promoted (rating < 4, missing data, or
+ * duplicate suppression upstream). Never throws — failure is logged and
+ * silently swallowed so the caller's feedback write still completes.
+ */
+export async function autoPromoteIfWinning(params: {
+  iterationRow: {
+    id: string;
+    analysis_json: PhotoAnalysisResult | null;
+    director_output_json: DirectorSceneOutput | null;
+    embedding: unknown;
+    provider: string | null;
+  };
+  rating: number;
+  promotedBy: string;
+}): Promise<{ id: string; archetype: string; tier: "primary" | "backup" } | null> {
+  const { iterationRow, rating, promotedBy } = params;
+  if (rating < 4 || !iterationRow.analysis_json || !iterationRow.director_output_json) return null;
+
+  const supabase = getSupabase();
+  const tier: "primary" | "backup" = rating === 5 ? "primary" : "backup";
+  const analysis = iterationRow.analysis_json;
+  const director = iterationRow.director_output_json;
+
+  let vec: number[] | null = null;
+  if (Array.isArray(iterationRow.embedding)) vec = iterationRow.embedding as number[];
+  else if (typeof iterationRow.embedding === "string" && iterationRow.embedding.startsWith("[")) {
+    try { vec = JSON.parse(iterationRow.embedding) as number[]; } catch { /* no-op */ }
+  }
+  if (!vec) {
+    const embedded = await embedTextSafe(
+      buildAnalysisText({
+        roomType: analysis.room_type,
+        keyFeatures: analysis.key_features ?? [],
+        composition: analysis.composition,
+        suggestedMotion: analysis.suggested_motion,
+        cameraMovement: director.camera_movement,
+      }),
+    );
+    if (embedded) {
+      vec = embedded.vector;
+      try {
+        await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "embedding",
+          provider: "openai",
+          units_consumed: embedded.usage.totalTokens,
+          unit_type: "tokens",
+          cost_cents: Math.round(embedded.usage.costCents),
+          metadata: {
+            scope: "lab_auto_promote_embedding",
+            model: embedded.model,
+            tokens: embedded.usage.totalTokens,
+            iteration_id: iterationRow.id,
+          },
+        });
+      } catch (costErr) {
+        console.error("[embeddings] cost_events insert failed:", costErr);
+      }
+    }
+  }
+
+  const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+  const slug = Math.random().toString(36).slice(2, 6);
+  const prefix = tier === "backup" ? "backup_" : "";
+  const archetype = `${prefix}${analysis.room_type}_${director.camera_movement}_${stamp}_${slug}`;
+  try {
+    const { data: recipe } = await supabase
+      .from("prompt_lab_recipes")
+      .insert({
+        archetype,
+        room_type: analysis.room_type,
+        camera_movement: director.camera_movement,
+        provider: iterationRow.provider,
+        prompt_template: director.prompt,
+        source_iteration_id: iterationRow.id,
+        rating_at_promotion: rating,
+        promoted_by: promotedBy,
+        embedding: vec ? toPgVector(vec) : null,
+      })
+      .select("id, archetype")
+      .single();
+    if (recipe) return { id: recipe.id as string, archetype: recipe.archetype as string, tier };
+  } catch (err) {
+    console.error("[auto-promote] failed:", err);
+  }
+  return null;
+}
 
 export async function getNextIterationNumber(sessionId: string): Promise<number> {
   const supabase = getSupabase();
