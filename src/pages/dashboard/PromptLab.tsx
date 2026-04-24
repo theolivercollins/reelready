@@ -1125,13 +1125,18 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [prevSibling, nextSibling, navigate]);
 
-  // Auto-refresh every 10s while any iteration has an in-flight render.
+  // Auto-refresh every 10s while any iteration has an in-flight render OR a
+  // pending judge (clip finalized but Gemini judge hasn't run yet — the
+  // poll-judge cron drains at ~5/min so judgments land within ~1-2 minutes).
   useEffect(() => {
     if (!data) return;
-    const anyPending = data.iterations.some(
-      (it) => it.provider_task_id && !it.clip_url && !it.render_error
+    const anyRendering = data.iterations.some(
+      (it) => it.provider_task_id && !it.clip_url && !it.render_error,
     );
-    if (!anyPending) return;
+    const anyJudgePending = data.iterations.some(
+      (it) => it.clip_url && it.judge_rating_overall == null && it.judge_error == null,
+    );
+    if (!anyRendering && !anyJudgePending) return;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") reload();
     }, 10000);
@@ -2038,6 +2043,20 @@ function IterationCard({
           </a>
         </div>
       )}
+
+      {/* Judge pending — clip has landed but judge cron hasn't run yet. */}
+      {iteration.clip_url
+        && iteration.judge_rating_overall == null
+        && iteration.judge_error == null
+        && (
+          <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Judging…
+            </span>
+            <span className="text-muted-foreground/60">Gemini auto-judge runs every minute</span>
+          </div>
+        )}
 
       {/* Judge chip — appears when judge has run (or errored) */}
       {(iteration.judge_rating_overall != null || iteration.judge_error != null) && (
