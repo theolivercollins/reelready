@@ -26,6 +26,20 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
 
   const supabase = getSupabase();
 
+  // Kill-switch: an operator can set system_flags.judge_cron_paused=true to
+  // stop Gemini API calls instantly (no redeploy needed). Check every tick.
+  const { data: flag } = await supabase
+    .from("system_flags")
+    .select("value, reason")
+    .eq("name", "judge_cron_paused")
+    .maybeSingle();
+  if (flag?.value === true) {
+    return res.status(200).json({
+      skipped: true,
+      reason: flag.reason ?? "judge_cron_paused flag is set",
+    });
+  }
+
   const { data: pending, error: selectErr } = await supabase
     .from("prompt_lab_iterations")
     .select(
