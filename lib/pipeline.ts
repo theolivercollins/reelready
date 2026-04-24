@@ -53,17 +53,18 @@ import {
   type MotionHeadroom,
 } from "./providers/gemini-analyzer.js";
 import { mapCameraMovementToHeadroomKey } from "./prompt-lab-listings.js";
+import {
+  selectPhotos,
+  TARGET_SCENE_COUNT,
+  MAX_PER_ROOM_TYPE,
+  REQUIRED_ROOM_TYPES,
+} from "./pipeline/selection.js";
 
+// Used by analyzer batching; keep here since it's only a concern of this file.
 const BATCH_SIZE = 8;
-const TARGET_SCENE_COUNT = 12;
-const MAX_PER_ROOM_TYPE = 2;
-const REQUIRED_ROOM_TYPES: RoomType[] = [
-  "exterior_front",
-  "kitchen",
-  "living_room",
-  "master_bedroom",
-  "bathroom",
-];
+
+// Re-export for any downstream importer that pulls these via lib/pipeline.
+export { TARGET_SCENE_COUNT, MAX_PER_ROOM_TYPE, REQUIRED_ROOM_TYPES };
 
 // ─── MAIN PIPELINE ─────────────────────────────────────────────
 
@@ -354,55 +355,9 @@ async function runAnalysis(propertyId: string, photos: Photo[]): Promise<void> {
     `Analysis done: ${selected.length} selected from ${allResults.length} (${nonViableCount} photos marked non-viable for video)`);
 }
 
-function selectPhotos<A extends PhotoAnalysisResult>(
-  results: Array<{ photo: Photo; analysis: A; provider?: string }>
-): Array<{ photo: Photo; analysis: A; provider?: string }> {
-  // Eligible candidates must (a) not be globally discarded AND (b) be
-  // viable as a video starting frame. Claude's new video_viable flag
-  // catches pretty-but-unusable photos that aesthetic_score can't.
-  const candidates = results.filter(
-    (r) => !r.analysis.suggested_discard && r.analysis.video_viable !== false,
-  );
-  const byRoom = new Map<RoomType, typeof candidates>();
-  for (const c of candidates) {
-    const existing = byRoom.get(c.analysis.room_type) ?? [];
-    existing.push(c);
-    byRoom.set(c.analysis.room_type, existing);
-  }
-  for (const group of byRoom.values()) {
-    group.sort((a, b) => b.analysis.aesthetic_score - a.analysis.aesthetic_score);
-  }
-
-  const selected: typeof candidates = [];
-
-  // Required room types
-  for (const rt of REQUIRED_ROOM_TYPES) {
-    const group = byRoom.get(rt);
-    if (group?.[0] && !selected.some((s) => s.analysis.room_type === rt)) {
-      selected.push(group[0]);
-    }
-  }
-  // Exterior back / aerial
-  for (const rt of ["exterior_back", "aerial"] as RoomType[]) {
-    const group = byRoom.get(rt);
-    if (group?.[0] && !selected.some((s) => s.analysis.room_type === rt)) {
-      selected.push(group[0]);
-    }
-  }
-  // Fill remaining
-  const remaining = candidates
-    .filter((c) => !selected.includes(c))
-    .sort((a, b) => b.analysis.aesthetic_score - a.analysis.aesthetic_score);
-
-  for (const candidate of remaining) {
-    if (selected.length >= TARGET_SCENE_COUNT) break;
-    const count = selected.filter((s) => s.analysis.room_type === candidate.analysis.room_type).length;
-    if (count >= MAX_PER_ROOM_TYPE) continue;
-    selected.push(candidate);
-  }
-
-  return selected;
-}
+// selectPhotos lives in ./pipeline/selection.ts — imported at the top of this
+// file. Prompt Lab's batch-selection endpoint uses the same module so the
+// Lab preview can never drift from the real production selection.
 
 // ─── STAGE 2.5: PROPERTY STYLE GUIDE ──────────────────────────
 // One vision pass over all selected photos produces a structured style

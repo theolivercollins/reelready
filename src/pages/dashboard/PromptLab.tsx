@@ -29,9 +29,12 @@ import {
   rerenderWithProvider,
   rateIteration,
   overrideJudgeRating,
+  fetchBatchSelection,
   type LabSession,
   type LabIteration,
   type JudgeRubricResult,
+  type BatchSelectionResponse,
+  type BatchSelectionItem,
 } from "@/lib/promptLabApi";
 import { HALLUCINATION_FLAGS, type HallucinationFlag } from "../../../lib/prompts/judge-rubric.js";
 import { promoteRecipe } from "@/lib/recipesApi";
@@ -612,6 +615,8 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
                     ))}
                   </div>
 
+                  <ListingSelectionSection batchLabel={batch === "Unbatched" ? null : batch} />
+
                   {visible.length === 0 ? (
                     <div className="rounded border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
                       No sessions in this filter.
@@ -688,6 +693,206 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
       >
         Drop a session here to create a new batch
       </div>
+    </div>
+  );
+}
+
+// Inline "see listing selection" panel — replays the production selectPhotos
+// algorithm on every session in a batch so the operator can see which photos
+// would land in a real listing video and which would be skipped (and why),
+// without having to actually ship the batch through the pipeline.
+function ListingSelectionSection({ batchLabel }: { batchLabel: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<BatchSelectionResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  async function run() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetchBatchSelection(batchLabel);
+      setData(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggle() {
+    if (!open) {
+      setOpen(true);
+      if (!data && !loading) await run();
+    } else {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div className="mb-4 border border-border">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-accent/30 transition"
+      >
+        <span className="flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span className="font-semibold uppercase tracking-[0.12em]">See listing selection</span>
+          {data && (
+            <span className="text-muted-foreground">
+              · {data.selected_count} picked · {data.not_selected_count} skipped · {data.discarded_count} discarded
+              {data.unanalyzed.length > 0 ? ` · ${data.unanalyzed.length} unanalyzed` : ""}
+            </span>
+          )}
+        </span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "" : "-rotate-90"}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-border p-3 text-xs">
+          {loading ? (
+            <div className="flex items-center gap-2 py-6 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Running production selection…
+            </div>
+          ) : error ? (
+            <div className="flex items-start gap-2 py-3 text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{error}</span>
+              <button onClick={run} className="ml-auto underline">Retry</button>
+            </div>
+          ) : !data ? (
+            <div className="py-3 text-muted-foreground">Loading…</div>
+          ) : (
+            <>
+              <p className="mb-3 text-muted-foreground">
+                Target {data.target} scenes · max {data.max_per_room} per room type. Run against each session's cached vision analysis.
+                {data.unanalyzed.length > 0 && (
+                  <> {data.unanalyzed.length} session{data.unanalyzed.length === 1 ? "" : "s"} still need analysis and were excluded.</>
+                )}
+              </p>
+              <div className="grid gap-4 md:grid-cols-3">
+                <SelectionColumn
+                  title="Selected"
+                  count={data.selected_count}
+                  items={data.items.filter((i) => i.status === "selected")}
+                  tone="positive"
+                  onOpenSession={(id) => navigate(`/dashboard/development/prompt-lab/${id}`)}
+                />
+                <SelectionColumn
+                  title="Not selected"
+                  count={data.not_selected_count}
+                  items={data.items.filter((i) => i.status === "not_selected")}
+                  tone="neutral"
+                  onOpenSession={(id) => navigate(`/dashboard/development/prompt-lab/${id}`)}
+                />
+                <SelectionColumn
+                  title="Discarded"
+                  count={data.discarded_count}
+                  items={data.items.filter((i) => i.status === "discarded")}
+                  tone="negative"
+                  onOpenSession={(id) => navigate(`/dashboard/development/prompt-lab/${id}`)}
+                />
+              </div>
+              {data.unanalyzed.length > 0 && (
+                <div className="mt-4 border-t border-border pt-3 text-muted-foreground">
+                  <div className="mb-2 font-semibold uppercase tracking-[0.12em]">
+                    Unanalyzed ({data.unanalyzed.length})
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {data.unanalyzed.map((u) => (
+                      <button
+                        key={u.session_id}
+                        onClick={() => navigate(`/dashboard/development/prompt-lab/${u.session_id}`)}
+                        className="h-10 w-10 overflow-hidden border border-border bg-muted hover:border-foreground"
+                        title={u.label ?? ""}
+                      >
+                        {u.image_url && (
+                          <img src={u.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 flex justify-end">
+                <Button size="sm" variant="outline" onClick={run}>
+                  <Loader2 className={`mr-2 h-3 w-3 ${loading ? "animate-spin" : "hidden"}`} />
+                  Re-run
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SelectionColumn({
+  title,
+  count,
+  items,
+  tone,
+  onOpenSession,
+}: {
+  title: string;
+  count: number;
+  items: BatchSelectionItem[];
+  tone: "positive" | "neutral" | "negative";
+  onOpenSession: (sessionId: string) => void;
+}) {
+  const toneClasses =
+    tone === "positive"
+      ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+      : tone === "negative"
+        ? "border-destructive/40 text-destructive"
+        : "border-border text-muted-foreground";
+
+  return (
+    <div>
+      <div className={`mb-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${toneClasses}`}>
+        {title} ({count})
+      </div>
+      {items.length === 0 ? (
+        <div className="py-3 text-muted-foreground/60">—</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((i) => (
+            <button
+              key={i.session_id}
+              onClick={() => onOpenSession(i.session_id)}
+              className="flex w-full items-start gap-3 border border-border bg-background p-2 text-left transition hover:border-foreground"
+            >
+              <div className="h-14 w-14 shrink-0 overflow-hidden bg-muted">
+                {i.image_url && (
+                  <img src={i.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {i.rank != null && (
+                    <span className="font-mono text-[10px] tabular-nums text-muted-foreground">#{i.rank}</span>
+                  )}
+                  <span className="truncate text-[11px] font-semibold">
+                    {i.room_type ? i.room_type.replace(/_/g, " ") : "?"}
+                  </span>
+                  {i.aesthetic_score != null && (
+                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                      {i.aesthetic_score.toFixed(1)}/10
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 text-[10px] leading-snug text-muted-foreground">{i.reason}</div>
+                {i.label && (
+                  <div className="mt-1 truncate text-[10px] text-muted-foreground/60">{i.label}</div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

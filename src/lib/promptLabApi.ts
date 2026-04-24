@@ -179,6 +179,43 @@ export function rerenderWithProvider(
   });
 }
 
+export type BatchSelectionStatus = "selected" | "not_selected" | "discarded";
+
+export interface BatchSelectionItem {
+  session_id: string;
+  image_url: string | null;
+  label: string | null;
+  room_type: string | null;
+  aesthetic_score: number | null;
+  video_viable: boolean | null;
+  status: BatchSelectionStatus;
+  rank: number | null;
+  reason: string;
+}
+
+export interface BatchSelectionResponse {
+  batch_label: string | null;
+  target: number;
+  max_per_room: number;
+  selected_count: number;
+  discarded_count: number;
+  not_selected_count: number;
+  unanalyzed: Array<{ session_id: string; image_url: string | null; label: string | null }>;
+  items: BatchSelectionItem[];
+}
+
+/**
+ * Runs the production selectPhotos() algorithm against every session in a
+ * batch and returns a per-session verdict with reason. `batchLabel = null`
+ * targets the Unbatched pseudo-group.
+ */
+export function fetchBatchSelection(batchLabel: string | null): Promise<BatchSelectionResponse> {
+  return fetchJSON("/api/admin/prompt-lab/batch-selection", {
+    method: "POST",
+    body: JSON.stringify({ batch_label: batchLabel }),
+  });
+}
+
 export function overrideJudgeRating(
   iterationId: string,
   correctedRatingJson: JudgeRubricResult,
