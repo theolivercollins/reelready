@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAdmin } from "../../lib/auth.js";
 import { getSupabase } from "../../lib/client.js";
+import { formatRowSku } from "../../lib/ledger/formatSku.js";
 
 // GET /api/admin/rating-ledger
 //   ?limit=50&offset=0
@@ -49,12 +50,6 @@ function parseSurfaces(raw: unknown): LedgerSurface[] {
     }
   }
   return allowed.size > 0 ? Array.from(allowed) : ALL_SURFACES;
-}
-
-function providerToSku(provider: string | null): string | null {
-  if (!provider) return null;
-  if (provider === "kling") return "kling-v2-native";
-  return provider;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -115,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise<LedgerRow[]> {
   const { data: iterations, error: iterErr } = await supabase
     .from("prompt_lab_iterations")
-    .select("id, session_id, rating, user_comment, tags, clip_url, provider, embedding, judge_rating_overall, created_at")
+    .select("id, session_id, rating, user_comment, tags, clip_url, provider, model_used, embedding, judge_rating_overall, created_at")
     .not("rating", "is", null);
   if (iterErr) throw iterErr;
 
@@ -139,7 +134,10 @@ async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise
   return (iterations ?? []).map((i): LedgerRow => {
     const session = sessionIndex.get(i.session_id as string);
     const provider = (i.provider as string | null) ?? null;
-    const sku = providerToSku(provider);
+    const { sku, has_model_used } = formatRowSku({
+      modelUsed: (i.model_used as string | null) ?? null,
+      provider,
+    });
     const listingName = session?.label ?? session?.batch_label ?? null;
     return {
       surface: "legacy_lab",
@@ -155,7 +153,7 @@ async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise
       scene_id: null,
       iteration_id: i.id as string,
       has_embedding: i.embedding != null,
-      has_model_used: false,
+      has_model_used,
       recipe_id: null,
       judge_rating_overall: (i.judge_rating_overall as number | null) ?? null,
     };
@@ -212,6 +210,8 @@ async function fetchListingsLab(supabase: ReturnType<typeof getSupabase>): Promi
     const sourceImage = scene ? photoIndex.get(scene.photo_id) ?? null : null;
     const listingName = scene ? listingIndex.get(scene.listing_id) ?? null : null;
     const modelUsed = (i.model_used as string | null) ?? null;
+    const provider = modelUsed ? modelUsed.split("-")[0] : null;
+    const { sku, has_model_used } = formatRowSku({ modelUsed, provider });
     return {
       surface: "listings_lab",
       rated_at: String(i.created_at),
@@ -220,13 +220,13 @@ async function fetchListingsLab(supabase: ReturnType<typeof getSupabase>): Promi
       user_comment: (i.user_comment as string | null) ?? null,
       source_image_url: sourceImage,
       clip_url: (i.clip_url as string | null) ?? null,
-      sku: modelUsed,
-      provider: modelUsed ? modelUsed.split("-")[0] : null,
+      sku,
+      provider,
       listing_name: listingName,
       scene_id: (i.scene_id as string | null) ?? null,
       iteration_id: i.id as string,
       has_embedding: i.embedding != null,
-      has_model_used: modelUsed != null && modelUsed.length > 0,
+      has_model_used,
       recipe_id: null,
       judge_rating_overall: null,
     };
@@ -293,7 +293,12 @@ async function fetchProd(supabase: ReturnType<typeof getSupabase>): Promise<Ledg
     const sourceImage = scene?.photo_id ? photoIndex.get(scene.photo_id) ?? null : null;
     const clipUrl = (r.rated_clip_url as string | null) ?? scene?.clip_url ?? null;
     const provider = (r.rated_provider as string | null) ?? scene?.provider ?? null;
-    const sku = providerToSku(provider);
+    // Prod scenes currently do not denormalize model_used onto scenes or
+    // scene_ratings (see docs/PROJECT-STATE.md — prod pipeline captures only
+    // the coarse provider name on scenes). Once a rated_model_used column is
+    // added, pass it as modelUsed here. Until then, the formatter falls back
+    // to the provider-native SKU and guarantees no "atlas" leak.
+    const { sku, has_model_used } = formatRowSku({ modelUsed: null, provider });
     const ratedAt = String(r.rated_snapshot_at ?? r.updated_at ?? r.created_at);
     const listingName = r.property_id ? propertyIndex.get(r.property_id as string) ?? null : null;
     const hasEmbedding = r.rated_embedding != null || scene?.embedding != null;
@@ -311,7 +316,7 @@ async function fetchProd(supabase: ReturnType<typeof getSupabase>): Promise<Ledg
       scene_id: (r.scene_id as string | null) ?? null,
       iteration_id: r.id as string,
       has_embedding: hasEmbedding,
-      has_model_used: false,
+      has_model_used,
       recipe_id: null,
       judge_rating_overall: null,
     };
