@@ -97,7 +97,7 @@ EVALUATION CRITERIA
    reveal             — camera starts with a FOREGROUND ELEMENT occluding a hero feature, then moves past the foreground to expose the feature. The photo must have an identifiable foreground element (wall edge, column, doorframe, potted plant, counter corner, archway) that the camera can physically pass in front of. If no such foreground element exists in the photo, DO NOT pick reveal — pick push_in or dolly instead.
    drone_push_in      — aerial approach toward the property from a distance (aerial photos only); also the default for shots that WOULD want a drone_pull_back — editor reverses it in post
    top_down           — overhead bird's-eye view showing roofline, pool, or lot geometry (aerial photos only)
-   low_angle_glide    — near-floor horizontal glide making ceilings feel taller (grand entry halls, great rooms with dramatic ceilings)
+   low_angle_glide    — near-floor horizontal glide aimed at a FURNITURE/ARCHITECTURE hero (sectional, fireplace, staircase, kitchen island) at human eye level. The low camera position makes the ceiling APPEAR taller as a side effect — the ceiling is NEVER the target. If the only thing the glide would aim at is the ceiling itself, pick push_in toward the room's primary furniture instead.
    feature_closeup    — extreme close-up on ONE hero feature with shallow depth of field. Use only when the photo frames a single statement element tightly enough that the model can keep the subject in focus and blur everything else: a standalone tub, a pendant chandelier, a fireplace mantel close-up, a chef's range, a vanity faucet, the front door with hardware. DO NOT pick feature_closeup on wide establishing shots — the feature must already dominate the frame.
    rack_focus         — static camera, focus pulls between a near subject and a far subject (or vice versa). Use when the photo clearly has TWO subjects at different depths — a foreground detail and a background hero — and you want to emphasize the spatial relationship without any camera movement. Rare; usually only for interior detail shots with a strong foreground/background pairing.
 
@@ -113,13 +113,26 @@ EVALUATION CRITERIA
    no overhead starting frame for a crane_down to descend from. Use
    push_in, dolly, reveal, or low_angle_glide instead.
 
+   HERO SUBJECT — HARD RULE (overrides everything below):
+   The camera's target must be a piece of furniture or architecture at
+   human eye level that a buyer walks up to. Ceilings, ceiling fans,
+   chandeliers, beams, HVAC, floors, rugs, countertops viewed from above,
+   and art on upper walls are ATMOSPHERIC — they can be mentioned as
+   secondary detail ("under the tray ceiling") but they are NEVER the
+   subject of the motion. motion_rationale must name the hero the camera
+   ends on, and that hero must be a room-defining element (sectional,
+   bed, island, vanity, tub, fireplace, entry door, facade, staircase,
+   pool). If the only striking thing in the photo is a ceiling feature,
+   the photo is weak — mark video_viable=false rather than invent a
+   motion that ends on the ceiling.
+
    Motion-fit rules (strong defaults, use judgment):
    - Kitchen with visible island + ceiling → dolly_left_to_right across the island or push_in toward the island
    - Kitchen tunnel view down the counter → push_in
    - Kitchen side angle showing the full counter length → dolly_left_to_right or dolly_right_to_left
    - Kitchen with an occluding wall/column/corner in the foreground AND a clear hero feature behind → reveal (name the foreground element in motion_rationale)
-   - Living room with coffered/vaulted ceiling → low_angle_glide or push_in
-   - Living room with picture window → low_angle_glide or push_in
+   - Living room with coffered/vaulted/tray ceiling → low_angle_glide or push_in TOWARD the sectional / sofa / fireplace / focal wall (the high ceiling is a side-effect beauty shot, never the target). If the photo has no clear eye-level hero, pick push_in toward whatever grouping IS on the ground.
+   - Living room with picture window → low_angle_glide or push_in toward the seating facing the window (not the window itself, not the ceiling)
    - Master bedroom with bed as focal → push_in toward the bed
    - Bathroom with freestanding tub in tight frame → feature_closeup (shallow DOF) OR push_in toward the tub
    - Bathroom with double vanity → dolly_left_to_right across the vanity
