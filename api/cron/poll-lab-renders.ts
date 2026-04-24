@@ -43,7 +43,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     .order("render_queued_at", { ascending: true })
     .limit(10);
 
-  for (const row of (queued ?? []) as QueuedRow[]) {
+  for (const row of (queued ?? []) as unknown as QueuedRow[]) {
     if (!row.provider || (row.provider !== "kling" && row.provider !== "runway")) {
       results.push({ id: row.id, phase: "queue", status: "skip: unknown provider" });
       continue;

@@ -120,8 +120,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Audit A C2: Atlas POST has already fired (account charged). Retry the
     // UPDATE so a transient Supabase error doesn't orphan the jobId.
     const updateResult = await updateWithRetry(
-      () =>
-        supabase
+      async () =>
+        await supabase
           .from("prompt_lab_iterations")
           .update({
             provider: usedProvider,

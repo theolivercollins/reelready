@@ -237,13 +237,16 @@ describe("pickArm — Thompson converges on truly-better arm", () => {
     // Simulated "truly-best" arm has win-rate 0.8; loser 0.4. We run 200
     // iterations; after each, update the chosen arm with a Bernoulli draw
     // from its "true" rate. Over time, posterior should concentrate on winner.
-    const trueRates: Record<V1AtlasSku, number> = {
+    // Test uses 4 SKUs even though V1AtlasSku was later narrowed to 2 active
+    // slugs — keep the wider Record<string, …> so simulated bandit behavior
+    // against the historical 4-arm setup still typechecks.
+    const trueRates: Record<string, number> = {
       [SKUS.v26]: 0.8,
       [SKUS.master]: 0.4,
       [SKUS.std]: 0.4,
       [SKUS.o3]: 0.4,
     };
-    const state: Record<V1AtlasSku, { alpha: number; beta: number }> = {
+    const state: Record<string, { alpha: number; beta: number }> = {
       [SKUS.v26]: { alpha: 0, beta: 0 },
       [SKUS.master]: { alpha: 0, beta: 0 },
       [SKUS.std]: { alpha: 0, beta: 0 },

@@ -151,15 +151,15 @@ Return ONLY valid JSON matching this schema (no markdown, no prose outside the J
 // Output validator — defensive JSON parsing + schema check.
 // ============================================================================
 
-export interface ValidationOk {
-  ok: true;
-  result: JudgeRubricResult;
+// Flat result shape (not a discriminated union) so callers under the
+// tsconfig.api.json's strict:false narrowing can read both fields without
+// casting. Callers always check `ok` first; `result` / `error` are filled
+// accordingly at construction time.
+export interface ValidationResult {
+  ok: boolean;
+  result?: JudgeRubricResult;
+  error?: string;
 }
-export interface ValidationErr {
-  ok: false;
-  error: string;
-}
-export type ValidationResult = ValidationOk | ValidationErr;
 
 function isIntInRange(v: unknown, lo: number, hi: number): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
