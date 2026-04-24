@@ -35,6 +35,13 @@ export interface LedgerRow {
   recipe_id: string | null;
   /** Judge overall rating (1–5) — only populated for legacy_lab rows where JUDGE_ENABLED ran. */
   judge_rating_overall: number | null;
+  /**
+   * Human-readable order number (e.g. `V1-00001`, `V2-00042`). Present for
+   * every legacy_lab and listings_lab row (backfilled + trigger-assigned
+   * post-migration 041). `null` on prod rows — prod scene_ratings don't use
+   * the order-id scheme.
+   */
+  order_id: string | null;
 }
 
 const ALL_SURFACES: LedgerSurface[] = ["legacy_lab", "listings_lab", "prod"];
@@ -110,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise<LedgerRow[]> {
   const { data: iterations, error: iterErr } = await supabase
     .from("prompt_lab_iterations")
-    .select("id, session_id, rating, user_comment, tags, clip_url, provider, model_used, embedding, judge_rating_overall, created_at")
+    .select("id, session_id, rating, user_comment, tags, clip_url, provider, model_used, embedding, judge_rating_overall, order_id, created_at")
     .not("rating", "is", null);
   if (iterErr) throw iterErr;
 
@@ -156,6 +163,7 @@ async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise
       has_model_used,
       recipe_id: null,
       judge_rating_overall: (i.judge_rating_overall as number | null) ?? null,
+      order_id: (i.order_id as string | null) ?? null,
     };
   });
 }
@@ -163,7 +171,7 @@ async function fetchLegacyLab(supabase: ReturnType<typeof getSupabase>): Promise
 async function fetchListingsLab(supabase: ReturnType<typeof getSupabase>): Promise<LedgerRow[]> {
   const { data: iterations, error: iterErr } = await supabase
     .from("prompt_lab_listing_scene_iterations")
-    .select("id, scene_id, rating, rating_reasons, user_comment, clip_url, model_used, embedding, created_at")
+    .select("id, scene_id, rating, rating_reasons, user_comment, clip_url, model_used, embedding, order_id, created_at")
     .not("rating", "is", null);
   if (iterErr) throw iterErr;
 
@@ -229,6 +237,7 @@ async function fetchListingsLab(supabase: ReturnType<typeof getSupabase>): Promi
       has_model_used,
       recipe_id: null,
       judge_rating_overall: null,
+      order_id: (i.order_id as string | null) ?? null,
     };
   });
 }
@@ -319,6 +328,7 @@ async function fetchProd(supabase: ReturnType<typeof getSupabase>): Promise<Ledg
       has_model_used,
       recipe_id: null,
       judge_rating_overall: null,
+      order_id: null,
     };
   });
 }

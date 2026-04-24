@@ -80,6 +80,8 @@ export interface LabListingIteration {
   rating_reasons: string[];
   archived: boolean;
   created_at: string;
+  /** Human-readable order number (e.g. `V2-00001`) — assigned by DB trigger. */
+  order_id: string | null;
 }
 
 export async function listListings(): Promise<{ listings: LabListing[] }> {
