@@ -7,6 +7,7 @@ import {
   Star,
   Trash2,
   ArrowLeft,
+  ArrowRight,
   Play,
   Sparkles,
   DollarSign,
@@ -170,6 +171,22 @@ function SessionList() {
       if (autoAnalyze) {
         // Kick off analyses in parallel, don't wait — user can watch progress in list.
         await Promise.allSettled(createdIds.map((id) => analyzeSession(id)));
+      }
+
+      // If the operator uploaded several photos with no batch label, offer to
+      // group them. This is the common listing-drop flow — user drags 20
+      // images and doesn't always remember to type a name first.
+      if (!batch && files.length > 1 && createdIds.length > 1) {
+        const makeBatch = window.confirm(
+          `Group these ${createdIds.length} photos into a new batch?`,
+        );
+        if (makeBatch) {
+          const suggested = `Batch · ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+          const name = window.prompt("Name this batch:", suggested)?.trim();
+          if (name) {
+            await Promise.all(createdIds.map((id) => updateSession(id, { batch_label: name })));
+          }
+        }
       }
 
       await reload();
@@ -1042,6 +1059,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [siblings, setSiblings] = useState<LabSession[]>([]);
 
   const reload = useCallback(async () => {
     try {
@@ -1055,6 +1073,57 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Pull every session in the same batch (or the Unbatched pool) so the
+  // operator can flip through them with the left/right arrow keys without
+  // going back to the list. Fetched once per navigation; uses the cheap
+  // sessions-list endpoint the landing page already hits.
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { sessions: all } = await listSessions();
+        if (cancelled) return;
+        const currentKey = (data.session.batch_label ?? "").trim() || null;
+        const batchSiblings = all
+          .filter((s) => {
+            const k = (s.batch_label ?? "").trim() || null;
+            return k === currentKey && !s.archived;
+          })
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        setSiblings(batchSiblings);
+      } catch {
+        // Sibling lookup is best-effort — it only powers keyboard nav. Silent fail.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
+
+  const siblingIndex = siblings.findIndex((s) => s.id === sessionId);
+  const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : null;
+  const nextSibling = siblingIndex >= 0 && siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : null;
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Don't hijack typing / modifier combos.
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const editable = tag === "INPUT" || tag === "TEXTAREA" || (document.activeElement as HTMLElement | null)?.isContentEditable;
+      if (editable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key === "ArrowLeft" && prevSibling) {
+        e.preventDefault();
+        navigate(`/dashboard/development/prompt-lab/${prevSibling.id}`);
+      } else if (e.key === "ArrowRight" && nextSibling) {
+        e.preventDefault();
+        navigate(`/dashboard/development/prompt-lab/${nextSibling.id}`);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prevSibling, nextSibling, navigate]);
 
   // Auto-refresh every 10s while any iteration has an in-flight render.
   useEffect(() => {
@@ -1201,9 +1270,34 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard/development/prompt-lab" className="text-muted-foreground hover:text-foreground">
+          <Link to="/dashboard/development/prompt-lab" className="text-muted-foreground hover:text-foreground" title="Back to list">
             <ArrowLeft className="h-4 w-4" />
           </Link>
+          {siblings.length > 1 && (
+            <div className="flex items-center gap-1 border-l border-border pl-3">
+              <button
+                type="button"
+                onClick={() => prevSibling && navigate(`/dashboard/development/prompt-lab/${prevSibling.id}`)}
+                disabled={!prevSibling}
+                title={prevSibling ? `Previous (←) · ${prevSibling.label ?? "Untitled"}` : "No previous session"}
+                className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <span className="px-1 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {siblingIndex >= 0 ? siblingIndex + 1 : "?"}/{siblings.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => nextSibling && navigate(`/dashboard/development/prompt-lab/${nextSibling.id}`)}
+                disabled={!nextSibling}
+                title={nextSibling ? `Next (→) · ${nextSibling.label ?? "Untitled"}` : "No next session"}
+                className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
+              >
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <div>
             <span className="label text-muted-foreground">— Prompt Lab session</span>
             <EditableLabel
