@@ -327,7 +327,10 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
   const [filters, setFilters] = useState<Record<string, "all" | ShotStatus>>({});
   const [organizeMode, setOrganizeMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [collapsedBatches, setCollapsedBatches] = useState<Set<string>>(new Set());
+  // Batches start collapsed — show as compact widgets, expand on click. Users
+  // asked for this after every session in every batch rendering up-front was
+  // making the Prompt Lab landing page slow and visually busy.
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -350,8 +353,8 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
     });
   }
 
-  function toggleCollapse(batch: string) {
-    setCollapsedBatches((prev) => {
+  function toggleExpand(batch: string) {
+    setExpandedBatches((prev) => {
       const next = new Set(prev);
       if (next.has(batch)) next.delete(batch);
       else next.add(batch);
@@ -554,12 +557,12 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
             <div className="mb-3 flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => toggleCollapse(batch)}
+                  onClick={() => toggleExpand(batch)}
                   className="p-1 text-muted-foreground hover:text-foreground transition"
-                  title={collapsedBatches.has(batch) ? "Expand" : "Collapse"}
+                  title={expandedBatches.has(batch) ? "Collapse" : "Expand"}
                 >
                   <ChevronDown
-                    className={`h-4 w-4 transition-transform ${collapsedBatches.has(batch) ? "-rotate-90" : ""}`}
+                    className={`h-4 w-4 transition-transform ${expandedBatches.has(batch) ? "" : "-rotate-90"}`}
                   />
                 </button>
                 <BatchTitle label={batch} onRename={(v) => renameBatch(batch, v)} />
@@ -573,13 +576,13 @@ function BatchGroups({ sessions, onReload, showArchived, setShowArchived }: { se
                 )}
               </div>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {collapsedBatches.has(batch) ? `${counts.all} sessions · ` : ""}
+                {!expandedBatches.has(batch) ? `${counts.all} sessions · ` : ""}
                 {counts.completed}/{counts.all} completed
                 {avgRating ? ` · avg ${avgRating.toFixed(1)}★` : ""}
               </span>
             </div>
 
-            {!collapsedBatches.has(batch) && (
+            {expandedBatches.has(batch) && (
               <>
                 <div className="mb-3 flex flex-wrap gap-1">
                   {(
