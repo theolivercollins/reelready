@@ -166,6 +166,8 @@ Other fields follow existing real-estate conventions:
 - suggested_motion: one of push_in, orbit, parallax, dolly_left_to_right, dolly_right_to_left, reveal, drone_push_in, top_down, low_angle_glide, feature_closeup, rack_focus — or null if not video_viable. MUST correspond to a motion_headroom value that is true. If suggested_motion would be push_in but motion_headroom.push_in is false, pick a different in-headroom motion or leave suggested_motion null.
 - motion_rationale: one short sentence (under 15 words) explaining why the motion fits, naming a specific feature.
 
+HERO SUBJECT — HARD RULE: the camera's target (the thing motion_rationale ends on) must be a piece of FURNITURE or ARCHITECTURE at human eye level — a sectional, bed, island, vanity, tub, fireplace, staircase, facade, entry door, pool, or similar. CEILINGS, ceiling fans, chandeliers, beams, HVAC, floors, rugs, and art on upper walls are ATMOSPHERIC context only — they are NEVER the subject of the motion. low_angle_glide is a camera position (near-floor) aimed at an eye-level hero; the high ceiling APPEARS taller as a side effect but is never what the camera ends on. If the only striking thing in the photo is a ceiling feature, set video_viable=false rather than invent a motion that targets the ceiling.
+
 NEVER emit pull_out, drone_pull_back, slow_pan, orbital_slow, tilt_up, tilt_down, crane_up, or crane_down in suggested_motion — all removed from the vocabulary.`;
 
 // ─── Response schema ────────────────────────────────────────────────────
