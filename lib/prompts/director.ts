@@ -98,13 +98,16 @@ upward tilt) is allowed and encouraged — it adds dimensionality. The
 distinction is the TERMINAL FRAMING: a shot that ends staring at the
 ceiling is bad; a shot that rises slightly as it orbits is fine.
 
-PUSH_IN sub-variants:
-- Straight Push → "slow cinematic straight push centered on [subject]"
+PUSH_IN sub-variants (2026-04-24: phrasing switched from "straight push" to
+"push in" — the data showed "straight push" was ambiguous to Kling v2-master
+and v2.6-pro, which interpret it as a 2D zoom instead of a 3D camera push.
+"push in" is the canonical i2v motion verb and reads as forward dolly):
+- Straight Push → "slow cinematic push in toward [subject]"
   Simple smooth perfectly centered forward motion. Use grid-line framing.
-- Straight Push Curve → "slow cinematic straight push with gentle curve toward [subject]"
-  A straight push that uses a gentle lateral curve (as if a camera operator's wrist
+- Straight Push Curve → "slow cinematic push in with gentle curve toward [subject]"
+  A push-in that uses a gentle lateral curve (as if a camera operator's wrist
   gently swept). Adds a touch of dimensionality without breaking the forward line.
-- Straight Push with Rise → "slow cinematic straight push rising upward toward [subject]"
+- Straight Push with Rise → "slow cinematic push in rising upward toward [subject]"
   Forward push combined with a subtle upward vertical rise. The rise is
   secondary — the forward motion dominates. Do not end on a ceiling.
 
@@ -182,10 +185,10 @@ MUST match the shape of these legacy winners, not the verbose
 multi-sentence style that retrieval examples might appear to permit.
 
 LEGACY 5★ EXAMPLES (this is the shape — copy it):
-- "slow cinematic straight push with gentle curve centered on the arched entry portico and dark wood front door" (108 chars)
+- "slow cinematic push in with gentle curve centered on the arched entry portico and dark wood front door" (102 chars)
 - "smooth cinematic drone rising backward and upward from the white three-story beachfront home toward the turquoise Gulf coastline" (128 chars)
-- "slow cinematic straight push with gentle curve into the kitchen through the open pocket slider wall" (99 chars)
-- "slow cinematic straight push with gentle curve left toward the bar-height Adirondack dining set and canal view beyond" (117 chars)
+- "slow cinematic push in with gentle curve into the kitchen through the open pocket slider wall" (94 chars)
+- "slow cinematic push in with gentle curve left toward the bar-height Adirondack dining set" (89 chars)
 
 HARD LENGTH RULES:
 - Single-image scene (end_photo_id is null or omitted): prompt MUST be ≤ 120 characters.

@@ -40,6 +40,7 @@ import {
 import { HALLUCINATION_FLAGS, type HallucinationFlag } from "../../../lib/prompts/judge-rubric.js";
 import { promoteRecipe } from "@/lib/recipesApi";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
+import { surfaceAffinityForPick } from "../../../lib/providers/sku-motion-affinity.js";
 
 // Per-clip cost (5s render). Atlas SKUs match ATLAS_MODELS.priceCentsPerClip
 // in lib/providers/atlas.ts. "kling-v2-native" and "runway-gen4-native" are
@@ -909,6 +910,48 @@ function SelectionColumn({
             </button>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// Inline "this SKU is a bad/good fit for this motion" hint. Reads the
+// hand-curated + data-backed affinity table; renders nothing when there's no
+// opinion for the motion, so untested motions stay silent instead of showing
+// a noisy "neutral" badge.
+function SkuAffinityHint({
+  cameraMovement,
+  sku,
+  onPickSuggested,
+}: {
+  cameraMovement: string | null | undefined;
+  sku: string | null | undefined;
+  onPickSuggested: (sku: string) => void;
+}) {
+  const hint = surfaceAffinityForPick({ cameraMovement, sku });
+  if (!hint) return null;
+  if (hint.verdict === "neutral") return null;
+
+  const isAvoid = hint.verdict === "avoid";
+  const tone = isAvoid
+    ? "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-300"
+    : "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300";
+
+  return (
+    <div className={`flex flex-wrap items-start gap-2 rounded border px-2 py-1.5 text-[11px] ${tone}`}>
+      <span className="font-semibold uppercase tracking-wider">
+        {isAvoid ? "⚠ bad fit" : "✓ best fit"}
+      </span>
+      <span className="flex-1 leading-snug">{hint.message}</span>
+      {isAvoid && hint.suggested_sku && (
+        <button
+          type="button"
+          onClick={() => onPickSuggested(hint.suggested_sku!)}
+          className="shrink-0 rounded border border-foreground/20 bg-background px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider hover:bg-foreground hover:text-background"
+          title={hint.evidence}
+        >
+          Use {hint.suggested_sku}
+        </button>
       )}
     </div>
   );
@@ -2165,6 +2208,11 @@ function IterationCard({
               {isNativeKlingSku(sku) ? "credits" : `≈ $${(V1_SKU_COST_CENTS[sku] / 100).toFixed(2)}/5s`}
             </span>
           </div>
+          <SkuAffinityHint
+            cameraMovement={(director as { camera_movement?: string } | null)?.camera_movement ?? null}
+            sku={sku}
+            onPickSuggested={(s) => setSku(s as SkuChoice)}
+          />
           {showAdvancedProvider ? (
             <div className="flex items-center gap-1">
               <select
