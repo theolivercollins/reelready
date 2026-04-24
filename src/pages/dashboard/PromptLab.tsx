@@ -39,6 +39,7 @@ import {
 } from "@/lib/promptLabApi";
 import { HALLUCINATION_FLAGS, type HallucinationFlag } from "../../../lib/prompts/judge-rubric.js";
 import { promoteRecipe } from "@/lib/recipesApi";
+import { supabase } from "@/lib/supabase";
 import { V1_ATLAS_SKUS, V1_DEFAULT_SKU, type V1AtlasSku } from "../../../lib/providers/router.js";
 import { surfaceAffinityForPick } from "../../../lib/providers/sku-motion-affinity.js";
 
@@ -1928,40 +1929,92 @@ function IterationCard({
   const [chat, setChat] = useState("");
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
-  // Auto-save feedback on every change (debounced 1.5s) so operator feedback
-  // can't be lost to navigating away without clicking "Save rating". Skips
-  // the initial mount so we don't immediately re-save the iteration's
-  // already-persisted state.
+  // Auto-save feedback so operator feedback can't be lost — normal typing
+  // triggers a 1.5s debounce; unmount, tab-hidden, and textarea blur all
+  // force an immediate flush. The flush on unmount uses fetch keepalive so
+  // it survives even if the browser is closing the tab.
   const hasMountedRef = useRef(false);
+  const ratingRef = useRef(rating);
+  const tagsRef = useRef(tags);
+  const commentRef = useRef(comment);
+  const lastSavedRef = useRef({
+    rating: iteration.rating,
+    tags: iteration.tags ?? [],
+    comment: iteration.user_comment ?? "",
+  });
+  useEffect(() => { ratingRef.current = rating; }, [rating]);
+  useEffect(() => { tagsRef.current = tags; }, [tags]);
+  useEffect(() => { commentRef.current = comment; }, [comment]);
+
+  const isDirty = useCallback(() => {
+    const s = lastSavedRef.current;
+    const ratingEq = s.rating === ratingRef.current;
+    const tagsEq = JSON.stringify([...s.tags].sort()) === JSON.stringify([...tagsRef.current].sort());
+    const commentEq = s.comment === commentRef.current;
+    return !(ratingEq && tagsEq && commentEq);
+  }, []);
+
+  const flushSave = useCallback(async (useKeepalive: boolean) => {
+    if (!isDirty()) return;
+    const body = {
+      iteration_id: iteration.id,
+      rating: ratingRef.current,
+      tags: tagsRef.current.length > 0 ? tagsRef.current : null,
+      comment: commentRef.current.trim() ? commentRef.current : null,
+    };
+    try {
+      if (useKeepalive) {
+        // Fire-and-forget via fetch keepalive — survives page unload / tab close.
+        // Skip auth header: browser will send cookies, server requireAdmin
+        // accepts session cookies in addition to bearer tokens.
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+        fetch("/api/admin/prompt-lab/rate", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          keepalive: true,
+        }).catch(() => { /* best-effort during unload */ });
+      } else {
+        await rateIteration(body);
+      }
+      lastSavedRef.current = {
+        rating: ratingRef.current,
+        tags: [...tagsRef.current],
+        comment: commentRef.current,
+      };
+      setAutoSaveState("saved");
+      setTimeout(() => setAutoSaveState("idle"), 2000);
+    } catch {
+      setAutoSaveState("error");
+    }
+  }, [iteration.id, isDirty]);
+
+  // Debounced save on every change (1.5s after last edit).
   useEffect(() => {
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
       return;
     }
-    // No-op if nothing to save (prevents hitting the API when user hasn't
-    // touched anything meaningful).
-    const sameRating = rating === iteration.rating;
-    const sameTags = JSON.stringify([...tags].sort()) === JSON.stringify([...(iteration.tags ?? [])].sort());
-    const sameComment = comment === (iteration.user_comment ?? "");
-    if (sameRating && sameTags && sameComment) return;
-
+    if (!isDirty()) return;
     setAutoSaveState("saving");
-    const handle = setTimeout(async () => {
-      try {
-        await rateIteration({
-          iteration_id: iteration.id,
-          rating: rating,
-          tags: tags.length > 0 ? tags : null,
-          comment: comment.trim() ? comment : null,
-        });
-        setAutoSaveState("saved");
-        setTimeout(() => setAutoSaveState("idle"), 2000);
-      } catch {
-        setAutoSaveState("error");
-      }
-    }, 1500);
+    const handle = setTimeout(() => { flushSave(false); }, 1500);
     return () => clearTimeout(handle);
-  }, [rating, tags, comment, iteration.id, iteration.rating, iteration.tags, iteration.user_comment]);
+  }, [rating, tags, comment, isDirty, flushSave]);
+
+  // Flush on unmount (navigate within app) + tab hide / page unload.
+  useEffect(() => {
+    const onHidden = () => { if (document.visibilityState === "hidden") flushSave(true); };
+    const onPageHide = () => flushSave(true);
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", onPageHide);
+      flushSave(true);
+    };
+  }, [flushSave]);
   const [renderForReal, setRenderForReal] = useState(false);
   const [providerChoice, setProviderChoice] = useState<"auto" | "kling" | "runway">("auto");
   const [showAdvancedProvider, setShowAdvancedProvider] = useState(false);
@@ -2366,6 +2419,7 @@ function IterationCard({
             <Textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
+              onBlur={() => flushSave(false)}
               placeholder="Anything you want to remember about this iteration"
               className="mt-2 min-h-[60px]"
             />
