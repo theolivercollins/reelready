@@ -4,8 +4,11 @@ import { Loader2, AlertTriangle, RefreshCw, ChevronDown, ExternalLink, ArrowLeft
 import {
   fetchSystemStatus,
   fetchSkuAffinity,
+  setSystemFlag,
   type SystemStatusResponse,
   type SystemStatusEvent,
+  type SystemStatusFeedbackRow,
+  type SystemStatusFlag,
   type SkuAffinityResponse,
 } from "@/lib/systemStatusApi";
 
@@ -75,6 +78,7 @@ export default function SystemStatus() {
       ) : status ? (
         <>
           <BudgetBar budget={status.budget} />
+          <KillSwitchSection flags={status.system_flags} onReload={reload} />
           <AlertsSection
             regressions={status.recent_regressions}
             queues={status.queues}
@@ -83,6 +87,7 @@ export default function SystemStatus() {
           <ProviderSummarySection rows={status.provider_summary} />
           <QueuesSection queues={status.queues} />
           <AffinitySection affinity={affinity} />
+          <FeedbackLogSection rows={status.feedback_log} />
           <LiveFeedSection events={status.events} />
         </>
       ) : null}
@@ -390,6 +395,160 @@ function LiveFeedSection({ events }: { events: SystemStatusEvent[] }) {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+// ── Kill-switch toggles ─────────────────────────────────────
+
+function KillSwitchSection({ flags, onReload }: { flags: SystemStatusFlag[]; onReload: () => void }) {
+  const [pending, setPending] = useState<string | null>(null);
+  if (flags.length === 0) return null;
+
+  async function toggle(flag: SystemStatusFlag) {
+    const nextValue = !flag.value;
+    const reason = nextValue
+      ? window.prompt(`Why pause "${flag.name}"?`, "operator manual pause") ?? undefined
+      : "operator unpaused";
+    setPending(flag.name);
+    try {
+      await setSystemFlag(flag.name, nextValue, reason);
+      await onReload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  return (
+    <section>
+      <div className="label text-muted-foreground">Kill switches</div>
+      <div className="mt-3 space-y-2">
+        {flags.map((f) => (
+          <div
+            key={f.name}
+            className={`flex flex-wrap items-center gap-3 border px-4 py-3 text-sm ${
+              f.value ? "border-amber-500/40 bg-amber-500/5" : "border-border bg-background"
+            }`}
+          >
+            <span className="font-mono font-medium">{f.name}</span>
+            <span className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+              f.value ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                      : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+            }`}>
+              {f.value ? "PAUSED" : "RUNNING"}
+            </span>
+            {f.reason && <span className="text-muted-foreground text-xs">"{f.reason}"</span>}
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              set {new Date(f.set_at).toLocaleString()}
+            </span>
+            <button
+              onClick={() => toggle(f)}
+              disabled={pending === f.name}
+              className="shrink-0 border border-foreground/40 bg-background px-3 py-1 text-xs hover:bg-foreground hover:text-background transition"
+            >
+              {pending === f.name ? "…" : f.value ? "Resume" : "Pause"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ── Feedback log (line-by-line) ─────────────────────────────
+
+function FeedbackLogSection({ rows }: { rows: SystemStatusFeedbackRow[] }) {
+  const [filter, setFilter] = useState<"all" | "rated" | "tagged" | "commented" | "refined">("all");
+
+  const filtered = rows.filter((r) => {
+    if (filter === "rated") return r.rating != null;
+    if (filter === "tagged") return r.tags.length > 0;
+    if (filter === "commented") return !!r.user_comment;
+    if (filter === "refined") return !!r.refinement_instruction;
+    return true;
+  });
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between">
+        <div className="label text-muted-foreground">Feedback log — last 100 iterations with any saved feedback</div>
+        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+          {(["all","rated","tagged","commented","refined"] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setFilter(k)}
+              className={`rounded-full border px-2 py-0.5 transition ${
+                filter === k ? "border-foreground bg-foreground text-background" : "border-border hover:border-foreground"
+              }`}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="mt-3 border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          No feedback matching filter.
+        </div>
+      ) : (
+        <div className="mt-3 space-y-1">
+          {filtered.map((r) => (
+            <div key={r.iteration_id} className="border border-border bg-background px-3 py-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {new Date(r.created_at).toLocaleString()}
+                </span>
+                {r.order_id && (
+                  <Link
+                    to={`/dashboard/development/prompt-lab/${r.session_id ?? ""}`}
+                    className="font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground underline"
+                    title="Open session"
+                  >
+                    {r.order_id}
+                  </Link>
+                )}
+                {r.model_used && (
+                  <span className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    {r.model_used}
+                  </span>
+                )}
+                {r.rating != null && (
+                  <span className={`inline-flex items-center gap-0.5 font-medium ${
+                    r.rating >= 4 ? "text-emerald-700 dark:text-emerald-300"
+                    : r.rating <= 2 ? "text-destructive"
+                    : "text-muted-foreground"
+                  }`}>
+                    {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
+                  </span>
+                )}
+                {r.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {r.tags.map((t) => (
+                      <span key={t} className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {r.user_comment && (
+                <div className="mt-1 leading-snug text-muted-foreground">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">note: </span>
+                  {r.user_comment}
+                </div>
+              )}
+              {r.refinement_instruction && (
+                <div className="mt-1 leading-snug text-muted-foreground">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">refine: </span>
+                  {r.refinement_instruction}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

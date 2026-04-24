@@ -28,6 +28,25 @@ export interface SystemStatusRegression {
   example_prompt: string | null;
 }
 
+export interface SystemStatusFeedbackRow {
+  iteration_id: string;
+  order_id: string | null;
+  created_at: string;
+  rating: number | null;
+  tags: string[];
+  user_comment: string | null;
+  refinement_instruction: string | null;
+  session_id: string | null;
+  model_used: string | null;
+}
+
+export interface SystemStatusFlag {
+  name: string;
+  value: boolean;
+  reason: string | null;
+  set_at: string;
+}
+
 export interface SystemStatusResponse {
   generated_at: string;
   events: SystemStatusEvent[];
@@ -44,6 +63,20 @@ export interface SystemStatusResponse {
     last_7d_cents: number;
     last_30d_cents: number;
   };
+  feedback_log: SystemStatusFeedbackRow[];
+  system_flags: SystemStatusFlag[];
+}
+
+export async function setSystemFlag(name: string, value: boolean, reason?: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+  const res = await fetch("/api/admin/system-flags", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ name, value, reason }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {

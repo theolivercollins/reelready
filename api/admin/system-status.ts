@@ -155,6 +155,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sumCents = (rows?: Array<{ cost_cents: number | null }> | null) =>
       (rows ?? []).reduce((s, r) => s + (typeof r.cost_cents === "number" ? r.cost_cents : 0), 0);
 
+    // 6) Feedback log — line-by-line timeline of every iteration that has any
+    // operator feedback (rating, tags, comment, refinement_instruction).
+    // Gives the operator a "did my ratings save?" audit view without SQL.
+    const { data: feedbackRows } = await supabase
+      .from("prompt_lab_iterations")
+      .select("id, order_id, created_at, rating, tags, user_comment, refinement_instruction, session_id, model_used")
+      .or("rating.not.is.null,tags.not.is.null,user_comment.not.is.null,refinement_instruction.not.is.null")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    const feedback_log = (feedbackRows ?? []).map((r) => ({
+      iteration_id: r.id as string,
+      order_id: (r.order_id as string | null) ?? null,
+      created_at: r.created_at as string,
+      rating: (r.rating as number | null) ?? null,
+      tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
+      user_comment: (r.user_comment as string | null) ?? null,
+      refinement_instruction: (r.refinement_instruction as string | null) ?? null,
+      session_id: (r.session_id as string | null) ?? null,
+      model_used: (r.model_used as string | null) ?? null,
+    }));
+
+    // 7) System flags state — exposes kill-switches so the UI can render a
+    // toggle.
+    const { data: flagRows } = await supabase
+      .from("system_flags")
+      .select("name, value, reason, set_at");
+    const system_flags = (flagRows ?? []).map((r) => ({
+      name: r.name as string,
+      value: !!r.value,
+      reason: (r.reason as string | null) ?? null,
+      set_at: r.set_at as string,
+    }));
+
     return res.status(200).json({
       generated_at: new Date().toISOString(),
       events: events ?? [],
@@ -166,6 +199,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         last_7d_cents: sumCents(rows7d),
         last_30d_cents: sumCents(rows30d),
       },
+      feedback_log,
+      system_flags,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
