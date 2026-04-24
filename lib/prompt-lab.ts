@@ -14,6 +14,7 @@ import {
   type DirectorOutput,
   type DirectorSceneOutput,
 } from "./prompts/director.js";
+import { sanitizeDirectorPrompt } from "./prompts/sanitize-director.js";
 import { computeClaudeCost } from "./utils/claude-cost.js";
 import { selectProvider, resolveDecision, resolveDecisionAsync } from "./providers/router.js";
 import type { ThompsonDecision } from "./providers/thompson-router.js";
@@ -436,6 +437,13 @@ export async function directSinglePhoto(
   const parsed: DirectorOutput = JSON.parse(jsonMatch[0]);
   const scene = parsed.scenes?.[0];
   if (!scene) throw new Error("Director returned no scenes");
+  // Hard guard: soft guidance in DIRECTOR_SYSTEM was leaking "beyond"/"through"
+  // into ~22% of prod prompts (audit 2026-04-24). Enforce the ban post-parse.
+  const { cleaned, edits } = sanitizeDirectorPrompt(scene.prompt, scene.camera_movement);
+  if (edits.length > 0) {
+    console.warn(`[director] sanitized prompt (${photoId}): ${edits.join("; ")}`);
+    scene.prompt = cleaned;
+  }
   const usageCost = computeClaudeCost(response.usage as never, DIRECT_MODEL);
   return { scene, costCents: Math.round(usageCost.costCents) };
 }
@@ -511,12 +519,19 @@ ${(await resolveDirectorSystem()).body}`;
     duration_seconds: number;
     rationale: string;
   };
+  const { cleaned: cleanedRefinePrompt, edits: refineEdits } = sanitizeDirectorPrompt(
+    parsed.prompt,
+    parsed.camera_movement,
+  );
+  if (refineEdits.length > 0) {
+    console.warn(`[refine] sanitized prompt: ${refineEdits.join("; ")}`);
+  }
   const scene: DirectorSceneOutput = {
     scene_number: params.previousScene.scene_number,
     photo_id: params.previousScene.photo_id,
     room_type: params.previousScene.room_type,
     camera_movement: parsed.camera_movement,
-    prompt: parsed.prompt,
+    prompt: cleanedRefinePrompt,
     duration_seconds: parsed.duration_seconds ?? 4,
     provider_preference: null,
   };
