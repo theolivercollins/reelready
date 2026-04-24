@@ -6,7 +6,8 @@
     { "path": "/api/cron/poll-scenes", "schedule": "* * * * *" },
     { "path": "/api/cron/poll-lab-renders", "schedule": "* * * * *" },
     { "path": "/api/cron/poll-listing-iterations", "schedule": "* * * * *" },
-    { "path": "/api/cron/poll-listing-lifecycle", "schedule": "* * * * *" }
+    { "path": "/api/cron/poll-listing-lifecycle", "schedule": "* * * * *" },
+    { "path": "/api/cron/poll-judge", "schedule": "* * * * *" }
   ],
   "routes": [
     { "handle": "filesystem" },
