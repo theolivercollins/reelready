@@ -99,12 +99,19 @@ export interface AffinityPickHint {
  * describing whether it matches the learned affinity. Returns null when we
  * have no opinion — callers should hide the warning chip entirely in that
  * case rather than show a neutral "all good" badge.
+ *
+ * `liveRules` lets the caller pass in fresh DB-backed rules (fetched from
+ * /api/admin/sku-affinity) so the hint reflects the nightly refresh. When
+ * omitted or empty, falls back to the static seed in this file.
  */
 export function surfaceAffinityForPick(input: {
   cameraMovement: string | null | undefined;
   sku: string | null | undefined;
+  liveRules?: AffinityRule[] | null;
 }): AffinityPickHint | null {
-  const rule = getAffinityRule(input.cameraMovement);
+  const rule = (input.liveRules && input.liveRules.length > 0
+    ? input.liveRules.find((r) => r.camera_movement === input.cameraMovement) ?? null
+    : null) ?? getAffinityRule(input.cameraMovement);
   if (!rule) return null;
   const sku = input.sku ?? "";
   if (!sku) return null;
