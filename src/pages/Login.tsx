@@ -4,15 +4,19 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { Mail, ArrowRight, ArrowLeft, CheckCircle2, Loader2, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { Wordmark } from "@/components/brand/Wordmark";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
+type AuthMode = "password" | "magic";
+
 export default function Login() {
-  const { user, profile, loading, signInWithMagicLink } = useAuth();
+  const { user, profile, loading, signInWithMagicLink, signInWithPassword } = useAuth();
+  const [mode, setMode] = useState<AuthMode>("password");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -27,10 +31,15 @@ export default function Login() {
     setError("");
     setSubmitting(true);
     try {
-      await signInWithMagicLink(email);
-      setSent(true);
+      if (mode === "password") {
+        await signInWithPassword(email, password);
+        // onAuthStateChange will redirect via the Navigate above.
+      } else {
+        await signInWithMagicLink(email);
+        setSent(true);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send magic link");
+      setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
       setSubmitting(false);
     }
@@ -85,7 +94,9 @@ export default function Login() {
             Welcome back.
           </h2>
           <p className="mt-3 text-sm text-muted-foreground">
-            Enter your email — we'll send a one-time link.
+            {mode === "password"
+              ? "Enter your email and password."
+              : "Enter your email — we'll send a one-time link."}
           </p>
 
           {sent ? (
@@ -134,24 +145,64 @@ export default function Login() {
                 </div>
               </div>
 
+              {mode === "password" && (
+                <div>
+                  <Label htmlFor="password" className="label text-muted-foreground">
+                    Password
+                  </Label>
+                  <div className="relative mt-3">
+                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="pl-11"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div className="border border-destructive/40 bg-destructive/5 p-4">
                   <p className="text-xs text-destructive">{error}</p>
                 </div>
               )}
 
-              <Button type="submit" size="lg" className="w-full" disabled={submitting || !email}>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={submitting || !email || (mode === "password" && !password)}
+              >
                 {submitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Sending
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {mode === "password" ? "Signing in" : "Sending"}
                   </>
                 ) : (
                   <>
-                    Send magic link
+                    {mode === "password" ? "Sign in" : "Send magic link"}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
               </Button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setMode(mode === "password" ? "magic" : "password");
+                }}
+                className="block w-full text-center text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+              >
+                {mode === "password"
+                  ? "Use magic link instead"
+                  : "Use password instead"}
+              </button>
 
               <p className="text-center text-xs text-muted-foreground">
                 Don't have an account?{" "}

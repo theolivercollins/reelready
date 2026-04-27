@@ -25,6 +25,12 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signInWithMagicLink: (email: string) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (
+    email: string,
+    password: string,
+    meta?: { first_name?: string; last_name?: string; brokerage?: string }
+  ) => Promise<{ requiresConfirmation: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -35,6 +41,8 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: true,
   signInWithMagicLink: async () => {},
+  signInWithPassword: async () => {},
+  signUpWithPassword: async () => ({ requiresConfirmation: false }),
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -116,6 +124,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   }
 
+  async function signInWithPassword(email: string, password: string) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }
+
+  async function signUpWithPassword(
+    email: string,
+    password: string,
+    meta?: { first_name?: string; last_name?: string; brokerage?: string }
+  ): Promise<{ requiresConfirmation: boolean }> {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: meta || {},
+        emailRedirectTo: AUTH_CALLBACK_URL,
+      },
+    });
+    if (error) throw error;
+    // If a session is returned, confirmation is not required (Supabase project setting).
+    return { requiresConfirmation: !data.session };
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     setUser(null);
@@ -125,7 +156,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, signInWithMagicLink, signOut, refreshProfile }}
+      value={{
+        user,
+        profile,
+        session,
+        loading,
+        signInWithMagicLink,
+        signInWithPassword,
+        signUpWithPassword,
+        signOut,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>
