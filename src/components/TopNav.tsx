@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -36,7 +37,6 @@ import { ThemeToggle } from "@/components/brand/ThemeToggle";
 const dashboardNav = [
   { to: "/dashboard", label: "Overview", icon: LayoutGrid, end: true },
   { to: "/dashboard/pipeline", label: "Pipeline", icon: GitBranch },
-  { to: "/dashboard/properties", label: "Listings", icon: Building2 },
   { to: "/dashboard/logs", label: "Logs", icon: FileText },
   { to: "/dashboard/finances", label: "Finances", icon: DollarSign },
   { to: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
@@ -95,9 +95,10 @@ function DevelopmentNav() {
   );
 }
 
-function CustomListingsNav() {
+function ListingsNav() {
   const location = useLocation();
   const active =
+    location.pathname.startsWith("/dashboard/properties") ||
     location.pathname.startsWith("/dashboard/clients") ||
     location.pathname.startsWith("/dashboard/listings");
   return (
@@ -109,12 +110,26 @@ function CustomListingsNav() {
             active ? "text-foreground after:absolute after:inset-x-0 after:bottom-[-1px] after:h-[1px] after:bg-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <LayoutTemplate className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Custom Listings
+          <Building2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Listings
           <ChevronDown className="h-3 w-3 opacity-70" strokeWidth={1.5} />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/properties" className="cursor-pointer">
+            <Building2 className="mr-2 h-3.5 w-3.5" /> All Listings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Custom Listings
+        </DropdownMenuLabel>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/listings/new" className="cursor-pointer">
+            <LayoutTemplate className="mr-2 h-3.5 w-3.5" /> New Custom Page
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/dashboard/clients" className="cursor-pointer">
             <Users className="mr-2 h-3.5 w-3.5" /> Clients
@@ -123,11 +138,6 @@ function CustomListingsNav() {
         <DropdownMenuItem asChild>
           <Link to="/dashboard/clients/new" className="cursor-pointer">
             <Users className="mr-2 h-3.5 w-3.5" /> Add Client
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/dashboard/listings/new" className="cursor-pointer">
-            <LayoutTemplate className="mr-2 h-3.5 w-3.5" /> New Listing Page
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -189,8 +199,8 @@ export function TopNav() {
                 {label}
               </NavLink>
             ))}
+            <ListingsNav />
             <DevelopmentNav />
-            <CustomListingsNav />
             {dashboardNav.slice(-1).map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
