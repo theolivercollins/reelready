@@ -122,6 +122,40 @@ function PublishModal({
 }
 
 // ────────────────────────────────────────────────────────────
+// Normalize a pasted video URL into an iframe-embeddable form.
+// YouTube watch URLs and Vimeo page URLs cannot be iframed directly —
+// they refuse the connection. Convert them to their embed equivalents.
+// ────────────────────────────────────────────────────────────
+
+function normalizeVideoUrl(raw: string): string {
+  const url = raw.trim();
+  if (!url) return "";
+
+  // youtu.be/<id>?... → youtube.com/embed/<id>
+  const ytShort = url.match(/^https?:\/\/youtu\.be\/([A-Za-z0-9_-]{11})/);
+  if (ytShort) return `https://www.youtube.com/embed/${ytShort[1]}`;
+
+  // youtube.com/watch?v=<id>&...
+  const ytWatch = url.match(/^https?:\/\/(?:www\.)?youtube\.com\/watch\?(.+)$/);
+  if (ytWatch) {
+    const params = new URLSearchParams(ytWatch[1]);
+    const id = params.get("v");
+    if (id) return `https://www.youtube.com/embed/${id}`;
+  }
+
+  // youtube.com/shorts/<id>
+  const ytShorts = url.match(/^https?:\/\/(?:www\.)?youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/);
+  if (ytShorts) return `https://www.youtube.com/embed/${ytShorts[1]}`;
+
+  // vimeo.com/<id> → player.vimeo.com/video/<id>
+  const vimeo = url.match(/^https?:\/\/(?:www\.)?vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+
+  // Bunny iframe URLs, already-embed YouTube/Vimeo, mp4s, signed Supabase URLs — pass through.
+  return url;
+}
+
+// ────────────────────────────────────────────────────────────
 // Mini preview of the landing page
 // ────────────────────────────────────────────────────────────
 
@@ -135,14 +169,15 @@ function ListingPreview({
   agentScheduleUrl?: string;
 }) {
   const [descExpanded, setDescExpanded] = useState(false);
+  const embedUrl = normalizeVideoUrl(videoUrl);
 
   return (
     <div className="border border-border bg-background overflow-hidden">
       {/* Video placeholder */}
       <div className="relative aspect-video w-full bg-neutral-900 flex items-center justify-center">
-        {videoUrl ? (
+        {embedUrl ? (
           <iframe
-            src={videoUrl}
+            src={embedUrl}
             className="absolute inset-0 h-full w-full"
             allow="autoplay; fullscreen"
             allowFullScreen
@@ -300,6 +335,11 @@ export default function CustomListingNew() {
 
   async function handlePublish(publish: boolean) {
     if (!scraped || !clientId) return;
+    const normalizedVideo = normalizeVideoUrl(videoUrl);
+    if (!normalizedVideo) {
+      toast.error("Add a video URL before publishing.");
+      return;
+    }
 
     const setter = publish ? setPublishing : setSavingDraft;
     setter(true);
@@ -308,7 +348,7 @@ export default function CustomListingNew() {
       const result = await createListing({
         client_id: clientId,
         address,
-        video_url: videoUrl,
+        video_url: normalizedVideo,
         mls: mlsOverride || scraped.mls || undefined,
         scraped_data: scraped,
         publish,
@@ -384,7 +424,7 @@ export default function CustomListingNew() {
             placeholder="Bunny.net iframe URL, Supabase signed URL, YouTube, or any embeddable URL"
           />
           <p className="text-[11px] text-muted-foreground">
-            Paste a Bunny.net iframe URL, Supabase signed URL, YouTube, or any embeddable video URL.
+            Paste a Bunny.net iframe URL, Supabase signed URL, YouTube watch / Shorts / youtu.be URL, Vimeo page URL, or any embeddable video URL. YouTube and Vimeo URLs are auto-converted to their embed form.
           </p>
         </div>
 
@@ -460,36 +500,44 @@ export default function CustomListingNew() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Button
-              onClick={() => handlePublish(true)}
-              disabled={publishing || savingDraft}
-              size="default"
-            >
-              {publishing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Publishing…
-                </>
-              ) : (
-                "Publish to Sierra"
-              )}
-            </Button>
-            <Button
-              onClick={() => handlePublish(false)}
-              disabled={publishing || savingDraft}
-              variant="outline"
-              size="default"
-            >
-              {savingDraft ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                "Save Draft"
-              )}
-            </Button>
+          <div className="space-y-2 pt-2">
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => handlePublish(true)}
+                disabled={publishing || savingDraft || !videoUrl.trim()}
+                size="default"
+                title={!videoUrl.trim() ? "Add a video URL above first" : undefined}
+              >
+                {publishing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Publishing…
+                  </>
+                ) : (
+                  "Publish to Sierra"
+                )}
+              </Button>
+              <Button
+                onClick={() => handlePublish(false)}
+                disabled={publishing || savingDraft || !videoUrl.trim()}
+                variant="outline"
+                size="default"
+              >
+                {savingDraft ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save Draft"
+                )}
+              </Button>
+            </div>
+            {!videoUrl.trim() && (
+              <p className="text-[11px] text-muted-foreground">
+                Add a video URL in Section A before publishing.
+              </p>
+            )}
           </div>
         </section>
       )}
