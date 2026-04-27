@@ -27,6 +27,8 @@ import {
   GitPullRequest,
   ListChecks,
   Activity,
+  Users,
+  LayoutTemplate,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
@@ -93,6 +95,46 @@ function DevelopmentNav() {
   );
 }
 
+function CustomListingsNav() {
+  const location = useLocation();
+  const active =
+    location.pathname.startsWith("/dashboard/clients") ||
+    location.pathname.startsWith("/dashboard/listings");
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={`relative flex items-center gap-2 whitespace-nowrap py-[26px] text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ease-cinematic outline-none ${
+            active ? "text-foreground after:absolute after:inset-x-0 after:bottom-[-1px] after:h-[1px] after:bg-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <LayoutTemplate className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Custom Listings
+          <ChevronDown className="h-3 w-3 opacity-70" strokeWidth={1.5} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/clients" className="cursor-pointer">
+            <Users className="mr-2 h-3.5 w-3.5" /> Clients
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/clients/new" className="cursor-pointer">
+            <Users className="mr-2 h-3.5 w-3.5" /> Add Client
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard/listings/new" className="cursor-pointer">
+            <LayoutTemplate className="mr-2 h-3.5 w-3.5" /> New Listing Page
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function TopNav() {
   const { user, profile, signOut } = useAuth();
   const location = useLocation();
@@ -148,6 +190,7 @@ export function TopNav() {
               </NavLink>
             ))}
             <DevelopmentNav />
+            <CustomListingsNav />
             {dashboardNav.slice(-1).map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}

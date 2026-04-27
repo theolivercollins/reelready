@@ -36,6 +36,9 @@ import DashboardLabListings from "./pages/dashboard/LabListings";
 import DashboardLabListingNew from "./pages/dashboard/LabListingNew";
 import DashboardLabListingDetail from "./pages/dashboard/LabListingDetail";
 import DashboardRatingLedger from "./pages/dashboard/RatingLedger";
+import DashboardClients from "./pages/dashboard/Clients";
+import DashboardClientNew from "./pages/dashboard/ClientNew";
+import DashboardCustomListingNew from "./pages/dashboard/CustomListingNew";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -90,6 +93,9 @@ const App = () => (
                   <Route path="rating-ledger" element={<DashboardRatingLedger />} />
                   <Route path="finances" element={<DashboardFinances />} />
                   <Route path="settings" element={<DashboardSettings />} />
+                  <Route path="clients" element={<DashboardClients />} />
+                  <Route path="clients/new" element={<DashboardClientNew />} />
+                  <Route path="listings/new" element={<DashboardCustomListingNew />} />
                 </Route>
               </Route>
 
