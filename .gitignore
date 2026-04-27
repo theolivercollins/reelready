@@ -11,3 +11,4 @@ dist/
 docs/CREDENTIALS.md
 .DS_Store
 .worktrees/
+credentials.env
