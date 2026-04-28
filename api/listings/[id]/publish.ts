@@ -86,6 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const slug = `walkthrough/${lp.slug}`;
   const result = await publishToSierra({
     sierraAdminUrl: client.sierra_admin_url,
+    sierraSiteName: client.sierra_site_name || "",
     sierraAdminUsername: client.sierra_admin_username,
     sierraAdminPassword: password,
     sierraPublicBaseUrl: client.sierra_public_base_url,

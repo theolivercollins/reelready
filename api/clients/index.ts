@@ -9,12 +9,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const supabase = getSupabase();
 
+  const SELECT_FIELDS =
+    "id, name, sierra_public_base_url, sierra_region_id, sierra_admin_url, sierra_site_name, sierra_admin_username, agent_name, agent_team, agent_phone, agent_email, agent_photo_url, agent_schedule_url, brand_color_primary, created_at, updated_at";
+
   if (req.method === "GET") {
     const { data, error } = await supabase
       .from("clients")
-      .select(
-        "id, name, sierra_public_base_url, sierra_region_id, sierra_admin_url, sierra_admin_username, agent_name, agent_team, agent_phone, agent_email, agent_photo_url, agent_schedule_url, brand_color_primary, created_at, updated_at"
-      )
+      .select(SELECT_FIELDS)
       .eq("created_by", auth.user.id)
       .order("created_at", { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
@@ -28,6 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       "sierra_public_base_url",
       "sierra_region_id",
       "sierra_admin_url",
+      "sierra_site_name",
       "sierra_admin_username",
       "sierra_admin_password",
       "agent_name",
@@ -49,6 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sierra_public_base_url: b.sierra_public_base_url,
         sierra_region_id: b.sierra_region_id,
         sierra_admin_url: b.sierra_admin_url,
+        sierra_site_name: b.sierra_site_name,
         sierra_admin_username: b.sierra_admin_username,
         sierra_admin_password_encrypted,
         agent_name: b.agent_name,
@@ -60,9 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         brand_color_primary: b.brand_color_primary || "#171717",
         created_by: auth.user.id,
       })
-      .select(
-        "id, name, sierra_public_base_url, sierra_region_id, sierra_admin_url, sierra_admin_username, agent_name, agent_team, agent_phone, agent_email, agent_photo_url, agent_schedule_url, brand_color_primary, created_at, updated_at"
-      )
+      .select(SELECT_FIELDS)
       .single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(201).json(data);

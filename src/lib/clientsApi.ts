@@ -22,6 +22,7 @@ export interface Client {
   name: string;
   sierra_public_base_url: string;
   sierra_admin_url?: string;
+  sierra_site_name?: string;
   sierra_admin_username?: string;
   sierra_region_id?: string;
   agent_name?: string;
@@ -38,6 +39,7 @@ export interface CreateClientInput {
   name: string;
   sierra_public_base_url: string;
   sierra_admin_url: string;
+  sierra_site_name: string;
   sierra_admin_username: string;
   sierra_admin_password: string;
   sierra_region_id: string;

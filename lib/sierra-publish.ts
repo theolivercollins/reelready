@@ -16,7 +16,8 @@ const APIFY_BASE = "https://api.apify.com/v2";
 const APIFY_ACTOR_ID = process.env.APIFY_SIERRA_ACTOR_ID || "apify~playwright-scraper";
 
 export interface SierraPublishInput {
-  sierraAdminUrl: string;        // e.g. https://client2.sierrainteractivedev.com
+  sierraAdminUrl: string;        // e.g. https://client2.sierrainteractivedev.com (no trailing slash)
+  sierraSiteName: string;        // e.g. "thehelgemoteam" — the Sierra "Site Name" login field
   sierraAdminUsername: string;
   sierraAdminPassword: string;
   sierraPublicBaseUrl: string;   // e.g. https://www.thehelgemoteam.com
@@ -40,21 +41,26 @@ export async function publishToSierra(
     return { ok: false, error: "APIFY_API_TOKEN not set" };
   }
 
+  // Strip trailing slash so we don't end up with `//login.aspx`.
+  const adminUrl = input.sierraAdminUrl.replace(/\/+$/, "");
+  const publicBase = input.sierraPublicBaseUrl.replace(/\/+$/, "");
+
   const startResp = await fetch(
     `${APIFY_BASE}/acts/${encodeURIComponent(APIFY_ACTOR_ID)}/runs?token=${token}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        startUrls: [{ url: `${input.sierraAdminUrl}/login` }],
+        startUrls: [{ url: `${adminUrl}/login.aspx` }],
         pageFunction: buildPageFunction(),
         // The actor passes input fields as `context.request.userData`
         // and our pageFunction reads from `context.customData`.
         customData: {
-          adminUrl: input.sierraAdminUrl,
+          adminUrl,
+          siteName: input.sierraSiteName,
           username: input.sierraAdminUsername,
           password: input.sierraAdminPassword,
-          publicBaseUrl: input.sierraPublicBaseUrl,
+          publicBaseUrl: publicBase,
           slug: input.pageSlug,
           title: input.pageTitle,
           html: input.pageHtml,
@@ -115,46 +121,52 @@ function buildPageFunction(): string {
   return `
     async function pageFunction(context) {
       const { page, customData, log } = context;
-      const { adminUrl, username, password, slug, title, html } = customData;
+      const { adminUrl, siteName, username, password, slug, title, html, publicBaseUrl } = customData;
 
-      log.info('Logging into Sierra admin');
-      await page.goto(adminUrl + '/login', { waitUntil: 'domcontentloaded' });
-      await page.fill('input[name="username"], input[type="email"]', username);
-      await page.fill('input[name="password"], input[type="password"]', password);
+      log.info('Logging into Sierra admin (' + adminUrl + ')');
+      // Sierra's admin login is at /login.aspx and requires three fields:
+      // txtSiteName, txtUserName, txtPassword. Submit is btnLoginSubmit.
+      await page.goto(adminUrl + '/login.aspx', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('#txtSiteName', { timeout: 30000 });
+      await page.fill('#txtSiteName', siteName);
+      await page.fill('#txtUserName', username);
+      await page.fill('#txtPassword', password);
       await Promise.all([
         page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-        page.click('button[type="submit"], input[type="submit"]'),
+        page.click('#btnLoginSubmit'),
       ]);
+      log.info('Login submitted, current URL: ' + page.url());
 
-      log.info('Navigating to new Content Page');
+      log.info('Navigating to new Content Page form');
       await page.goto(adminUrl + '/content-page-form.aspx?secid=-1&clid=-1&sb=2&so=0&pn=1&asid=-1', {
         waitUntil: 'domcontentloaded',
       });
 
-      // Set URL slug + title.
-      await page.fill('input[name*="Title"], input[id*="Title"]', title);
-      await page.fill('input[name*="Url"], input[id*="Url"]', slug);
+      // Set URL slug + title. ASP.NET names usually have a "txtTitle" / "txtUrl" pattern;
+      // fall back to broader selectors if those exact IDs aren't present.
+      await page.fill('input[id*="Title"], input[name*="Title"]', title);
+      await page.fill('input[id*="Url"], input[name*="Url"]', slug);
 
       // Click "Add New Page Component" → choose "Content Area".
-      await page.click('text=Add New Page Component');
-      await page.click('text=Content Area');
+      await page.click('text=Add New Page Component', { timeout: 15000 });
+      await page.click('text=Content Area', { timeout: 15000 });
 
-      // Wait for the editor to render, then click HTML source-edit and paste.
-      await page.waitForSelector('iframe[id*="cke"], iframe[title*="Rich Text"]', { timeout: 15000 });
-      // Most CKEditor instances expose a Source button.
+      // Wait for the CKEditor instance to render.
+      await page.waitForSelector('iframe[id*="cke"], iframe[title*="Rich Text"]', { timeout: 30000 });
+      // Toggle to source view, paste HTML, toggle back.
       const sourceBtn = page.locator('a.cke_button__source, button[title*="Source"]').first();
       await sourceBtn.click();
       const sourceTextarea = page.locator('textarea.cke_source').first();
       await sourceTextarea.fill(html);
-      await sourceBtn.click(); // toggle back to rich view to commit
+      await sourceBtn.click();
 
       // Save the Content Page.
       await page.click('text=Save');
       await page.waitForLoadState('networkidle', { timeout: 30000 });
 
       // The published URL is the public-base + slug.
-      const publicBase = customData.publicBaseUrl.replace(/\\/$/, '');
-      const sierra_page_url = publicBase + '/' + slug.replace(/^\\//, '');
+      const sierra_page_url = publicBaseUrl + '/' + slug.replace(/^\\//, '');
+      log.info('Sierra page URL: ' + sierra_page_url);
 
       return { sierra_page_url };
     }

@@ -13,6 +13,7 @@ export default function ClientNew() {
   const [name, setName] = useState("");
   const [sierraPublicUrl, setSierraPublicUrl] = useState("");
   const [sierraAdminUrl, setSierraAdminUrl] = useState("");
+  const [sierraSiteName, setSierraSiteName] = useState("");
   const [sierraUsername, setSierraUsername] = useState("");
   const [sierraPassword, setSierraPassword] = useState("");
   const [sierraRegionId, setSierraRegionId] = useState("");
@@ -32,7 +33,7 @@ export default function ClientNew() {
     setError(null);
 
     // Required field check
-    if (!name || !sierraPublicUrl || !sierraAdminUrl || !sierraUsername || !sierraPassword ||
+    if (!name || !sierraPublicUrl || !sierraAdminUrl || !sierraSiteName || !sierraUsername || !sierraPassword ||
       !sierraRegionId || !agentName || !agentPhone || !agentEmail || !agentScheduleUrl) {
       setError("Please fill in all required fields.");
       return;
@@ -44,6 +45,7 @@ export default function ClientNew() {
         name,
         sierra_public_base_url: sierraPublicUrl,
         sierra_admin_url: sierraAdminUrl,
+        sierra_site_name: sierraSiteName,
         sierra_admin_username: sierraUsername,
         sierra_admin_password: sierraPassword,
         sierra_region_id: sierraRegionId,
@@ -149,6 +151,21 @@ export default function ClientNew() {
               type="url"
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Sierra site name <span className="text-destructive">*</span>
+            </label>
+            <Input
+              value={sierraSiteName}
+              onChange={(e) => setSierraSiteName(e.target.value)}
+              placeholder="thehelgemoteam"
+              required
+            />
+            <p className="text-[11px] text-muted-foreground">
+              The "Site Name" you type into the first field of the Sierra admin login page (above Username).
+            </p>
           </div>
 
           <div className="space-y-2">
