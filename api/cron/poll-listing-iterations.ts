@@ -36,35 +36,32 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         // Native Kling: 0¢ (pre-paid credits; Kling refunds on failure).
         const nativeKlingFailed = isNativeKling(iter.model_used);
         const failedCostCents = nativeKlingFailed ? 0 : atlasClipCostCents(iter.model_used);
-        try {
-          await supabase.from("cost_events").insert({
-            property_id: null,
-            scene_id: null,
-            stage: "generation",
-            provider: nativeKlingFailed ? "kling" : "atlas",
-            units_consumed: 1,
-            unit_type: "renders",
-            cost_cents: failedCostCents,
-            metadata: nativeKlingFailed
-              ? {
-                  scope: "lab_listing",
-                  scene_id: iter.scene_id,
-                  iteration_id: iter.id,
-                  model: iter.model_used,
-                  billing: "prepaid_credits_failed_refunded",
-                  render_outcome: "failed",
-                }
-              : {
-                  scope: "lab_listing",
-                  scene_id: iter.scene_id,
-                  iteration_id: iter.id,
-                  model: iter.model_used,
-                  render_outcome: "failed",
-                },
-          });
-        } catch (costErr) {
-          console.error("[poll-listing-iterations] failed cost_events insert:", costErr);
-        }
+        const { error: failedCostErr } = await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "generation",
+          provider: nativeKlingFailed ? "kling" : "atlas",
+          units_consumed: 1,
+          unit_type: "renders",
+          cost_cents: failedCostCents,
+          metadata: nativeKlingFailed
+            ? {
+                scope: "lab_listing",
+                scene_id: iter.scene_id,
+                iteration_id: iter.id,
+                model: iter.model_used,
+                billing: "prepaid_credits_failed_refunded",
+                render_outcome: "failed",
+              }
+            : {
+                scope: "lab_listing",
+                scene_id: iter.scene_id,
+                iteration_id: iter.id,
+                model: iter.model_used,
+                render_outcome: "failed",
+              },
+        });
+        if (failedCostErr) console.error("[poll-listing-iterations] failed cost_events insert:", failedCostErr);
         failed += 1;
         continue;
       }
@@ -112,22 +109,19 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       // even if cost is zero. Native Kling records provider='kling',
       // cost_cents=0, metadata.billing='prepaid_credits' so we retain
       // a per-render audit trail even when cash cost is 0.
-      try {
-        await supabase.from("cost_events").insert({
-          property_id: null,
-          scene_id: null,
-          stage: "generation",
-          provider: nativeKling ? "kling" : "atlas",
-          units_consumed: 1,
-          unit_type: "renders",
-          cost_cents: costCents,
-          metadata: nativeKling
-            ? { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used, billing: "prepaid_credits" }
-            : { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used },
-        });
-      } catch (costErr) {
-        console.error("[poll-listing-iterations] cost_events insert failed:", costErr);
-      }
+      const { error: costErr } = await supabase.from("cost_events").insert({
+        property_id: null,
+        scene_id: null,
+        stage: "generation",
+        provider: nativeKling ? "kling" : "atlas",
+        units_consumed: 1,
+        unit_type: "renders",
+        cost_cents: costCents,
+        metadata: nativeKling
+          ? { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used, billing: "prepaid_credits" }
+          : { scope: "lab_listing", scene_id: iter.scene_id, iteration_id: iter.id, model: iter.model_used },
+      });
+      if (costErr) console.error("[poll-listing-iterations] cost_events insert failed:", costErr);
 
       // Fire-and-forget Gemini judge hook. Mirrors finalizeLabRender's hook
       // for the single-image Lab — without this the Listing Lab clips never

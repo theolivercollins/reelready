@@ -505,22 +505,21 @@ export async function embedScene(sceneId: string): Promise<void> {
     .update({ embedding: toPgVector(embedded.vector), embedding_model: embedded.model })
     .eq("id", sceneId);
   if (updateError) throw updateError;
-  try {
-    await supabase.from("cost_events").insert({
-      property_id: (scene.property_id as string | null) ?? null,
-      scene_id: sceneId,
-      stage: "embedding",
-      provider: "openai",
-      units_consumed: embedded.usage.totalTokens,
-      unit_type: "tokens",
-      cost_cents: Math.round(embedded.usage.costCents),
-      metadata: {
-        scope: "prod_scene_embedding",
-        model: embedded.model,
-        tokens: embedded.usage.totalTokens,
-      },
-    });
-  } catch (costErr) {
+  const { error: costErr } = await supabase.from("cost_events").insert({
+    property_id: (scene.property_id as string | null) ?? null,
+    scene_id: sceneId,
+    stage: "embedding",
+    provider: "openai",
+    units_consumed: embedded.usage.totalTokens,
+    unit_type: "tokens",
+    cost_cents: Math.round(embedded.usage.costCents),
+    metadata: {
+      scope: "prod_scene_embedding",
+      model: embedded.model,
+      tokens: embedded.usage.totalTokens,
+    },
+  });
+  if (costErr) {
     console.error("[embeddings] cost_events insert failed:", costErr);
   }
 }

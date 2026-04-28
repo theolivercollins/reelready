@@ -179,27 +179,24 @@ export async function analyzeListingPhotos(listingId: string): Promise<void> {
         // Log the Claude-fallback cost. analyzeSingleImage returns costCents
         // but not the full usage breakdown — we still record enough for
         // reconciliation (scope marks the fallback path).
-        try {
-          await supabase.from("cost_events").insert({
-            property_id: null,
-            scene_id: null,
-            stage: "analysis",
-            provider: "anthropic",
-            units_consumed: 0, // analyzeSingleImage doesn't surface tokens; cost_cents is the ground truth
-            unit_type: "tokens",
-            cost_cents: Math.round(claudeRes.costCents),
-            metadata: {
-              scope: "lab_listing_photo_eyes_fallback",
-              model: "claude-sonnet-4-6",
-              listing_id: listingId,
-              photo_id: p.id,
-              reason: "gemini_failure",
-              gemini_error: msg,
-            },
-          });
-        } catch (costErr) {
-          console.error("[analyzeListingPhotos] claude fallback cost_events insert failed:", costErr);
-        }
+        const { error: costErr } = await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "analysis",
+          provider: "anthropic",
+          units_consumed: 0, // analyzeSingleImage doesn't surface tokens; cost_cents is the ground truth
+          unit_type: "tokens",
+          cost_cents: Math.round(claudeRes.costCents),
+          metadata: {
+            scope: "lab_listing_photo_eyes_fallback",
+            model: "claude-sonnet-4-6",
+            listing_id: listingId,
+            photo_id: p.id,
+            reason: "gemini_failure",
+            gemini_error: msg,
+          },
+        });
+        if (costErr) console.error("[analyzeListingPhotos] claude fallback cost_events insert failed:", costErr);
       }
 
       const embedded = await embedTextSafe(
@@ -221,50 +218,44 @@ export async function analyzeListingPhotos(listingId: string): Promise<void> {
 
       // Cost event for the Gemini path (Claude path logged inline above).
       if (analysisProvider === "google" && geminiUsage && geminiModel) {
-        try {
-          await supabase.from("cost_events").insert({
-            property_id: null,
-            scene_id: null,
-            stage: "analysis",
-            provider: "google",
-            units_consumed: geminiUsage.inputTokens + geminiUsage.outputTokens,
-            unit_type: "tokens",
-            cost_cents: Math.round(geminiUsage.costCents),
-            metadata: {
-              scope: "lab_listing_photo_eyes",
-              model: geminiModel,
-              listing_id: listingId,
-              photo_id: p.id,
-              input_tokens: geminiUsage.inputTokens,
-              output_tokens: geminiUsage.outputTokens,
-            },
-          });
-        } catch (costErr) {
-          console.error("[analyzeListingPhotos] gemini cost_events insert failed:", costErr);
-        }
+        const { error: costErr } = await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "analysis",
+          provider: "google",
+          units_consumed: geminiUsage.inputTokens + geminiUsage.outputTokens,
+          unit_type: "tokens",
+          cost_cents: Math.round(geminiUsage.costCents),
+          metadata: {
+            scope: "lab_listing_photo_eyes",
+            model: geminiModel,
+            listing_id: listingId,
+            photo_id: p.id,
+            input_tokens: geminiUsage.inputTokens,
+            output_tokens: geminiUsage.outputTokens,
+          },
+        });
+        if (costErr) console.error("[analyzeListingPhotos] gemini cost_events insert failed:", costErr);
       }
 
       if (embedded) {
-        try {
-          await supabase.from("cost_events").insert({
-            property_id: null,
-            scene_id: null,
-            stage: "embedding",
-            provider: "openai",
-            units_consumed: embedded.usage.totalTokens,
-            unit_type: "tokens",
-            cost_cents: Math.round(embedded.usage.costCents),
-            metadata: {
-              scope: "lab_listing_photo_embedding",
-              model: embedded.model,
-              tokens: embedded.usage.totalTokens,
-              listing_id: listingId,
-              photo_id: p.id,
-            },
-          });
-        } catch (costErr) {
-          console.error("[embeddings] cost_events insert failed:", costErr);
-        }
+        const { error: costErr } = await supabase.from("cost_events").insert({
+          property_id: null,
+          scene_id: null,
+          stage: "embedding",
+          provider: "openai",
+          units_consumed: embedded.usage.totalTokens,
+          unit_type: "tokens",
+          cost_cents: Math.round(embedded.usage.costCents),
+          metadata: {
+            scope: "lab_listing_photo_embedding",
+            model: embedded.model,
+            tokens: embedded.usage.totalTokens,
+            listing_id: listingId,
+            photo_id: p.id,
+          },
+        });
+        if (costErr) console.error("[embeddings] cost_events insert failed:", costErr);
       }
     }),
   );
@@ -379,22 +370,19 @@ export async function directListingScenes(listingId: string): Promise<void> {
   });
 
   // Record token cost for listing director (Sonnet 4.6).
-  try {
-    const supabaseForCost = getSupabase();
-    const cost = computeClaudeCost(response.usage as never, LISTING_DIRECTOR_MODEL);
-    await supabaseForCost.from("cost_events").insert({
-      property_id: null,
-      scene_id: null,
-      stage: "director",
-      provider: "anthropic",
-      units_consumed: cost.totalTokens,
-      unit_type: "tokens",
-      cost_cents: Math.round(cost.costCents),
-      metadata: { scope: "lab_listing_director", listing_id: listingId, model: LISTING_DIRECTOR_MODEL },
-    });
-  } catch (costErr) {
-    console.error("[directListingScenes] cost_events insert failed:", costErr);
-  }
+  const supabaseForCost = getSupabase();
+  const cost = computeClaudeCost(response.usage as never, LISTING_DIRECTOR_MODEL);
+  const { error: costErr } = await supabaseForCost.from("cost_events").insert({
+    property_id: null,
+    scene_id: null,
+    stage: "director",
+    provider: "anthropic",
+    units_consumed: cost.totalTokens,
+    unit_type: "tokens",
+    cost_cents: Math.round(cost.costCents),
+    metadata: { scope: "lab_listing_director", listing_id: listingId, model: LISTING_DIRECTOR_MODEL },
+  });
+  if (costErr) console.error("[directListingScenes] cost_events insert failed:", costErr);
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);

@@ -176,17 +176,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const final = await stream.finalMessage();
 
     // Record token cost for this chat turn (Haiku 4.5 — cheaper than Sonnet).
+    // scene_id is left null here because the listing-scene id is in
+    // prompt_lab_listing_scenes, not the prod `scenes` table that the
+    // cost_events FK targets — capturing it in metadata instead.
     const cost = computeClaudeCost(final.usage, CHAT_MODEL);
-    await supabase.from("cost_events").insert({
+    const { error: costErr } = await supabase.from("cost_events").insert({
       property_id: null,
-      scene_id: sceneId,
+      scene_id: null,
       stage: "chat",
       provider: "anthropic",
       units_consumed: cost.totalTokens,
       unit_type: "tokens",
       cost_cents: Math.round(cost.costCents),
-      metadata: { scope: "lab_listing_scene_chat", listing_id: (scene as { listing_id?: string }).listing_id ?? null, scene_id: sceneId, model: CHAT_MODEL },
+      metadata: { scope: "lab_listing_scene_chat", listing_id: (scene as { listing_id?: string }).listing_id ?? null, listing_scene_id: sceneId, model: CHAT_MODEL },
     });
+    if (costErr) console.error("[lab-listing-scene-chat] cost_events insert failed:", costErr);
 
     let promptUpdated: string | null = null;
     for (const block of final.content) {

@@ -160,22 +160,21 @@ Produce the JSON object per your instructions.`;
       changes: Array<{ change_id: string; intent: string; evidence_iteration_ids: string[]; evidence_summary: string }>;
     };
 
-    // Record token cost for rule mining (Sonnet 4.6).
-    try {
-      const cost = computeClaudeCost(response.usage as never, MINE_MODEL);
-      await supabase.from("cost_events").insert({
-        property_id: null,
-        scene_id: null,
-        stage: "rule_mining",
-        provider: "anthropic",
-        units_consumed: cost.totalTokens,
-        unit_type: "tokens",
-        cost_cents: Math.round(cost.costCents),
-        metadata: { scope: "lab_rule_mining", model: MINE_MODEL, iterations_count: iterations.length, days },
-      });
-    } catch (costErr) {
-      console.error("[mine] cost_events insert failed:", costErr);
-    }
+    // Record token cost for rule mining (Sonnet 4.6). Supabase JS does not
+    // throw on insert failure — surface the {error} return explicitly so a
+    // schema or RLS regression can't silently zero out cost telemetry.
+    const cost = computeClaudeCost(response.usage as never, MINE_MODEL);
+    const { error: costErr } = await supabase.from("cost_events").insert({
+      property_id: null,
+      scene_id: null,
+      stage: "rule_mining",
+      provider: "anthropic",
+      units_consumed: cost.totalTokens,
+      unit_type: "tokens",
+      cost_cents: Math.round(cost.costCents),
+      metadata: { scope: "lab_rule_mining", model: MINE_MODEL, iterations_count: iterations.length, days },
+    });
+    if (costErr) console.error("[mine] cost_events insert failed:", costErr);
 
     const { data: proposal, error: pErr } = await supabase
       .from("lab_prompt_proposals")

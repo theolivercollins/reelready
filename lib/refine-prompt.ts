@@ -33,21 +33,18 @@ export async function rewritePromptWithDirectives(input: {
   const cost = computeClaudeCost(response.usage as never, "claude-sonnet-4-6");
 
   // Record token cost for every rewrite pass (Sonnet 4.6).
-  try {
-    const supabase = getSupabase();
-    await supabase.from("cost_events").insert({
-      property_id: null,
-      scene_id: null,
-      stage: "refine",
-      provider: "anthropic",
-      units_consumed: cost.totalTokens,
-      unit_type: "tokens",
-      cost_cents: Math.round(cost.costCents),
-      metadata: { scope: "lab_listing_refine_rewrite", model: "claude-sonnet-4-6" },
-    });
-  } catch (costErr) {
-    console.error("[rewritePromptWithDirectives] cost_events insert failed:", costErr);
-  }
+  const supabase = getSupabase();
+  const { error: costErr } = await supabase.from("cost_events").insert({
+    property_id: null,
+    scene_id: null,
+    stage: "refine",
+    provider: "anthropic",
+    units_consumed: cost.totalTokens,
+    unit_type: "tokens",
+    cost_cents: Math.round(cost.costCents),
+    metadata: { scope: "lab_listing_refine_rewrite", model: "claude-sonnet-4-6" },
+  });
+  if (costErr) console.error("[rewritePromptWithDirectives] cost_events insert failed:", costErr);
 
   return { rewritten: text, costCents: cost.costCents };
 }

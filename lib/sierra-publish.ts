@@ -123,24 +123,57 @@ function buildPageFunction(): string {
       const { page, customData, log } = context;
       const { adminUrl, siteName, username, password, slug, title, html, publicBaseUrl } = customData;
 
-      log.info('Logging into Sierra admin (' + adminUrl + ')');
-      // Sierra's admin login is at /login.aspx and requires three fields:
-      // txtSiteName, txtUserName, txtPassword. Submit is btnLoginSubmit.
-      await page.goto(adminUrl + '/login.aspx', { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('#txtSiteName', { timeout: 30000 });
-      await page.fill('#txtSiteName', siteName);
-      await page.fill('#txtUserName', username);
-      await page.fill('#txtPassword', password);
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-        page.click('#btnLoginSubmit'),
-      ]);
-      log.info('Login submitted, current URL: ' + page.url());
+      // Try several plausible Site Name formats. Sierra's login form has
+      // type="url" but may also accept plain domains depending on the customer.
+      function siteNameVariants(s) {
+        const trimmed = (s || '').trim().replace(/\\/+$/, '');
+        const noScheme = trimmed.replace(/^https?:\\/\\//, '');
+        const noWww = noScheme.replace(/^www\\./, '');
+        const variants = [trimmed, noScheme, noWww, 'https://' + noWww, 'https://www.' + noWww];
+        return Array.from(new Set(variants.filter(Boolean)));
+      }
+
+      async function loginAttempt(siteNameValue) {
+        log.info('Login attempt with siteName="' + siteNameValue + '"');
+        await page.goto(adminUrl + '/login.aspx', { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('#txtSiteName', { timeout: 30000 });
+        await page.fill('#txtSiteName', siteNameValue);
+        await page.fill('#txtUserName', username);
+        await page.fill('#txtPassword', password);
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null),
+          page.click('#btnLoginSubmit'),
+        ]);
+        await page.waitForTimeout(1500);
+        const url = page.url();
+        const onLoginPage = /\\/login\\.aspx/i.test(url);
+        if (onLoginPage) {
+          const errText = await page.locator('#ErrorContainer .text, .alert, .error, [class*="error"]').first().innerText({ timeout: 1000 }).catch(() => '');
+          log.warning('Login still on /login.aspx — siteName="' + siteNameValue + '" rejected. Error text: "' + (errText || '(none)') + '"');
+          return { ok: false, errText, url };
+        }
+        log.info('Login succeeded with siteName="' + siteNameValue + '". URL: ' + url);
+        return { ok: true, url };
+      }
+
+      let result = null;
+      let lastErr = '';
+      for (const variant of siteNameVariants(siteName)) {
+        result = await loginAttempt(variant);
+        if (result.ok) break;
+        lastErr = result.errText || ('Still on ' + result.url);
+      }
+      if (!result || !result.ok) {
+        throw new Error('Sierra login failed for all site-name variants. Last error: ' + lastErr);
+      }
 
       log.info('Navigating to new Content Page form');
       await page.goto(adminUrl + '/content-page-form.aspx?secid=-1&clid=-1&sb=2&so=0&pn=1&asid=-1', {
         waitUntil: 'domcontentloaded',
       });
+      if (/\\/login\\.aspx/i.test(page.url())) {
+        throw new Error('Bounced back to /login.aspx when opening content-page-form — session not authenticated.');
+      }
 
       // Set URL slug + title. ASP.NET names usually have a "txtTitle" / "txtUrl" pattern;
       // fall back to broader selectors if those exact IDs aren't present.
