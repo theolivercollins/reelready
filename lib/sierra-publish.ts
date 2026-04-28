@@ -53,8 +53,6 @@ export async function publishToSierra(
       body: JSON.stringify({
         startUrls: [{ url: `${adminUrl}/login.aspx` }],
         pageFunction: buildPageFunction(),
-        // The actor passes input fields as `context.request.userData`
-        // and our pageFunction reads from `context.customData`.
         customData: {
           adminUrl,
           siteName: input.sierraSiteName,
@@ -65,8 +63,23 @@ export async function publishToSierra(
           title: input.pageTitle,
           html: input.pageHtml,
         },
-        proxyConfiguration: { useApifyProxy: true },
+        // Anti-bot: residential US proxy + stealth + persistent session cookies.
+        proxyConfiguration: {
+          useApifyProxy: true,
+          apifyProxyGroups: ["RESIDENTIAL"],
+          apifyProxyCountry: "US",
+        },
+        useChrome: true,
+        launcher: "chromium",
+        useStealth: true,
+        ignoreCorsAndCsp: true,
+        persistCookiesPerSession: true,
+        sessionPoolName: "sierra-publish",
+        requestHandlerTimeoutSecs: 180,
+        navigationTimeoutSecs: 60,
         maxRequestsPerCrawl: 5,
+        viewportWidth: 1440,
+        viewportHeight: 900,
       }),
     }
   );
