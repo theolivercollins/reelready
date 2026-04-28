@@ -81,7 +81,8 @@ export default function Clients() {
               {clients.map((client) => (
                 <TableRow
                   key={client.id}
-                  className="cursor-default"
+                  className="cursor-pointer hover:bg-muted/40"
+                  onClick={() => navigate(`/dashboard/clients/${client.id}`)}
                 >
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>

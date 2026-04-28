@@ -78,3 +78,17 @@ export async function createClient(input: CreateClientInput): Promise<Client> {
     body: JSON.stringify(input),
   });
 }
+
+export async function getClient(id: string): Promise<Client> {
+  return authedFetch<Client>(`/api/clients/${encodeURIComponent(id)}`);
+}
+
+export async function updateClient(
+  id: string,
+  input: Partial<CreateClientInput>
+): Promise<Client> {
+  return authedFetch<Client>(`/api/clients/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}

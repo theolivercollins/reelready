@@ -1,13 +1,16 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { Loader2, ArrowLeft, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { createClient } from "@/lib/clientsApi";
+import { createClient, getClient, updateClient } from "@/lib/clientsApi";
 
 export default function ClientNew() {
   const navigate = useNavigate();
+  const params = useParams<{ id?: string }>();
+  const editingId = params.id;
+  const isEditing = !!editingId;
 
   // Form state
   const [name, setName] = useState("");
@@ -26,28 +29,61 @@ export default function ClientNew() {
   const [brandColor, setBrandColor] = useState("#171717");
 
   const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editingId) return;
+    let cancelled = false;
+    getClient(editingId)
+      .then((c) => {
+        if (cancelled) return;
+        setName(c.name || "");
+        setSierraPublicUrl(c.sierra_public_base_url || "");
+        setSierraAdminUrl(c.sierra_admin_url || "");
+        setSierraSiteName(c.sierra_site_name || "");
+        setSierraUsername(c.sierra_admin_username || "");
+        // Don't prefill password — operator types a new one only if changing.
+        setSierraRegionId(c.sierra_region_id || "");
+        setAgentName(c.agent_name || "");
+        setAgentTeamLine(c.agent_team_line || "");
+        setAgentPhone(c.agent_phone || "");
+        setAgentEmail(c.agent_email || "");
+        setAgentPhotoUrl(c.agent_photo_url || "");
+        setAgentScheduleUrl(c.agent_schedule_url || "");
+        setBrandColor(c.brand_primary_color || "#171717");
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    // Required field check
-    if (!name || !sierraPublicUrl || !sierraAdminUrl || !sierraSiteName || !sierraUsername || !sierraPassword ||
-      !sierraRegionId || !agentName || !agentPhone || !agentEmail || !agentScheduleUrl) {
+    // Required field check — password only required on create, optional on edit.
+    const baseValid =
+      name && sierraPublicUrl && sierraAdminUrl && sierraSiteName && sierraUsername &&
+      sierraRegionId && agentName && agentPhone && agentEmail && agentScheduleUrl;
+    if (!baseValid || (!isEditing && !sierraPassword)) {
       setError("Please fill in all required fields.");
       return;
     }
 
     setSubmitting(true);
     try {
-      await createClient({
+      const payload = {
         name,
         sierra_public_base_url: sierraPublicUrl,
         sierra_admin_url: sierraAdminUrl,
         sierra_site_name: sierraSiteName,
         sierra_admin_username: sierraUsername,
-        sierra_admin_password: sierraPassword,
+        sierra_admin_password: sierraPassword || undefined,
         sierra_region_id: sierraRegionId,
         agent_name: agentName,
         agent_team_line: agentTeamLine || undefined,
@@ -56,8 +92,14 @@ export default function ClientNew() {
         agent_photo_url: agentPhotoUrl || undefined,
         agent_schedule_url: agentScheduleUrl,
         brand_primary_color: brandColor,
-      });
-      toast.success("Client created successfully.");
+      };
+      if (isEditing && editingId) {
+        await updateClient(editingId, payload);
+        toast.success("Client updated.");
+      } else {
+        await createClient(payload as Parameters<typeof createClient>[0]);
+        toast.success("Client created successfully.");
+      }
       navigate("/dashboard/clients");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -75,10 +117,19 @@ export default function ClientNew() {
         >
           <ArrowLeft className="h-3 w-3" /> back to clients
         </Link>
-        <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">Add new client</h2>
+        <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em]">
+          {isEditing ? "Edit client" : "Add new client"}
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
-          Set up a Sierra Interactive site to publish custom listing landing pages.
+          {isEditing
+            ? "Update this client's Sierra access and agent card. Leave the password blank to keep the existing one."
+            : "Set up a Sierra Interactive site to publish custom listing landing pages."}
         </p>
+        {loading && (
+          <p className="mt-2 text-xs text-muted-foreground inline-flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading client…
+          </p>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="max-w-2xl space-y-8">
@@ -189,14 +240,16 @@ export default function ClientNew() {
               </p>
             </div>
             <label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Sierra admin password <span className="text-destructive">*</span>
+              Sierra admin password {!isEditing && <span className="text-destructive">*</span>}
+              {isEditing && <span className="opacity-50">(leave blank to keep existing)</span>}
             </label>
             <Input
               value={sierraPassword}
               onChange={(e) => setSierraPassword(e.target.value)}
               type="password"
               autoComplete="current-password"
-              required
+              placeholder={isEditing ? "•••••••• (unchanged)" : ""}
+              required={!isEditing}
             />
           </div>
         </section>
@@ -307,12 +360,14 @@ export default function ClientNew() {
         )}
 
         <div className="flex gap-3">
-          <Button type="submit" disabled={submitting} size="lg">
+          <Button type="submit" disabled={submitting || loading} size="lg">
             {submitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Saving…
               </>
+            ) : isEditing ? (
+              "Update client"
             ) : (
               "Create client"
             )}

@@ -95,6 +95,7 @@ const App = () => (
                   <Route path="settings" element={<DashboardSettings />} />
                   <Route path="clients" element={<DashboardClients />} />
                   <Route path="clients/new" element={<DashboardClientNew />} />
+                  <Route path="clients/:id" element={<DashboardClientNew />} />
                   <Route path="listings/new" element={<DashboardCustomListingNew />} />
                 </Route>
               </Route>
