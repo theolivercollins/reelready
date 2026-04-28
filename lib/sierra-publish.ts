@@ -174,18 +174,55 @@ function buildPageFunction(): string {
         throw new Error('Sierra login failed for all site-name variants. Last error: ' + lastErr);
       }
 
-      log.info('Navigating to new Content Page form');
-      await page.goto(adminUrl + '/content-page-form.aspx?secid=-1&clid=-1&sb=2&so=0&pn=1&asid=-1', {
-        waitUntil: 'domcontentloaded',
-      });
+      // Sierra requires visiting /content-pages.aspx first to establish
+      // server-side state before the new-page form will render.
+      log.info('Navigating to content-pages.aspx (list)');
+      await page.goto(adminUrl + '/content-pages.aspx', { waitUntil: 'networkidle', timeout: 30000 }).catch(() => null);
       if (/\\/login\\.aspx/i.test(page.url())) {
-        throw new Error('Bounced back to /login.aspx when opening content-page-form — session not authenticated.');
+        throw new Error('Bounced to /login.aspx when opening content-pages — session not authenticated.');
       }
 
-      // Set URL slug + title. ASP.NET names usually have a "txtTitle" / "txtUrl" pattern;
-      // fall back to broader selectors if those exact IDs aren't present.
-      await page.fill('input[id*="Title"], input[name*="Title"]', title);
-      await page.fill('input[id*="Url"], input[name*="Url"]', slug);
+      log.info('Navigating to new Content Page form');
+      await page.goto(adminUrl + '/content-page-form.aspx?secid=-1&clid=-1&sb=2&so=0&pn=1&asid=-1', {
+        waitUntil: 'networkidle',
+        timeout: 30000,
+      }).catch(() => null);
+      if (/\\/login\\.aspx/i.test(page.url())) {
+        throw new Error('Bounced to /login.aspx when opening content-page-form — session not authenticated.');
+      }
+
+      // Diagnostic: dump every input/select on the form so we can see the actual
+      // selectors Sierra uses for Title / URL slug. Logs visible in Apify run.
+      const inputDump = await page.evaluate(() => {
+        const els = Array.from(document.querySelectorAll('input, textarea, select'));
+        return els.slice(0, 60).map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          type: el.type || '',
+          name: el.name || '',
+          id: el.id || '',
+          placeholder: el.placeholder || '',
+        }));
+      }).catch(() => []);
+      log.info('Fields on content-page-form: ' + JSON.stringify(inputDump));
+
+      // Try a wider set of selectors. ASP.NET names vary across builds.
+      const titleSelectors = [
+        'input[id*="Title"]',
+        'input[name*="Title"]',
+        'input[id*="title"]',
+        'input[name*="title"]',
+        'input[id*="PageName"]',
+        'input[id*="Name"][type="text"]',
+      ].join(', ');
+      const urlSelectors = [
+        'input[id*="Url"]',
+        'input[name*="Url"]',
+        'input[id*="Slug"]',
+        'input[id*="Path"]',
+      ].join(', ');
+
+      await page.fill(titleSelectors, title);
+      await page.fill(urlSelectors, slug);
 
       // Click "Add New Page Component" → choose "Content Area".
       await page.click('text=Add New Page Component', { timeout: 15000 });
