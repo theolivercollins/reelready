@@ -1,16 +1,39 @@
 # Listing Elevate — Handoff
 
-Last updated: 2026-04-24
+Last updated: 2026-04-28
 
 See also:
 - [README.md](./README.md) — folder guide + session hygiene
 - [state/PROJECT-STATE.md](./state/PROJECT-STATE.md) — authoritative state
 - [plans/back-on-track-plan.md](./plans/back-on-track-plan.md) — condensed roadmap
 - [specs/2026-04-20-back-on-track-design.md](./specs/2026-04-20-back-on-track-design.md) — full roadmap spec
+- [specs/2026-04-27-custom-listing-pages-design.md](./specs/2026-04-27-custom-listing-pages-design.md) — Custom Listing Pages feature spec
 - [audits/ML-AUDIT-2026-04-20.md](./audits/ML-AUDIT-2026-04-20.md) — Phase M.1 verdict
 - [sessions/](./sessions/) — per-session notes
 
 ## Right now
+
+**2026-04-28: Custom Listing Pages feature shipped to preview** on `feat/custom-listing-pages` (not yet merged to main). End-to-end LE-integrated flow for spinning up per-listing video-walkthrough landing pages on a client's Sierra Interactive site. Multi-tenant from day one (per-client Sierra creds + agent card + brand color). Operator effort target <1 min per listing.
+
+- **Feature surface:** Top nav → Listings → New Custom Page. Pick client → paste address + video URL → Fetch → Publish to Sierra → modal with live URL + QR.
+- **Migration 043 applied to live `reelready` Supabase via MCP** (2026-04-27). New tables: `clients` (Sierra-site config + AES-256-GCM-encrypted admin creds), `landing_pages` (per-listing artifacts).
+- **Architecture decision:** Sierra has no Content Page CRUD API and no single-listing-by-MLS# Page Component (researched 2026-04-26). Programmatic publish therefore uses **Apify Playwright** driving the Sierra admin UI — same approach third-party blog publishers reportedly use. LE backend renders HTML server-side + decrypts client password + kicks Apify run + polls (`maxDuration: 300`). The original master-`/walkthrough/?mls=X` design at `~/ht/docs/2026-04-26-walkthrough-landing-design.md` is superseded by this approach (`~/ht/` artifacts retained for reference).
+- **Bridge scraper:** `lib/sierra-scrape.ts` parses Sierra's public detail page (JSON-LD + structured markup) until the Sierra REST API key arrives. Same JSON shape the future API will return — swap is one-line.
+- **Auth:** added password sign-in alongside the existing magic-link flow. Existing accounts (no password set) keep using magic link until they reset via Supabase dashboard.
+- **Top nav restructured:** Listings is now a dropdown grouping Properties (renamed "All Listings") + the new Custom Listings actions (New Custom Page, Clients, Add Client). Removed standalone "Custom Listings" dropdown.
+- **Env:** `APIFY_API_TOKEN` + `CLIENTS_ENCRYPTION_KEY` set in Vercel preview via CLI; mirrored to local `credentials.env` (added to `.gitignore`).
+- **Known risk:** Apify Playwright selectors in `lib/sierra-publish.ts` `buildPageFunction()` are educated guesses for Sierra's admin UI (login form input names, "Add New Page Component" → "Content Area" click flow, CKEditor source-mode toggle). First real publish will likely need 1-3 iterations of selector tuning based on the Apify run log.
+- **Session notes:** [`sessions/2026-04-28-custom-listing-pages.md`](./sessions/2026-04-28-custom-listing-pages.md)
+- **Spec:** [`specs/2026-04-27-custom-listing-pages-design.md`](./specs/2026-04-27-custom-listing-pages-design.md)
+
+**Open follow-ups (post-publish-test):**
+1. Tune Apify Playwright selectors based on first real run.
+2. Edit / republish UI for `landing_pages` rows (no UI today after initial draft create).
+3. Tracking Links integration so leads land in Sierra CRM tagged with MLS# Campaign.
+4. Agent self-service dashboard (v1.1 — operator-only CRUD today).
+5. Request Sierra REST API key from `support@sierrainteractive.com` to retire the bridge scraper.
+
+---
 
 **2026-04-24 (later): Iteration order-id system shipped (migration 041).** Every Lab iteration — past and future — now has a human-readable order number of the form `V{n}-{seq:05}`.
 
