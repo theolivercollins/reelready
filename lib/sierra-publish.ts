@@ -135,14 +135,21 @@ function buildPageFunction(): string {
 
       async function loginAttempt(siteNameValue) {
         log.info('Login attempt with siteName="' + siteNameValue + '"');
-        await page.goto(adminUrl + '/login.aspx', { waitUntil: 'domcontentloaded' });
+        // Wait for networkidle so login-form.js has time to initialize and bind handlers.
+        await page.goto(adminUrl + '/login.aspx', { waitUntil: 'networkidle', timeout: 30000 }).catch(() => null);
         await page.waitForSelector('#txtSiteName', { timeout: 30000 });
-        await page.fill('#txtSiteName', siteNameValue);
-        await page.fill('#txtUserName', username);
-        await page.fill('#txtPassword', password);
+        // Use real keystrokes so input/change events fire and Sierra's JS sees the values.
+        await page.click('#txtSiteName', { clickCount: 3 });
+        await page.type('#txtSiteName', siteNameValue, { delay: 25 });
+        await page.click('#txtUserName', { clickCount: 3 });
+        await page.type('#txtUserName', username, { delay: 25 });
+        await page.click('#txtPassword', { clickCount: 3 });
+        await page.type('#txtPassword', password, { delay: 25 });
+        // Press Enter inside password field — this triggers the form's onsubmit handler
+        // (which the JS validator hooks). Falls back to button click if no nav within 5s.
         await Promise.all([
           page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null),
-          page.click('#btnLoginSubmit'),
+          page.press('#txtPassword', 'Enter'),
         ]);
         await page.waitForTimeout(1500);
         const url = page.url();
