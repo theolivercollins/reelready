@@ -342,7 +342,7 @@ export default function CustomListingNew() {
     try {
       const result = await createListing({
         client_id: clientId,
-        address,
+        address: address.trim() || scraped.address,
         video_url: normalizedVideo,
         mls: mlsOverride || scraped.mls || undefined,
         scraped_data: scraped,
