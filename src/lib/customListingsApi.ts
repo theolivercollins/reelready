@@ -93,10 +93,34 @@ export async function createListing(input: CreateListingInput): Promise<{
   qr_url: string;
   sierra_page_url: string;
 }> {
-  return authedFetch("/api/listings", {
+  const draft = await authedFetch<{ id: string }>("/api/listings", {
     method: "POST",
     body: JSON.stringify(input),
   });
+  if (!input.publish) {
+    return {
+      id: draft.id,
+      url: "",
+      qr_url: "",
+      sierra_page_url: "",
+    };
+  }
+  // Chain to the publish endpoint when publish=true.
+  const result = await authedFetch<{
+    ok: boolean;
+    listing: { id: string; sierra_page_url: string | null; qr_url: string | null };
+    sierra_page_url: string;
+    qr_url: string;
+  }>(`/api/listings/${encodeURIComponent(draft.id)}/publish`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return {
+    id: draft.id,
+    url: result.sierra_page_url,
+    qr_url: result.qr_url,
+    sierra_page_url: result.sierra_page_url,
+  };
 }
 
 export async function listListings(): Promise<CustomListing[]> {

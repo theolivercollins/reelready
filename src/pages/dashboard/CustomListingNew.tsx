@@ -304,7 +304,10 @@ export default function CustomListingNew() {
 
   async function handleFetch() {
     if (!clientId) { setScrapeError("Select a client first."); return; }
-    if (!address) { setScrapeError("Enter an address."); return; }
+    if (!mlsOverride.trim()) {
+      setScrapeError("Enter the listing's MLS# (find it on Sierra → Featured Listings).");
+      return;
+    }
 
     setScrapeError(null);
     setScraping(true);
@@ -313,21 +316,13 @@ export default function CustomListingNew() {
     try {
       const data = await scrapeListing({
         client_id: clientId,
-        address,
-        mls: mlsOverride || undefined,
+        address: address || mlsOverride,
+        mls: mlsOverride.trim(),
       });
       setScraped(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Backend not ready — use mock
-      if (msg.startsWith("404") || msg.includes("not ready") || msg.includes("404")) {
-        toast.warning("Backend not ready yet, using mock data.");
-        setScraped(MOCK_SCRAPED_LISTING);
-      } else {
-        setScrapeError(
-          "Couldn't find a listing matching that address. Try the full address or paste an MLS# directly."
-        );
-      }
+      setScrapeError(`Fetch failed: ${msg}`);
     } finally {
       setScraping(false);
     }
@@ -430,7 +425,7 @@ export default function CustomListingNew() {
 
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-wider text-muted-foreground">
-            MLS# override <span className="opacity-50">(optional)</span>
+            MLS#
           </label>
           <Input
             value={mlsOverride}
@@ -439,7 +434,8 @@ export default function CustomListingNew() {
             className="max-w-[180px]"
           />
           <p className="text-[11px] text-muted-foreground">
-            Usually auto-detected from address. Paste an MLS# to override.
+            Find it on Sierra admin → Featured Listings, or in the listing's
+            Sierra URL after <code>/property-search/detail/240/</code>.
           </p>
         </div>
 
