@@ -58,18 +58,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const slug = slugifyAddress(listing.address);
 
+    // Upsert by (client_id, slug) so re-running this on the same listing
+    // refreshes the draft instead of failing on the unique constraint.
+    // Reset status to draft on each upsert — the publish flow will re-fire.
     const { data, error } = await supabase
       .from("landing_pages")
-      .insert({
-        client_id: client.id,
-        mls: listing.mls,
-        address: listing.address,
-        slug,
-        video_url,
-        scraped_data: listing,
-        status: "draft",
-        created_by: auth.user.id,
-      })
+      .upsert(
+        {
+          client_id: client.id,
+          mls: listing.mls,
+          address: listing.address,
+          slug,
+          video_url,
+          scraped_data: listing,
+          status: "draft",
+          publish_error: null,
+          sierra_page_url: null,
+          qr_url: null,
+          published_at: null,
+          created_by: auth.user.id,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "client_id,slug" }
+      )
       .select(
         "id, client_id, mls, address, slug, video_url, status, sierra_page_url, qr_url, published_at, created_at, updated_at"
       )
